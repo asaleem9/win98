@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <rect width="16" height="16" rx="1" fill="#1a1a1a"/>
+  <circle cx="8" cy="7" r="3" fill="#888"/>
+  <circle cx="5" cy="7" r="1.5" fill="#444"/>
+  <circle cx="11" cy="7" r="1.5" fill="#444"/>
+  <path d="M5 6 Q5 4 7 4 Q8 4 8 5" stroke="#ccc" stroke-width="1" fill="none"/>
+  <path d="M11 6 Q11 4 9 4 Q8 4 8 5" stroke="#ccc" stroke-width="1" fill="none"/>
+  <text x="8" y="14" text-anchor="middle" fill="#fff" font-size="4" font-family="Arial">NAP</text>
+</svg>

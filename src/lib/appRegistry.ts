@@ -5,6 +5,30 @@ import { setAppRegistry } from '@/hooks/useWindowManager';
 // Placeholder app for apps not yet implemented
 const PlaceholderApp = lazy(() => import('@/components/apps/placeholder/PlaceholderApp'));
 
+// Real implementations
+const DiskDefragmenter = lazy(() => import('@/components/apps/defrag/DiskDefragmenter'));
+const TaskManagerApp = lazy(() => import('@/components/apps/task-manager/TaskManager'));
+const RegistryEditor = lazy(() => import('@/components/apps/regedit/RegistryEditor'));
+const DisplayProperties = lazy(() => import('@/components/apps/display-properties/DisplayProperties'));
+const InternetExplorer = lazy(() => import('@/components/apps/ie5/InternetExplorer'));
+const AOL = lazy(() => import('@/components/apps/aol/AOL'));
+const AIM = lazy(() => import('@/components/apps/aim/AIM'));
+const WinampApp = lazy(() => import('@/components/apps/winamp/Winamp'));
+const NapsterApp = lazy(() => import('@/components/apps/napster/Napster'));
+const NotepadApp = lazy(() => import('@/components/apps/notepad/Notepad'));
+const CalculatorApp = lazy(() => import('@/components/apps/calculator/Calculator'));
+const PaintApp = lazy(() => import('@/components/apps/paint/Paint'));
+const MinesweeperApp = lazy(() => import('@/components/apps/minesweeper/Minesweeper'));
+const MSDOSApp = lazy(() => import('@/components/apps/msdos/MSDOSPrompt'));
+const ExplorerApp = lazy(() => import('@/components/apps/explorer/Explorer'));
+const Word97App = lazy(() => import('@/components/apps/word97/Word97'));
+const ExcelApp = lazy(() => import('@/components/apps/excel/Excel'));
+const PowerPointApp = lazy(() => import('@/components/apps/powerpoint/PowerPoint'));
+const Photoshop5App = lazy(() => import('@/components/apps/photoshop5/Photoshop5'));
+const MacromediaFlashApp = lazy(() => import('@/components/apps/flash/MacromediaFlash'));
+const FrontPageApp = lazy(() => import('@/components/apps/frontpage/FrontPage'));
+const VisualBasic6App = lazy(() => import('@/components/apps/vb6/VisualBasic6'));
+
 const apps: Record<string, AppDefinition> = {
   'notepad': {
     id: 'notepad',
@@ -12,7 +36,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/notepad-32.svg',
     icon16: '/icons/notepad-16.svg',
     category: 'accessories',
-    component: PlaceholderApp,
+    component: NotepadApp,
     defaultWindow: { title: 'Untitled - Notepad', width: 500, height: 400, minWidth: 250, minHeight: 200 },
     startMenuPath: ['Programs', 'Accessories'],
     desktopIcon: true,
@@ -24,7 +48,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/calculator-32.svg',
     icon16: '/icons/calculator-16.svg',
     category: 'accessories',
-    component: PlaceholderApp,
+    component: CalculatorApp,
     defaultWindow: { title: 'Calculator', width: 260, height: 300, minWidth: 260, minHeight: 300 },
     startMenuPath: ['Programs', 'Accessories'],
     singleton: true,
@@ -35,7 +59,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/paint-32.svg',
     icon16: '/icons/paint-16.svg',
     category: 'accessories',
-    component: PlaceholderApp,
+    component: PaintApp,
     defaultWindow: { title: 'untitled - Paint', width: 600, height: 480, minWidth: 300, minHeight: 250 },
     startMenuPath: ['Programs', 'Accessories'],
     singleton: true,
@@ -46,7 +70,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/minesweeper-32.svg',
     icon16: '/icons/minesweeper-16.svg',
     category: 'games',
-    component: PlaceholderApp,
+    component: MinesweeperApp,
     defaultWindow: { title: 'Minesweeper', width: 200, height: 260, minWidth: 200, minHeight: 260 },
     startMenuPath: ['Programs', 'Games'],
     desktopIcon: true,
@@ -69,7 +93,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/msdos-32.svg',
     icon16: '/icons/msdos-16.svg',
     category: 'system',
-    component: PlaceholderApp,
+    component: MSDOSApp,
     defaultWindow: { title: 'MS-DOS Prompt', width: 520, height: 340, minWidth: 320, minHeight: 200 },
     startMenuPath: ['Programs'],
     singleton: false,
@@ -80,7 +104,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/explorer-32.svg',
     icon16: '/icons/explorer-16.svg',
     category: 'system',
-    component: PlaceholderApp,
+    component: ExplorerApp,
     defaultWindow: { title: 'Exploring - C:\\', width: 640, height: 480, minWidth: 350, minHeight: 250 },
     startMenuPath: ['Programs'],
     singleton: false,
@@ -91,7 +115,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/ie-32.svg',
     icon16: '/icons/ie-16.svg',
     category: 'internet',
-    component: PlaceholderApp,
+    component: InternetExplorer,
     defaultWindow: { title: 'Microsoft Internet Explorer', width: 700, height: 500, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs'],
     desktopIcon: true,
@@ -148,7 +172,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/aol-32.svg',
     icon16: '/icons/aol-16.svg',
     category: 'internet',
-    component: PlaceholderApp,
+    component: AOL,
     defaultWindow: { title: 'America Online', width: 640, height: 480, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Internet Tools'],
     singleton: true,
@@ -159,7 +183,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/aim-32.svg',
     icon16: '/icons/aim-16.svg',
     category: 'internet',
-    component: PlaceholderApp,
+    component: AIM,
     defaultWindow: { title: 'AIM Buddy List', width: 200, height: 400, minWidth: 150, minHeight: 250 },
     startMenuPath: ['Programs', 'Internet Tools'],
     quickLaunch: true,
@@ -171,8 +195,8 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/winamp-32.svg',
     icon16: '/icons/winamp-16.svg',
     category: 'multimedia',
-    component: PlaceholderApp,
-    defaultWindow: { title: 'Winamp', width: 275, height: 116, minWidth: 275, minHeight: 116 },
+    component: WinampApp,
+    defaultWindow: { title: 'Winamp', width: 275, height: 260, minWidth: 275, minHeight: 140 },
     startMenuPath: ['Programs', 'Multimedia'],
     quickLaunch: true,
     singleton: true,
@@ -183,7 +207,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/word-32.svg',
     icon16: '/icons/word-16.svg',
     category: 'productivity',
-    component: PlaceholderApp,
+    component: Word97App,
     defaultWindow: { title: 'Document1 - Microsoft Word', width: 700, height: 500, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs'],
     singleton: true,
@@ -194,7 +218,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/excel-32.svg',
     icon16: '/icons/excel-16.svg',
     category: 'productivity',
-    component: PlaceholderApp,
+    component: ExcelApp,
     defaultWindow: { title: 'Book1 - Microsoft Excel', width: 700, height: 500, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs'],
     singleton: true,
@@ -216,7 +240,7 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/defrag-32.svg',
     icon16: '/icons/defrag-16.svg',
     category: 'system',
-    component: PlaceholderApp,
+    component: DiskDefragmenter,
     defaultWindow: { title: 'Disk Defragmenter', width: 500, height: 400, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Accessories', 'System Tools'],
     singleton: true,
@@ -227,8 +251,96 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/taskman-32.svg',
     icon16: '/icons/taskman-16.svg',
     category: 'system',
-    component: PlaceholderApp,
+    component: TaskManagerApp,
     defaultWindow: { title: 'Windows Task Manager', width: 400, height: 350, minWidth: 300, minHeight: 250 },
+    singleton: true,
+  },
+  'regedit': {
+    id: 'regedit',
+    name: 'Registry Editor',
+    icon: '/icons/regedit-32.svg',
+    icon16: '/icons/regedit-16.svg',
+    category: 'system',
+    component: RegistryEditor,
+    defaultWindow: { title: 'Registry Editor', width: 600, height: 400, minWidth: 400, minHeight: 250 },
+    startMenuPath: ['Programs', 'Accessories', 'System Tools'],
+    singleton: true,
+  },
+  'display-properties': {
+    id: 'display-properties',
+    name: 'Display Properties',
+    icon: '/icons/display-32.svg',
+    icon16: '/icons/display-16.svg',
+    category: 'system',
+    component: DisplayProperties,
+    defaultWindow: { title: 'Display Properties', width: 400, height: 440, minWidth: 380, minHeight: 400, resizable: false },
+    startMenuPath: ['Settings', 'Control Panel'],
+    singleton: true,
+  },
+  'napster': {
+    id: 'napster',
+    name: 'Napster',
+    icon: '/icons/napster-32.svg',
+    icon16: '/icons/napster-16.svg',
+    category: 'internet',
+    component: NapsterApp,
+    defaultWindow: { title: 'Napster', width: 550, height: 400, minWidth: 400, minHeight: 300 },
+    startMenuPath: ['Programs', 'Internet Tools'],
+    singleton: true,
+  },
+  'powerpoint': {
+    id: 'powerpoint',
+    name: 'Microsoft PowerPoint',
+    icon: '/icons/powerpoint-32.svg',
+    icon16: '/icons/powerpoint-16.svg',
+    category: 'productivity',
+    component: PowerPointApp,
+    defaultWindow: { title: 'Presentation1 - Microsoft PowerPoint', width: 750, height: 550, minWidth: 500, minHeight: 400 },
+    startMenuPath: ['Programs'],
+    singleton: true,
+  },
+  'photoshop5': {
+    id: 'photoshop5',
+    name: 'Adobe Photoshop',
+    icon: '/icons/photoshop-32.svg',
+    icon16: '/icons/photoshop-16.svg',
+    category: 'productivity',
+    component: Photoshop5App,
+    defaultWindow: { title: 'Adobe Photoshop', width: 800, height: 600, minWidth: 600, minHeight: 400 },
+    startMenuPath: ['Programs'],
+    singleton: true,
+  },
+  'flash': {
+    id: 'flash',
+    name: 'Macromedia Flash',
+    icon: '/icons/flash-32.svg',
+    icon16: '/icons/flash-16.svg',
+    category: 'productivity',
+    component: MacromediaFlashApp,
+    defaultWindow: { title: 'Macromedia Flash 5', width: 800, height: 600, minWidth: 600, minHeight: 400 },
+    startMenuPath: ['Programs'],
+    singleton: true,
+  },
+  'frontpage': {
+    id: 'frontpage',
+    name: 'Microsoft FrontPage',
+    icon: '/icons/frontpage-32.svg',
+    icon16: '/icons/frontpage-16.svg',
+    category: 'productivity',
+    component: FrontPageApp,
+    defaultWindow: { title: 'FrontPage Editor', width: 700, height: 500, minWidth: 400, minHeight: 300 },
+    startMenuPath: ['Programs'],
+    singleton: true,
+  },
+  'vb6': {
+    id: 'vb6',
+    name: 'Visual Basic 6',
+    icon: '/icons/vb6-32.svg',
+    icon16: '/icons/vb6-16.svg',
+    category: 'productivity',
+    component: VisualBasic6App,
+    defaultWindow: { title: 'Microsoft Visual Basic [design]', width: 800, height: 600, minWidth: 600, minHeight: 400 },
+    startMenuPath: ['Programs'],
     singleton: true,
   },
 };

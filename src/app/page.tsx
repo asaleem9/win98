@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { WindowProvider } from '@/contexts/WindowContext';
 import { WindowManager } from '@/components/window/WindowManager';
 import { Taskbar } from '@/components/taskbar/Taskbar';
@@ -35,6 +35,16 @@ export default function Home() {
   const handleBSODDismiss = useCallback(() => {
     setSystemState('running');
   }, []);
+
+  // Listen for BSOD events dispatched from apps
+  useEffect(() => {
+    const onBsod = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail;
+      handleBSOD(detail?.message);
+    };
+    window.addEventListener('win98-bsod', onBsod);
+    return () => window.removeEventListener('win98-bsod', onBsod);
+  }, [handleBSOD]);
 
   if (systemState === 'booting') {
     return <BootSequence onComplete={handleBootComplete} />;
