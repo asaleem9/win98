@@ -1,0 +1,497 @@
+/* ============================================
+   Windows 98 Design System
+   The authentic bevel system, colors, and fonts
+   ============================================ */
+
+/* --- Font Faces --- */
+@font-face {
+  font-family: 'MS Sans Serif';
+  src: url('/fonts/ms-sans-serif.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MS Sans Serif';
+  src: url('/fonts/ms-sans-serif-bold.woff2') format('woff2');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Fixedsys';
+  src: url('/fonts/fixedsys.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- CSS Custom Properties --- */
+:root {
+  /* Core Colors */
+  --win98-bg: #c0c0c0;
+  --win98-desktop: #008080;
+  --win98-window-bg: #c0c0c0;
+  --win98-window-text: #000000;
+
+  /* Title Bar */
+  --win98-titlebar-active-start: #000080;
+  --win98-titlebar-active-end: #1084d0;
+  --win98-titlebar-inactive-start: #808080;
+  --win98-titlebar-inactive-end: #b0b0b0;
+  --win98-titlebar-text-active: #ffffff;
+  --win98-titlebar-text-inactive: #c0c0c0;
+
+  /* Button/3D Element Colors */
+  --win98-button-face: #c0c0c0;
+  --win98-button-highlight: #ffffff;
+  --win98-button-light: #dfdfdf;
+  --win98-button-shadow: #808080;
+  --win98-button-dark-shadow: #000000;
+  --win98-button-text: #000000;
+
+  /* Selection */
+  --win98-highlight: #000080;
+  --win98-highlight-text: #ffffff;
+
+  /* Input Fields */
+  --win98-input-bg: #ffffff;
+  --win98-input-text: #000000;
+
+  /* Menu */
+  --win98-menu-bg: #c0c0c0;
+  --win98-menu-text: #000000;
+  --win98-menu-disabled: #808080;
+  --win98-menu-highlight: #000080;
+  --win98-menu-highlight-text: #ffffff;
+
+  /* Taskbar */
+  --win98-taskbar-bg: #c0c0c0;
+  --win98-start-green: #008000;
+
+  /* Scrollbar */
+  --win98-scrollbar-bg: #c0c0c0;
+  --win98-scrollbar-track: #c0c0c0;
+
+  /* Miscellaneous */
+  --win98-tooltip-bg: #ffffe1;
+  --win98-tooltip-text: #000000;
+  --win98-disabled-text: #808080;
+  --win98-link: #0000ff;
+  --win98-link-visited: #800080;
+
+  /* BSOD */
+  --win98-bsod-bg: #0000aa;
+  --win98-bsod-text: #ffffff;
+
+  /* Typography */
+  --win98-font: 'MS Sans Serif', 'Tahoma', 'Microsoft Sans Serif', 'Arial', sans-serif;
+  --win98-font-mono: 'Fixedsys', 'Courier New', 'Consolas', monospace;
+  --win98-font-size: 11px;
+  --win98-font-size-menu: 11px;
+  --win98-font-size-title: 11px;
+  --win98-font-size-icon: 10px;
+
+  /* Sizing */
+  --win98-titlebar-height: 18px;
+  --win98-menubar-height: 20px;
+  --win98-toolbar-height: 26px;
+  --win98-statusbar-height: 20px;
+  --win98-taskbar-height: 28px;
+  --win98-scrollbar-width: 16px;
+  --win98-icon-size: 32px;
+  --win98-icon-size-sm: 16px;
+  --win98-border-width: 2px;
+}
+
+/* --- Base Styles --- */
+.win98 {
+  font-family: var(--win98-font);
+  font-size: var(--win98-font-size);
+  color: var(--win98-window-text);
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  image-rendering: pixelated;
+}
+
+.win98 * {
+  box-sizing: border-box;
+}
+
+.win98 ::selection {
+  background: var(--win98-highlight);
+  color: var(--win98-highlight-text);
+}
+
+/* --- The Bevel System (Heart of Win98 styling) --- */
+
+/* Raised surface (buttons, window borders) */
+.win98-raised {
+  border: 2px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-dark-shadow) var(--win98-button-dark-shadow) var(--win98-button-highlight);
+  box-shadow: inset -1px -1px 0 var(--win98-button-shadow), inset 1px 1px 0 var(--win98-button-light);
+}
+
+/* Sunken surface (text inputs, status bars) */
+.win98-sunken {
+  border: 2px solid;
+  border-color: var(--win98-button-shadow) var(--win98-button-highlight) var(--win98-button-highlight) var(--win98-button-shadow);
+  box-shadow: inset -1px -1px 0 var(--win98-button-light), inset 1px 1px 0 var(--win98-button-dark-shadow);
+}
+
+/* Pressed button */
+.win98-pressed {
+  border: 2px solid;
+  border-color: var(--win98-button-dark-shadow) var(--win98-button-highlight) var(--win98-button-highlight) var(--win98-button-dark-shadow);
+  box-shadow: inset 1px 1px 0 var(--win98-button-shadow);
+  padding-top: 2px;
+  padding-left: 2px;
+}
+
+/* Etched border (group boxes) */
+.win98-etched {
+  border: 2px solid;
+  border-color: var(--win98-button-shadow) var(--win98-button-highlight) var(--win98-button-highlight) var(--win98-button-shadow);
+}
+
+/* Flat raised (toolbar buttons on hover) */
+.win98-flat-raised {
+  border: 1px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-shadow) var(--win98-button-shadow) var(--win98-button-highlight);
+}
+
+/* Flat sunken (toolbar buttons when pressed) */
+.win98-flat-sunken {
+  border: 1px solid;
+  border-color: var(--win98-button-shadow) var(--win98-button-highlight) var(--win98-button-highlight) var(--win98-button-shadow);
+}
+
+/* --- Window Styles --- */
+.win98-window {
+  background: var(--win98-window-bg);
+  border: 2px solid;
+  border-color: var(--win98-button-light) var(--win98-button-dark-shadow) var(--win98-button-dark-shadow) var(--win98-button-light);
+  box-shadow: inset -1px -1px 0 var(--win98-button-shadow), inset 1px 1px 0 var(--win98-button-highlight);
+  padding: 2px;
+}
+
+.win98-titlebar {
+  height: var(--win98-titlebar-height);
+  background: linear-gradient(to right, var(--win98-titlebar-active-start), var(--win98-titlebar-active-end));
+  color: var(--win98-titlebar-text-active);
+  font-size: var(--win98-font-size-title);
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+  user-select: none;
+}
+
+.win98-titlebar-inactive {
+  background: linear-gradient(to right, var(--win98-titlebar-inactive-start), var(--win98-titlebar-inactive-end));
+  color: var(--win98-titlebar-text-inactive);
+}
+
+/* --- Title Bar Buttons --- */
+.win98-title-button {
+  width: 16px;
+  height: 14px;
+  background: var(--win98-button-face);
+  border: 1px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-dark-shadow) var(--win98-button-dark-shadow) var(--win98-button-highlight);
+  box-shadow: inset -1px -1px 0 var(--win98-button-shadow), inset 1px 1px 0 var(--win98-button-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.win98-title-button:active {
+  border-color: var(--win98-button-dark-shadow) var(--win98-button-highlight) var(--win98-button-highlight) var(--win98-button-dark-shadow);
+  box-shadow: inset 1px 1px 0 var(--win98-button-shadow);
+}
+
+/* --- Scrollbar Styles --- */
+.win98 ::-webkit-scrollbar {
+  width: var(--win98-scrollbar-width);
+  height: var(--win98-scrollbar-width);
+}
+
+.win98 ::-webkit-scrollbar-track {
+  background: url("data:image/svg+xml,%3Csvg width='2' height='2' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1' height='1' fill='%23c0c0c0'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23c0c0c0'/%3E%3Crect x='1' width='1' height='1' fill='%23fff'/%3E%3Crect y='1' width='1' height='1' fill='%23fff'/%3E%3C/svg%3E") repeat;
+}
+
+.win98 ::-webkit-scrollbar-thumb {
+  background: var(--win98-button-face);
+  border: 2px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-dark-shadow) var(--win98-button-dark-shadow) var(--win98-button-highlight);
+  box-shadow: inset -1px -1px 0 var(--win98-button-shadow), inset 1px 1px 0 var(--win98-button-light);
+}
+
+.win98 ::-webkit-scrollbar-button {
+  background: var(--win98-button-face);
+  border: 2px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-dark-shadow) var(--win98-button-dark-shadow) var(--win98-button-highlight);
+  box-shadow: inset -1px -1px 0 var(--win98-button-shadow);
+  width: var(--win98-scrollbar-width);
+  height: var(--win98-scrollbar-width);
+}
+
+.win98 ::-webkit-scrollbar-corner {
+  background: var(--win98-button-face);
+}
+
+/* Firefox scrollbar */
+.win98 {
+  scrollbar-color: var(--win98-button-face) var(--win98-scrollbar-track);
+  scrollbar-width: auto;
+}
+
+/* --- Cursor Styles --- */
+.win98 {
+  cursor: url('/cursors/default.cur'), default;
+}
+
+.win98-cursor-wait,
+.win98 .cursor-wait {
+  cursor: url('/cursors/wait.cur'), wait;
+}
+
+.win98-cursor-pointer {
+  cursor: url('/cursors/pointer.cur'), pointer;
+}
+
+.win98-cursor-text {
+  cursor: url('/cursors/text.cur'), text;
+}
+
+.win98-cursor-move {
+  cursor: url('/cursors/move.cur'), move;
+}
+
+/* --- Focus Indicator (dotted inner border) --- */
+.win98-focus-visible:focus-visible {
+  outline: 1px dotted var(--win98-button-text);
+  outline-offset: -4px;
+}
+
+/* --- Disabled State --- */
+.win98-disabled {
+  color: var(--win98-disabled-text);
+  text-shadow: 1px 1px 0 var(--win98-button-highlight);
+  pointer-events: none;
+}
+
+/* --- Menu Styles --- */
+.win98-menu {
+  background: var(--win98-menu-bg);
+  border: 2px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-dark-shadow) var(--win98-button-dark-shadow) var(--win98-button-highlight);
+  box-shadow: inset -1px -1px 0 var(--win98-button-shadow), inset 1px 1px 0 var(--win98-button-light);
+  padding: 2px;
+}
+
+.win98-menu-item {
+  padding: 2px 20px 2px 22px;
+  white-space: nowrap;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.win98-menu-item:hover,
+.win98-menu-item-active {
+  background: var(--win98-menu-highlight);
+  color: var(--win98-menu-highlight-text);
+}
+
+.win98-menu-separator {
+  height: 0;
+  border-top: 1px solid var(--win98-button-shadow);
+  border-bottom: 1px solid var(--win98-button-highlight);
+  margin: 2px 1px;
+}
+
+/* --- Tooltip --- */
+.win98-tooltip {
+  background: var(--win98-tooltip-bg);
+  color: var(--win98-tooltip-text);
+  border: 1px solid var(--win98-button-dark-shadow);
+  padding: 2px 4px;
+  font-size: var(--win98-font-size);
+  white-space: nowrap;
+  box-shadow: 1px 1px 0 var(--win98-button-dark-shadow);
+}
+
+/* --- Taskbar --- */
+.win98-taskbar {
+  background: var(--win98-taskbar-bg);
+  height: var(--win98-taskbar-height);
+  border-top: 2px solid;
+  border-color: var(--win98-button-highlight) transparent transparent var(--win98-button-highlight);
+  box-shadow: inset 0 1px 0 var(--win98-button-light);
+  display: flex;
+  align-items: center;
+  padding: 2px 2px;
+  gap: 2px;
+}
+
+/* --- Start Button --- */
+.win98-start-button {
+  font-weight: bold;
+  font-size: var(--win98-font-size);
+  height: 22px;
+  padding: 0 6px 0 3px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+/* --- Desktop --- */
+.win98-desktop {
+  background: var(--win98-desktop);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* --- Desktop Icon --- */
+.win98-desktop-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 75px;
+  padding: 4px;
+  cursor: default;
+  user-select: none;
+}
+
+.win98-desktop-icon-label {
+  font-size: var(--win98-font-size-icon);
+  color: #ffffff;
+  text-align: center;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+  margin-top: 2px;
+  word-break: break-word;
+  line-height: 1.2;
+  max-width: 70px;
+}
+
+.win98-desktop-icon-selected .win98-desktop-icon-label {
+  background: var(--win98-highlight);
+  color: var(--win98-highlight-text);
+  text-shadow: none;
+}
+
+/* --- BSOD --- */
+.win98-bsod {
+  background: var(--win98-bsod-bg);
+  color: var(--win98-bsod-text);
+  font-family: var(--win98-font-mono);
+  font-size: 14px;
+  padding: 40px 60px;
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  cursor: none;
+}
+
+.win98-bsod-header {
+  background: var(--win98-bsod-text);
+  color: var(--win98-bsod-bg);
+  padding: 0 8px;
+  display: inline-block;
+  text-align: center;
+  align-self: center;
+  margin-bottom: 24px;
+}
+
+/* --- Progress Bar --- */
+.win98-progress {
+  height: 16px;
+  background: var(--win98-input-bg);
+}
+
+.win98-progress-bar {
+  height: 100%;
+  background: var(--win98-highlight);
+  transition: width 0.3s ease;
+}
+
+.win98-progress-segmented .win98-progress-bar {
+  background: repeating-linear-gradient(
+    to right,
+    var(--win98-highlight) 0px,
+    var(--win98-highlight) 8px,
+    transparent 8px,
+    transparent 10px
+  );
+}
+
+/* --- Tab Control --- */
+.win98-tab {
+  padding: 4px 12px;
+  background: var(--win98-button-face);
+  border: 2px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-dark-shadow) transparent var(--win98-button-highlight);
+  box-shadow: inset 1px 1px 0 var(--win98-button-light);
+  cursor: default;
+  position: relative;
+  bottom: -2px;
+  margin-right: -2px;
+}
+
+.win98-tab-active {
+  border-bottom-color: var(--win98-button-face);
+  background: var(--win98-button-face);
+  z-index: 1;
+  padding-bottom: 6px;
+}
+
+.win98-tab-content {
+  border: 2px solid;
+  border-color: var(--win98-button-highlight) var(--win98-button-dark-shadow) var(--win98-button-dark-shadow) var(--win98-button-highlight);
+  box-shadow: inset -1px -1px 0 var(--win98-button-shadow), inset 1px 1px 0 var(--win98-button-light);
+  background: var(--win98-button-face);
+  padding: 12px;
+}
+
+/* --- LED Display (for Minesweeper) --- */
+.win98-led {
+  font-family: 'Fixedsys', 'Courier New', monospace;
+  background: #000000;
+  color: #ff0000;
+  padding: 2px 4px;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 2px;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* --- Utility Classes --- */
+.win98-no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.win98-text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
