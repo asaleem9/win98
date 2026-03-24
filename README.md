@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║   ██╗    ██╗██╗███╗   ██╗ █████╗  █████╗                ║
+║   ██║    ██║██║████╗  ██║██╔══██╗██╔══██╗               ║
+║   ██║ █╗ ██║██║██╔██╗ ██║╚██████║╚█████╔╝               ║
+║   ██║███╗██║██║██║╚██╗██║ ╚═══██║██╔══██╗               ║
+║   ╚███╔███╔╝██║██║ ╚████║ █████║╚█████╔╝               ║
+║    ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝ ╚════╝ ╚════╝               ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> *It is now safe to turn off your computer.*
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**[win98os.vercel.app](https://win98os.vercel.app)**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+Remember when installing a program meant finding the CD-ROM? When you had to yell at your sister to get off the phone so you could go online? When your screen name was something like `sk8erboi99` or `SurfDude98`?
 
-To learn more about Next.js, take a look at the following resources:
+This is that. In your browser. For no good reason.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### What's in the box
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- The boot sequence (POST, memory count, the flag logo, the progress bar that meant nothing)
+- 56+ apps including Notepad, Paint, Minesweeper, Solitaire, Calculator, and the stuff you actually used your computer for
+- AIM with pre-loaded buddy conversations. Someone will ask you A/S/L. You will set an away message with alternating caps.
+- AOL with "You've Got Mail!" and a dial-up modem animation
+- IE5 pointed at Yahoo! like it's 1999
+- Winamp (it really whips the llama's ass)
+- BonziBuddy. I'm sorry.
+- Start menu, taskbar, system tray clock, the whole nine yards
+- Window dragging, resizing, minimize, maximize, alt-tab energy
+- Desktop icons with pixel art that would make your VGA monitor proud
+- Right-click context menus (even though half the options don't do anything, just like the real thing)
+- Games: StarCraft, Diablo II, Age of Empires II, RollerCoaster Tycoon, Oregon Trail, Tony Hawk 2, SimCity, C&C
+- The blue screen of death (it wouldn't be authentic without it)
 
-## Deploy on Vercel
+### Run it
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+pnpm install
+pnpm dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### The vibe
+
+No frameworks were harmed in the making of this—actually that's a lie, there's a lot of React under the hood. But you don't need to know that. Just double-click My Computer and pretend it's 1998.
+
+The year Titanic swept the Oscars. The year Google was founded in a garage. The year you had strong opinions about whether NSYNC or Backstreet Boys was better. (It was NSYNC. Fight me.)
+
+---
+
+```
+C:\>_
+```
