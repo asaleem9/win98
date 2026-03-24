@@ -1,1 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#0000FF" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="14" font-weight="bold">VB</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges">
+  <!-- Form/window background -->
+  <rect x="2" y="2" width="28" height="28" fill="#C0C0C0"/>
+  <!-- Window title bar -->
+  <rect x="2" y="2" width="28" height="4" fill="#000080"/>
+  <!-- Window border -->
+  <rect x="2" y="2" width="28" height="1" fill="#FFFFFF"/>
+  <rect x="2" y="2" width="1" height="28" fill="#FFFFFF"/>
+  <rect x="29" y="2" width="1" height="28" fill="#808080"/>
+  <rect x="2" y="29" width="28" height="1" fill="#808080"/>
+  <!-- Title bar highlight -->
+  <rect x="3" y="3" width="26" height="1" fill="#0000FF"/>
+  <!-- Close button -->
+  <rect x="26" y="3" width="3" height="2" fill="#C0C0C0"/>
+  <rect x="27" y="3" width="1" height="1" fill="#000000"/>
+  <!-- Form content area -->
+  <rect x="3" y="6" width="26" height="23" fill="#C0C0C0"/>
+  <!-- Blue lightning bolt -->
+  <rect x="14" y="8" width="6" height="2" fill="#0000FF"/>
+  <rect x="12" y="10" width="6" height="2" fill="#0000FF"/>
+  <rect x="10" y="12" width="12" height="2" fill="#0000FF"/>
+  <rect x="14" y="14" width="6" height="2" fill="#000080"/>
+  <rect x="12" y="16" width="6" height="2" fill="#000080"/>
+  <rect x="10" y="18" width="6" height="2" fill="#000080"/>
+  <rect x="10" y="20" width="4" height="2" fill="#000080"/>
+  <!-- Lightning highlight -->
+  <rect x="14" y="8" width="6" height="1" fill="#FFFFFF"/>
+  <rect x="12" y="10" width="1" height="2" fill="#FFFFFF"/>
+  <rect x="10" y="12" width="1" height="2" fill="#FFFFFF"/>
+  <!-- Lightning shadow -->
+  <rect x="21" y="12" width="1" height="2" fill="#000000"/>
+  <rect x="19" y="14" width="1" height="2" fill="#000000"/>
+  <rect x="17" y="16" width="1" height="2" fill="#000000"/>
+  <rect x="15" y="18" width="1" height="2" fill="#000000"/>
+  <!-- Button on form -->
+  <rect x="8" y="24" width="16" height="4" fill="#C0C0C0"/>
+  <rect x="8" y="24" width="16" height="1" fill="#FFFFFF"/>
+  <rect x="8" y="24" width="1" height="4" fill="#FFFFFF"/>
+  <rect x="23" y="24" width="1" height="4" fill="#808080"/>
+  <rect x="8" y="27" width="16" height="1" fill="#808080"/>
+</svg>

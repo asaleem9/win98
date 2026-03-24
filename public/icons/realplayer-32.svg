@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="2" fill="#2a2a3a"/>
+  <rect x="4" y="5" width="24" height="22" rx="2" fill="#3a4a5a"/>
+  <polygon points="12,10 12,22 24,16" fill="#5588bb"/>
+  <polygon points="12,10 12,22 24,16" fill="#6699cc" opacity="0.6"/>
+  <rect x="4" y="5" width="24" height="22" rx="2" fill="none" stroke="#778899" stroke-width="1"/>
+  <text x="16" y="7" text-anchor="middle" fill="#6699cc" font-size="4" font-family="Arial" font-weight="bold">Real</text>
+</svg>

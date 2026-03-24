@@ -1,1 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#808080" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="8" font-weight="bold">R</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- Lid -->
+  <rect x="4" y="1" width="8" height="2" fill="#808080"/>
+  <rect x="4" y="1" width="8" height="1" fill="#C0C0C0"/>
+  <rect x="11" y="1" width="1" height="2" fill="#000000"/>
+  <!-- Lid handle -->
+  <rect x="6" y="1" width="4" height="1" fill="#C0C0C0"/>
+  <!-- Body -->
+  <rect x="4" y="3" width="8" height="11" fill="#808080"/>
+  <rect x="4" y="3" width="1" height="11" fill="#C0C0C0"/>
+  <rect x="11" y="3" width="1" height="11" fill="#000000"/>
+  <rect x="4" y="13" width="8" height="1" fill="#000000"/>
+  <!-- Ridges -->
+  <rect x="6" y="5" width="1" height="7" fill="#C0C0C0"/>
+  <rect x="7" y="5" width="1" height="7" fill="#000000"/>
+  <rect x="9" y="5" width="1" height="7" fill="#C0C0C0"/>
+  <rect x="10" y="5" width="1" height="7" fill="#000000"/>
+  <!-- Base -->
+  <rect x="5" y="14" width="6" height="1" fill="#808080"/>
+</svg>

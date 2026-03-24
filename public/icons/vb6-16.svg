@@ -1,1 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#0000FF" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="8" font-weight="bold">VB</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- Form/window -->
+  <rect x="1" y="1" width="14" height="14" fill="#C0C0C0"/>
+  <!-- Title bar -->
+  <rect x="1" y="1" width="14" height="2" fill="#000080"/>
+  <!-- Border -->
+  <rect x="1" y="1" width="14" height="1" fill="#FFFFFF"/>
+  <rect x="1" y="1" width="1" height="14" fill="#FFFFFF"/>
+  <rect x="14" y="1" width="1" height="14" fill="#808080"/>
+  <rect x="1" y="14" width="14" height="1" fill="#808080"/>
+  <!-- Close button -->
+  <rect x="13" y="2" width="1" height="1" fill="#C0C0C0"/>
+  <!-- Lightning bolt -->
+  <rect x="7" y="4" width="3" height="1" fill="#0000FF"/>
+  <rect x="6" y="5" width="3" height="1" fill="#0000FF"/>
+  <rect x="5" y="6" width="6" height="1" fill="#0000FF"/>
+  <rect x="7" y="7" width="3" height="1" fill="#000080"/>
+  <rect x="6" y="8" width="3" height="1" fill="#000080"/>
+  <rect x="5" y="9" width="3" height="1" fill="#000080"/>
+  <rect x="5" y="10" width="2" height="1" fill="#000080"/>
+  <!-- Highlight -->
+  <rect x="7" y="4" width="3" height="1" fill="#FFFFFF"/>
+  <!-- Button -->
+  <rect x="4" y="12" width="8" height="2" fill="#C0C0C0"/>
+  <rect x="4" y="12" width="8" height="1" fill="#FFFFFF"/>
+  <rect x="4" y="12" width="1" height="2" fill="#FFFFFF"/>
+  <rect x="11" y="12" width="1" height="2" fill="#808080"/>
+  <rect x="4" y="13" width="8" height="1" fill="#808080"/>
+</svg>

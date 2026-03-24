@@ -1,1 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#008080" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="14" font-weight="bold">D</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges">
+  <!-- Monitor body -->
+  <rect x="3" y="2" width="26" height="20" fill="#C0C0C0"/>
+  <rect x="3" y="2" width="26" height="1" fill="#FFFFFF"/>
+  <rect x="3" y="2" width="1" height="20" fill="#FFFFFF"/>
+  <rect x="3" y="21" width="26" height="1" fill="#808080"/>
+  <rect x="28" y="2" width="1" height="20" fill="#808080"/>
+  <!-- Screen bezel -->
+  <rect x="5" y="4" width="22" height="15" fill="#808080"/>
+  <rect x="6" y="5" width="20" height="1" fill="#000000"/>
+  <rect x="6" y="5" width="1" height="13" fill="#000000"/>
+  <!-- Colorful screen pattern -->
+  <rect x="6" y="5" width="20" height="13" fill="#008080"/>
+  <!-- Color bands -->
+  <rect x="6" y="5" width="5" height="13" fill="#FF0000"/>
+  <rect x="11" y="5" width="5" height="13" fill="#00FF00"/>
+  <rect x="16" y="5" width="5" height="13" fill="#0000FF"/>
+  <rect x="21" y="5" width="5" height="13" fill="#FFFF00"/>
+  <!-- Screen highlight -->
+  <rect x="6" y="5" width="20" height="1" fill="rgba(255,255,255,0.3)"/>
+  <rect x="6" y="5" width="1" height="13" fill="rgba(255,255,255,0.2)"/>
+  <!-- Inner screen border (right/bottom shadow) -->
+  <rect x="25" y="5" width="1" height="13" fill="#000000"/>
+  <rect x="6" y="17" width="20" height="1" fill="#000000"/>
+  <!-- Power LED -->
+  <rect x="15" y="19" width="2" height="1" fill="#00FF00"/>
+  <!-- Monitor stand -->
+  <rect x="12" y="22" width="8" height="2" fill="#C0C0C0"/>
+  <rect x="12" y="22" width="8" height="1" fill="#FFFFFF"/>
+  <rect x="12" y="23" width="8" height="1" fill="#808080"/>
+  <!-- Base -->
+  <rect x="9" y="24" width="14" height="2" fill="#C0C0C0"/>
+  <rect x="9" y="24" width="14" height="1" fill="#FFFFFF"/>
+  <rect x="9" y="25" width="14" height="1" fill="#808080"/>
+  <!-- Outer black border -->
+  <rect x="9" y="26" width="14" height="1" fill="#000000"/>
+  <!-- Small color swatches at bottom -->
+  <rect x="5" y="28" width="4" height="3" fill="#FF0000"/>
+  <rect x="10" y="28" width="4" height="3" fill="#00FF00"/>
+  <rect x="15" y="28" width="4" height="3" fill="#0000FF"/>
+  <rect x="20" y="28" width="4" height="3" fill="#FFFF00"/>
+  <rect x="25" y="28" width="4" height="3" fill="#800080"/>
+</svg>

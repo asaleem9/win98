@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#000080" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="8" font-weight="bold">TM</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Window frame -->
+  <rect x="1" y="1" width="14" height="14" fill="#C0C0C0"/>
+  <rect x="1" y="1" width="14" height="1" fill="#FFFFFF"/>
+  <rect x="1" y="1" width="1" height="14" fill="#FFFFFF"/>
+  <rect x="14" y="1" width="1" height="14" fill="#808080"/>
+  <rect x="1" y="14" width="14" height="1" fill="#808080"/>
+  <!-- Title bar -->
+  <rect x="2" y="2" width="12" height="2" fill="#000080"/>
+  <!-- Graph area -->
+  <rect x="2" y="5" width="12" height="9" fill="#000000"/>
+  <!-- Bars -->
+  <rect x="3" y="10" width="2" height="4" fill="#00FF00"/>
+  <rect x="6" y="7" width="2" height="7" fill="#00FF00"/>
+  <rect x="9" y="11" width="2" height="3" fill="#00FF00"/>
+  <rect x="12" y="6" width="2" height="8" fill="#00FF00"/>
+</svg>

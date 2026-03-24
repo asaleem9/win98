@@ -1,0 +1,256 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TitleBar snapshots > active (focused) state 1`] = `
+<div>
+  <div
+    class="flex items-center h-[18px] px-[2px] gap-[2px] select-none shrink-0 bg-gradient-to-r from-[var(--win98-titlebar-active-start)] to-[var(--win98-titlebar-active-end)]"
+  >
+    <img
+      alt=""
+      class="w-[14px] h-[14px] flex-shrink-0"
+      draggable="false"
+      src="/icons/notepad-16.svg"
+      style="image-rendering: pixelated;"
+    />
+    <span
+      class="flex-1 truncate text-[11px] font-bold leading-none font-[family-name:var(--win98-font)] text-white"
+    >
+      Notepad
+    </span>
+    <div
+      class="flex gap-[1px]"
+    >
+      <button
+        class="w-[16px] h-[14px] flex items-end justify-center pb-[1px] bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+      >
+        <div
+          class="w-[6px] h-[2px] bg-black"
+        />
+      </button>
+      <button
+        class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+      >
+        <div
+          class="w-[8px] h-[7px] border border-black border-t-2"
+        />
+      </button>
+      <button
+        class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+      >
+        <span
+          class="text-[10px] font-bold leading-none mt-[-1px]"
+        >
+          ✕
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TitleBar snapshots > inactive (unfocused) state 1`] = `
+<div>
+  <div
+    class="flex items-center h-[18px] px-[2px] gap-[2px] select-none shrink-0 bg-gradient-to-r from-[var(--win98-titlebar-inactive-start)] to-[var(--win98-titlebar-inactive-end)]"
+  >
+    <img
+      alt=""
+      class="w-[14px] h-[14px] flex-shrink-0"
+      draggable="false"
+      src="/icons/notepad-16.svg"
+      style="image-rendering: pixelated;"
+    />
+    <span
+      class="flex-1 truncate text-[11px] font-bold leading-none font-[family-name:var(--win98-font)] text-[var(--win98-disabled-text)]"
+    >
+      Notepad
+    </span>
+    <div
+      class="flex gap-[1px]"
+    >
+      <button
+        class="w-[16px] h-[14px] flex items-end justify-center pb-[1px] bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+      >
+        <div
+          class="w-[6px] h-[2px] bg-black"
+        />
+      </button>
+      <button
+        class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+      >
+        <div
+          class="w-[8px] h-[7px] border border-black border-t-2"
+        />
+      </button>
+      <button
+        class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+      >
+        <span
+          class="text-[10px] font-bold leading-none mt-[-1px]"
+        >
+          ✕
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Window snapshots > maximized state 1`] = `
+<div>
+  <div
+    class="flex flex-col bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] fixed"
+    style="left: 0px; top: 0px; right: 0px; bottom: 28px; z-index: 10;"
+  >
+    <div
+      class="flex items-center h-[18px] px-[2px] gap-[2px] select-none shrink-0 bg-gradient-to-r from-[var(--win98-titlebar-active-start)] to-[var(--win98-titlebar-active-end)]"
+    >
+      <img
+        alt=""
+        class="w-[14px] h-[14px] flex-shrink-0"
+        draggable="false"
+        src="/icons/notepad-16.svg"
+        style="image-rendering: pixelated;"
+      />
+      <span
+        class="flex-1 truncate text-[11px] font-bold leading-none font-[family-name:var(--win98-font)] text-white"
+      >
+        Test Window
+      </span>
+      <div
+        class="flex gap-[1px]"
+      >
+        <button
+          class="w-[16px] h-[14px] flex items-end justify-center pb-[1px] bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          <div
+            class="w-[6px] h-[2px] bg-black"
+          />
+        </button>
+        <button
+          class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          <div
+            class="relative w-[8px] h-[8px]"
+          >
+            <div
+              class="absolute top-0 right-0 w-[6px] h-[6px] border border-black border-t-2"
+            />
+            <div
+              class="absolute bottom-0 left-0 w-[6px] h-[6px] border border-black border-t-2 bg-[var(--win98-button-face)]"
+            />
+          </div>
+        </button>
+        <button
+          class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          <span
+            class="text-[10px] font-bold leading-none mt-[-1px]"
+          >
+            ✕
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="flex-1 flex flex-col overflow-hidden"
+    >
+      <div>
+        Maximized content
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Window snapshots > normal state 1`] = `
+<div>
+  <div
+    class="flex flex-col bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] absolute"
+    style="left: 100px; top: 100px; width: 400px; height: 300px; z-index: 10;"
+  >
+    <div
+      class="flex items-center h-[18px] px-[2px] gap-[2px] select-none shrink-0 bg-gradient-to-r from-[var(--win98-titlebar-active-start)] to-[var(--win98-titlebar-active-end)]"
+    >
+      <img
+        alt=""
+        class="w-[14px] h-[14px] flex-shrink-0"
+        draggable="false"
+        src="/icons/notepad-16.svg"
+        style="image-rendering: pixelated;"
+      />
+      <span
+        class="flex-1 truncate text-[11px] font-bold leading-none font-[family-name:var(--win98-font)] text-white"
+      >
+        Test Window
+      </span>
+      <div
+        class="flex gap-[1px]"
+      >
+        <button
+          class="w-[16px] h-[14px] flex items-end justify-center pb-[1px] bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          <div
+            class="w-[6px] h-[2px] bg-black"
+          />
+        </button>
+        <button
+          class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          <div
+            class="w-[8px] h-[7px] border border-black border-t-2"
+          />
+        </button>
+        <button
+          class="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          <span
+            class="text-[10px] font-bold leading-none mt-[-1px]"
+          >
+            ✕
+          </span>
+        </button>
+      </div>
+    </div>
+    <div
+      class="flex-1 flex flex-col overflow-hidden"
+    >
+      <div>
+        Window content
+      </div>
+    </div>
+    <div
+      class="absolute z-10 cursor-n-resize"
+      style="top: 0px; left: 4px; right: 4px; height: 4px;"
+    />
+    <div
+      class="absolute z-10 cursor-s-resize"
+      style="bottom: 0px; left: 4px; right: 4px; height: 4px;"
+    />
+    <div
+      class="absolute z-10 cursor-e-resize"
+      style="top: 4px; right: 0px; bottom: 4px; width: 4px;"
+    />
+    <div
+      class="absolute z-10 cursor-w-resize"
+      style="top: 4px; left: 0px; bottom: 4px; width: 4px;"
+    />
+    <div
+      class="absolute z-10 cursor-nw-resize"
+      style="top: 0px; left: 0px; width: 4px; height: 4px;"
+    />
+    <div
+      class="absolute z-10 cursor-ne-resize"
+      style="top: 0px; right: 0px; width: 4px; height: 4px;"
+    />
+    <div
+      class="absolute z-10 cursor-sw-resize"
+      style="bottom: 0px; left: 0px; width: 4px; height: 4px;"
+    />
+    <div
+      class="absolute z-10 cursor-se-resize"
+      style="bottom: 0px; right: 0px; width: 4px; height: 4px;"
+    />
+  </div>
+</div>
+`;

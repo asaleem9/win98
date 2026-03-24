@@ -1,1 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#0000AA" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="8" font-weight="bold">N</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- Left computer -->
+  <rect x="0" y="2" width="6" height="5" fill="#C0C0C0"/>
+  <rect x="0" y="2" width="6" height="1" fill="#FFFFFF"/>
+  <rect x="0" y="2" width="1" height="5" fill="#FFFFFF"/>
+  <rect x="5" y="2" width="1" height="5" fill="#808080"/>
+  <rect x="0" y="6" width="6" height="1" fill="#808080"/>
+  <!-- Left screen -->
+  <rect x="1" y="3" width="4" height="3" fill="#000080"/>
+  <!-- Left base -->
+  <rect x="0" y="8" width="6" height="2" fill="#C0C0C0"/>
+  <rect x="0" y="8" width="6" height="1" fill="#FFFFFF"/>
+  <rect x="5" y="8" width="1" height="2" fill="#808080"/>
+  <!-- Right computer -->
+  <rect x="10" y="2" width="6" height="5" fill="#C0C0C0"/>
+  <rect x="10" y="2" width="6" height="1" fill="#FFFFFF"/>
+  <rect x="10" y="2" width="1" height="5" fill="#FFFFFF"/>
+  <rect x="15" y="2" width="1" height="5" fill="#808080"/>
+  <rect x="10" y="6" width="6" height="1" fill="#808080"/>
+  <!-- Right screen -->
+  <rect x="11" y="3" width="4" height="3" fill="#000080"/>
+  <!-- Right base -->
+  <rect x="10" y="8" width="6" height="2" fill="#C0C0C0"/>
+  <rect x="10" y="8" width="6" height="1" fill="#FFFFFF"/>
+  <rect x="15" y="8" width="1" height="2" fill="#808080"/>
+  <!-- Cable -->
+  <rect x="6" y="8" width="4" height="2" fill="#000000"/>
+  <rect x="6" y="8" width="4" height="1" fill="#808080"/>
+  <!-- Network indicator -->
+  <rect x="5" y="12" width="6" height="3" fill="#000080"/>
+  <rect x="6" y="13" width="4" height="1" fill="#00FF00"/>
+</svg>

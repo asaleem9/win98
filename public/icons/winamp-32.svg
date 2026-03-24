@@ -1,1 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#3C3C3C" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#00FF00" font-family="sans-serif" font-size="14" font-weight="bold">W</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges">
+  <!-- Dark background -->
+  <rect width="32" height="32" fill="#000000"/>
+  <rect x="1" y="1" width="30" height="30" fill="#808080"/>
+  <rect x="2" y="2" width="28" height="28" fill="#000000"/>
+  <!-- Lightning bolt in yellow/orange -->
+  <rect x="16" y="3" width="6" height="2" fill="#FFFF00"/>
+  <rect x="14" y="5" width="6" height="2" fill="#FFFF00"/>
+  <rect x="12" y="7" width="6" height="2" fill="#FFFF00"/>
+  <rect x="10" y="9" width="6" height="2" fill="#FFFF00"/>
+  <!-- Wide middle section -->
+  <rect x="10" y="11" width="14" height="2" fill="#FFFF00"/>
+  <rect x="12" y="13" width="12" height="2" fill="#FFFF00"/>
+  <!-- Lower bolt -->
+  <rect x="16" y="15" width="6" height="2" fill="#808000"/>
+  <rect x="14" y="17" width="6" height="2" fill="#808000"/>
+  <rect x="12" y="19" width="6" height="2" fill="#808000"/>
+  <rect x="10" y="21" width="6" height="2" fill="#808000"/>
+  <rect x="8" y="23" width="6" height="2" fill="#808000"/>
+  <rect x="8" y="25" width="4" height="2" fill="#808000"/>
+  <!-- Highlight on top-left of bolt -->
+  <rect x="16" y="3" width="6" height="1" fill="#FFFFFF"/>
+  <rect x="14" y="5" width="1" height="2" fill="#FFFFFF"/>
+  <rect x="12" y="7" width="1" height="2" fill="#FFFFFF"/>
+  <rect x="10" y="9" width="1" height="4" fill="#FFFFFF"/>
+  <!-- Dark shadow on bottom-right -->
+  <rect x="23" y="11" width="1" height="2" fill="#000000"/>
+  <rect x="23" y="13" width="1" height="2" fill="#000000"/>
+  <rect x="21" y="15" width="1" height="2" fill="#000000"/>
+  <rect x="19" y="17" width="1" height="2" fill="#000000"/>
+  <rect x="17" y="19" width="1" height="2" fill="#000000"/>
+  <rect x="15" y="21" width="1" height="2" fill="#000000"/>
+  <rect x="13" y="23" width="1" height="2" fill="#000000"/>
+</svg>

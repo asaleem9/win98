@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="2" fill="#1a1a2e"/>
+  <rect x="6" y="14" width="20" height="3" rx="1" fill="#e8d44d"/>
+  <rect x="7" y="12" width="4" height="2" rx="0.5" fill="#4caf50"/>
+  <rect x="21" y="12" width="4" height="2" rx="0.5" fill="#4caf50"/>
+  <circle cx="10" cy="20" r="2.5" fill="#888" stroke="#555" stroke-width="0.5"/>
+  <circle cx="22" cy="20" r="2.5" fill="#888" stroke="#555" stroke-width="0.5"/>
+  <rect x="8" y="17" width="1" height="3" fill="#999"/>
+  <rect x="23" y="17" width="1" height="3" fill="#999"/>
+  <text x="16" y="28" text-anchor="middle" fill="#e8d44d" font-size="5" font-family="Arial" font-weight="bold">THPS</text>
+</svg>

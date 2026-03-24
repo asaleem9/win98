@@ -1,1 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#808080" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#000080" font-family="sans-serif" font-size="8" font-weight="bold">RE</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Blue cube -->
+  <rect x="4" y="1" width="8" height="4" fill="#0000FF"/>
+  <rect x="4" y="5" width="8" height="5" fill="#000080"/>
+  <rect x="4" y="1" width="8" height="1" fill="#FFFFFF"/>
+  <rect x="4" y="1" width="1" height="9" fill="#FFFFFF"/>
+  <rect x="11" y="1" width="1" height="9" fill="#000000"/>
+  <rect x="4" y="9" width="8" height="1" fill="#000000"/>
+  <!-- Cube grid -->
+  <rect x="8" y="1" width="1" height="9" fill="#000080"/>
+  <!-- Document -->
+  <rect x="1" y="8" width="7" height="7" fill="#FFFFFF"/>
+  <rect x="7" y="8" width="1" height="7" fill="#808080"/>
+  <rect x="1" y="14" width="7" height="1" fill="#808080"/>
+  <!-- Doc lines -->
+  <rect x="2" y="9" width="5" height="1" fill="#000000"/>
+  <rect x="2" y="11" width="4" height="1" fill="#000000"/>
+  <rect x="2" y="13" width="5" height="1" fill="#000000"/>
+  <!-- Key -->
+  <rect x="10" y="11" width="2" height="2" fill="#FFFF00"/>
+  <rect x="12" y="12" width="3" height="1" fill="#FFFF00"/>
+  <rect x="14" y="11" width="1" height="1" fill="#FFFF00"/>
+</svg>

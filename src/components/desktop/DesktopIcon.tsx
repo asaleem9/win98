@@ -33,7 +33,8 @@ export function DesktopIcon({ appId, name, icon, selected, onSelect, onDoubleCli
       </div>
       <span
         className={cn(
-          'text-center text-[11px] leading-tight mt-[2px] break-words max-w-[68px] px-[2px]',
+          'text-center text-[11px] leading-tight mt-[2px] max-w-[75px] px-[2px]',
+          'line-clamp-2 overflow-hidden',
           selected
             ? 'bg-[var(--win98-highlight)] text-white'
             : 'text-white [text-shadow:1px_1px_1px_black]',

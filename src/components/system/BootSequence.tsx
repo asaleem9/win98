@@ -8,6 +8,57 @@ interface BootSequenceProps {
   onComplete: () => void;
 }
 
+/** The classic 4-pane waving Windows flag logo */
+function WindowsFlag({ size = 160 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 88 88"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Red pane (top-left) */}
+      <path
+        d="M2 18 C6 8, 18 4, 28 6 L38 10 C36 16, 32 28, 30 36 L8 30 C4 28, 2 24, 2 18Z"
+        fill="#FF0000"
+      />
+      {/* Green pane (top-right) */}
+      <path
+        d="M42 11 C48 6, 60 2, 74 4 L86 8 C84 14, 78 28, 74 38 L34 38 C36 30, 40 18, 42 11Z"
+        fill="#00A800"
+      />
+      {/* Blue pane (bottom-left) */}
+      <path
+        d="M6 34 L28 40 C26 48, 22 60, 20 68 L2 64 C2 58, 2 46, 6 34Z"
+        fill="#0000FF"
+      />
+      {/* Yellow pane (bottom-right) */}
+      <path
+        d="M32 42 L72 42 C68 52, 62 66, 58 76 L22 72 C24 64, 28 52, 32 42Z"
+        fill="#FFB800"
+      />
+    </svg>
+  );
+}
+
+/** Animated progress bar with sliding blocks like the real Win98 boot */
+function BootProgressBar({ progress }: { progress: number }) {
+  const totalBlocks = 24;
+  const filledBlocks = Math.floor((progress / 100) * totalBlocks);
+
+  return (
+    <div className="w-[210px] h-[18px] bg-black border-[2px] border-[#404040] flex items-center px-[2px] gap-[1px]">
+      {Array.from({ length: filledBlocks }).map((_, i) => (
+        <div
+          key={i}
+          className="w-[7px] h-[12px] bg-[#A0A0A0] flex-shrink-0"
+        />
+      ))}
+    </div>
+  );
+}
+
 export function BootSequence({ onComplete }: BootSequenceProps) {
   const [phase, setPhase] = useState<'post' | 'logo' | 'done'>('post');
   const [memoryCount, setMemoryCount] = useState(0);
@@ -66,7 +117,13 @@ export function BootSequence({ onComplete }: BootSequenceProps) {
       >
         <div className="mb-4">
           <div>{SYSTEM_SPECS.bios}</div>
-          <div className="mt-2">Energy Star Logo</div>
+          <pre className="mt-2 text-[10px] leading-[10px] text-[#00AA00]">{`
+  ████████████████████████████
+  █                          █
+  █   ★  E N E R G Y        █
+  █      S T A R  ®         █
+  █                          █
+  ████████████████████████████`}</pre>
         </div>
         <div className="mb-4">
           <div>{SYSTEM_SPECS.processor}</div>
@@ -79,33 +136,27 @@ export function BootSequence({ onComplete }: BootSequenceProps) {
     );
   }
 
-  // Logo phase
+  // Logo phase - authentic Windows 98 boot screen
   return (
     <div
       className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center cursor-pointer"
       onClick={handleClick}
     >
-      {/* Windows 98 text logo */}
-      <div className="text-center mb-8">
-        <div className="text-[48px] font-bold text-white tracking-wider" style={{ fontFamily: 'Arial, sans-serif' }}>
-          <span className="text-[#FF0000]">W</span>
-          <span className="text-[#00FF00]">i</span>
-          <span className="text-[#0000FF]">n</span>
-          <span className="text-[#FFFF00]">d</span>
-          <span className="text-[#FF0000]">o</span>
-          <span className="text-[#00FF00]">w</span>
-          <span className="text-[#0000FF]">s</span>
-          <span className="text-white ml-3">98</span>
-        </div>
-        <div className="text-white text-[14px] mt-2">Microsoft® Windows 98</div>
+      {/* Windows flag logo */}
+      <div className="mb-6">
+        <WindowsFlag size={140} />
       </div>
 
-      {/* Progress bar */}
-      <div className="w-[200px] h-[16px] bg-[#000080] border border-[#808080]">
-        <div
-          className="h-full bg-[#0000FF] transition-[width] duration-75"
-          style={{ width: `${progress}%` }}
-        />
+      {/* Windows 98 text - plain white, like the real boot screen */}
+      <div
+        className="text-white text-[28px] tracking-[0.15em] mb-1"
+        style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 400 }}
+      >
+        Microsoft<span className="text-[18px] align-super">®</span> Windows 98
+      </div>
+
+      <div className="mt-10">
+        <BootProgressBar progress={progress} />
       </div>
 
       <div className="text-[var(--win98-disabled-text)] text-[11px] mt-8 font-[family-name:var(--win98-font)]">

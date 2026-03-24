@@ -1,0 +1,900 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Button98 snapshots > active state 1`] = `
+<div>
+  <button
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-w-[75px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-dark-shadow)] border-l-[var(--win98-button-dark-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_1px_1px_0_var(--win98-button-shadow)] pt-[2px] pl-[2px]"
+  >
+    Active
+  </button>
+</div>
+`;
+
+exports[`Button98 snapshots > default variant 1`] = `
+<div>
+  <button
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-w-[75px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px]"
+  >
+    OK
+  </button>
+</div>
+`;
+
+exports[`Button98 snapshots > disabled state 1`] = `
+<div>
+  <button
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] px-[6px] py-[1px] min-w-[75px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px] text-[var(--win98-disabled-text)] [text-shadow:1px_1px_0_var(--win98-button-highlight)] pointer-events-none"
+    disabled=""
+  >
+    Disabled
+  </button>
+</div>
+`;
+
+exports[`Button98 snapshots > flat variant 1`] = `
+<div>
+  <button
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border border-transparent min-w-0 hover:border-t-[var(--win98-button-highlight)] hover:border-l-[var(--win98-button-highlight)] hover:border-b-[var(--win98-button-shadow)] hover:border-r-[var(--win98-button-shadow)] active:border-t-[var(--win98-button-shadow)] active:border-l-[var(--win98-button-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+  >
+    Edit
+  </button>
+</div>
+`;
+
+exports[`Button98 snapshots > start variant 1`] = `
+<div>
+  <button
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid font-bold min-w-0 border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)]"
+  >
+    Start
+  </button>
+</div>
+`;
+
+exports[`Checkbox98 snapshots > checked 1`] = `
+<div>
+  <label
+    class="flex items-center gap-[6px] cursor-default select-none font-[family-name:var(--win98-font)] text-[11px]"
+    for="checkbox-Enable-sounds"
+  >
+    <input
+      checked=""
+      class="appearance-none w-[13px] h-[13px] flex-shrink-0 bg-[var(--win98-input-bg)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] checked:bg-[var(--win98-input-bg)] checked:after:content-['✓'] checked:after:text-[11px] checked:after:font-bold checked:after:leading-none checked:after:flex checked:after:items-center checked:after:justify-center"
+      id="checkbox-Enable-sounds"
+      type="checkbox"
+    />
+    <span>
+      Enable sounds
+    </span>
+  </label>
+</div>
+`;
+
+exports[`Checkbox98 snapshots > disabled 1`] = `
+<div>
+  <label
+    class="flex items-center gap-[6px] cursor-default select-none font-[family-name:var(--win98-font)] text-[11px] text-[var(--win98-disabled-text)] [text-shadow:1px_1px_0_var(--win98-button-highlight)]"
+    for="checkbox-Unavailable"
+  >
+    <input
+      class="appearance-none w-[13px] h-[13px] flex-shrink-0 bg-[var(--win98-input-bg)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] checked:bg-[var(--win98-input-bg)] checked:after:content-['✓'] checked:after:text-[11px] checked:after:font-bold checked:after:leading-none checked:after:flex checked:after:items-center checked:after:justify-center"
+      disabled=""
+      id="checkbox-Unavailable"
+      type="checkbox"
+    />
+    <span>
+      Unavailable
+    </span>
+  </label>
+</div>
+`;
+
+exports[`Checkbox98 snapshots > unchecked 1`] = `
+<div>
+  <label
+    class="flex items-center gap-[6px] cursor-default select-none font-[family-name:var(--win98-font)] text-[11px]"
+    for="checkbox-Enable-sounds"
+  >
+    <input
+      class="appearance-none w-[13px] h-[13px] flex-shrink-0 bg-[var(--win98-input-bg)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] checked:bg-[var(--win98-input-bg)] checked:after:content-['✓'] checked:after:text-[11px] checked:after:font-bold checked:after:leading-none checked:after:flex checked:after:items-center checked:after:justify-center"
+      id="checkbox-Enable-sounds"
+      type="checkbox"
+    />
+    <span>
+      Enable sounds
+    </span>
+  </label>
+</div>
+`;
+
+exports[`Dialog98 snapshots > error icon 1`] = `
+<div>
+  <div
+    class="bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="flex items-center h-[18px] px-[3px] bg-gradient-to-r from-[var(--win98-titlebar-active-start)] to-[var(--win98-titlebar-active-end)] text-white text-[11px] font-bold select-none"
+    >
+      <span
+        class="truncate"
+      >
+        Error
+      </span>
+    </div>
+    <div
+      class="flex items-start gap-3 p-4"
+    >
+      <div
+        class="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 border-solid text-lg font-bold"
+        style="border-color: rgb(255, 0, 0); color: rgb(255, 0, 0); background-color: white;"
+      >
+        ✕
+      </div>
+      <div
+        class="flex-1 pt-1 select-none"
+      >
+        An error has occurred.
+      </div>
+    </div>
+    <div
+      class="flex justify-center gap-[6px] pb-3 px-4"
+    >
+      <button
+        class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px] min-w-[75px] ring-1 ring-black ring-offset-0"
+      >
+        OK
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Dialog98 snapshots > warning icon 1`] = `
+<div>
+  <div
+    class="bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="flex items-center h-[18px] px-[3px] bg-gradient-to-r from-[var(--win98-titlebar-active-start)] to-[var(--win98-titlebar-active-end)] text-white text-[11px] font-bold select-none"
+    >
+      <span
+        class="truncate"
+      >
+        Warning
+      </span>
+    </div>
+    <div
+      class="flex items-start gap-3 p-4"
+    >
+      <div
+        class="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full border-2 border-solid text-lg font-bold"
+        style="border-color: rgb(255, 204, 0); color: rgb(255, 204, 0); background-color: rgb(255, 204, 0);"
+      >
+        !
+      </div>
+      <div
+        class="flex-1 pt-1 select-none"
+      >
+        Are you sure you want to continue?
+      </div>
+    </div>
+    <div
+      class="flex justify-center gap-[6px] pb-3 px-4"
+    >
+      <button
+        class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px] min-w-[75px] ring-1 ring-black ring-offset-0"
+      >
+        Yes
+      </button>
+      <button
+        class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px] min-w-[75px]"
+      >
+        No
+      </button>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`GroupBox98 snapshots > with label 1`] = `
+<div>
+  <fieldset
+    class="border-2 border-solid px-3 pb-3 pt-1 border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <legend
+      class="px-1 bg-[var(--win98-button-face)] select-none"
+    >
+      Display Settings
+    </legend>
+    <span>
+      Content here
+    </span>
+  </fieldset>
+</div>
+`;
+
+exports[`GroupBox98 snapshots > without label 1`] = `
+<div>
+  <fieldset
+    class="border-2 border-solid px-3 pb-3 pt-1 border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <span>
+      Content here
+    </span>
+  </fieldset>
+</div>
+`;
+
+exports[`Input98 snapshots > default variant 1`] = `
+<div>
+  <input
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-input-bg)] text-[var(--win98-input-text)] px-[2px] py-[1px] outline-none border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] disabled:bg-[var(--win98-button-face)] disabled:text-[var(--win98-disabled-text)]"
+    placeholder="Type here"
+  />
+</div>
+`;
+
+exports[`Input98 snapshots > disabled state 1`] = `
+<div>
+  <input
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-input-bg)] text-[var(--win98-input-text)] px-[2px] py-[1px] outline-none border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] disabled:bg-[var(--win98-button-face)] disabled:text-[var(--win98-disabled-text)]"
+    disabled=""
+    value="Disabled"
+  />
+</div>
+`;
+
+exports[`Input98 snapshots > flat variant 1`] = `
+<div>
+  <input
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-input-bg)] text-[var(--win98-input-text)] px-[2px] py-[1px] outline-none disabled:bg-[var(--win98-button-face)] disabled:text-[var(--win98-disabled-text)]"
+    placeholder="Flat"
+  />
+</div>
+`;
+
+exports[`ListView98 snapshots > details mode 1`] = `
+<div>
+  <div
+    class="bg-white overflow-auto border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="flex border-b border-[var(--win98-button-shadow)] bg-[var(--win98-button-face)] sticky top-0"
+    >
+      <div
+        class="px-2 py-[2px] border-r border-solid border-r-[var(--win98-button-shadow)] font-normal select-none cursor-default"
+        style="width: 180px;"
+      >
+        Name
+      </div>
+      <div
+        class="px-2 py-[2px] border-r border-solid border-r-[var(--win98-button-shadow)] font-normal select-none cursor-default"
+        style="width: 120px;"
+      >
+        Type
+      </div>
+      <div
+        class="px-2 py-[2px] border-r border-solid border-r-[var(--win98-button-shadow)] font-normal select-none cursor-default"
+        style="width: 80px;"
+      >
+        Size
+      </div>
+    </div>
+    <div
+      class="p-1 flex flex-col"
+    >
+      <div
+        class="cursor-default select-none flex items-center"
+      >
+        <div
+          class="px-2 py-[1px] truncate flex items-center gap-1"
+          style="width: 180px;"
+        >
+          <img
+            alt=""
+            class="w-4 h-4 flex-shrink-0"
+            src="/icons/notepad-16.svg"
+            style="image-rendering: pixelated;"
+          />
+          Document.txt
+        </div>
+        <div
+          class="px-2 py-[1px] truncate flex items-center gap-1"
+          style="width: 120px;"
+        >
+          Text Document
+        </div>
+        <div
+          class="px-2 py-[1px] truncate flex items-center gap-1"
+          style="width: 80px;"
+        >
+          4 KB
+        </div>
+      </div>
+      <div
+        class="cursor-default select-none flex items-center"
+      >
+        <div
+          class="px-2 py-[1px] truncate flex items-center gap-1"
+          style="width: 180px;"
+        >
+          <img
+            alt=""
+            class="w-4 h-4 flex-shrink-0"
+            src="/icons/paint-16.svg"
+            style="image-rendering: pixelated;"
+          />
+          Picture.bmp
+        </div>
+        <div
+          class="px-2 py-[1px] truncate flex items-center gap-1"
+          style="width: 120px;"
+        >
+          Bitmap Image
+        </div>
+        <div
+          class="px-2 py-[1px] truncate flex items-center gap-1"
+          style="width: 80px;"
+        >
+          256 KB
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ListView98 snapshots > large-icon mode 1`] = `
+<div>
+  <div
+    class="bg-white overflow-auto border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="p-1 flex flex-wrap gap-2 content-start"
+    >
+      <div
+        class="cursor-default select-none flex flex-col items-center w-[70px] p-1"
+      >
+        <div
+          class="p-[2px]"
+        >
+          <img
+            alt=""
+            class="w-8 h-8"
+            src="/icons/notepad-32.svg"
+            style="image-rendering: pixelated;"
+          />
+        </div>
+        <span
+          class="text-center text-[10px] leading-tight mt-[2px] break-words max-w-[68px]"
+        >
+          Document.txt
+        </span>
+      </div>
+      <div
+        class="cursor-default select-none flex flex-col items-center w-[70px] p-1"
+      >
+        <div
+          class="p-[2px]"
+        >
+          <img
+            alt=""
+            class="w-8 h-8"
+            src="/icons/paint-32.svg"
+            style="image-rendering: pixelated;"
+          />
+        </div>
+        <span
+          class="text-center text-[10px] leading-tight mt-[2px] break-words max-w-[68px]"
+        >
+          Picture.bmp
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ProgressBar98 snapshots > 0% progress 1`] = `
+<div>
+  <div
+    class="h-[16px] bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)]"
+  >
+    <div
+      class="h-full transition-[width] duration-300 bg-[repeating-linear-gradient(to_right,var(--win98-highlight)_0px,var(--win98-highlight)_8px,transparent_8px,transparent_10px)]"
+      style="width: 0%;"
+    />
+  </div>
+</div>
+`;
+
+exports[`ProgressBar98 snapshots > 50% progress 1`] = `
+<div>
+  <div
+    class="h-[16px] bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)]"
+  >
+    <div
+      class="h-full transition-[width] duration-300 bg-[repeating-linear-gradient(to_right,var(--win98-highlight)_0px,var(--win98-highlight)_8px,transparent_8px,transparent_10px)]"
+      style="width: 50%;"
+    />
+  </div>
+</div>
+`;
+
+exports[`ProgressBar98 snapshots > 100% progress 1`] = `
+<div>
+  <div
+    class="h-[16px] bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)]"
+  >
+    <div
+      class="h-full transition-[width] duration-300 bg-[repeating-linear-gradient(to_right,var(--win98-highlight)_0px,var(--win98-highlight)_8px,transparent_8px,transparent_10px)]"
+      style="width: 100%;"
+    />
+  </div>
+</div>
+`;
+
+exports[`ProgressBar98 snapshots > non-segmented 1`] = `
+<div>
+  <div
+    class="h-[16px] bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)]"
+  >
+    <div
+      class="h-full transition-[width] duration-300 bg-[var(--win98-highlight)]"
+      style="width: 50%;"
+    />
+  </div>
+</div>
+`;
+
+exports[`Radio98 snapshots > disabled 1`] = `
+<div>
+  <label
+    class="flex items-center gap-[6px] cursor-default select-none font-[family-name:var(--win98-font)] text-[11px] text-[var(--win98-disabled-text)] [text-shadow:1px_1px_0_var(--win98-button-highlight)]"
+    for="radio-Option-1"
+  >
+    <input
+      class="appearance-none w-[12px] h-[12px] flex-shrink-0 rounded-full bg-[var(--win98-input-bg)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] checked:after:content-[""] checked:after:block checked:after:w-[4px] checked:after:h-[4px] checked:after:bg-black checked:after:rounded-full checked:after:m-auto checked:after:mt-[2px]"
+      disabled=""
+      id="radio-Option-1"
+      name="group"
+      type="radio"
+    />
+    <span>
+      Option 1
+    </span>
+  </label>
+</div>
+`;
+
+exports[`Radio98 snapshots > selected 1`] = `
+<div>
+  <label
+    class="flex items-center gap-[6px] cursor-default select-none font-[family-name:var(--win98-font)] text-[11px]"
+    for="radio-Option-1"
+  >
+    <input
+      checked=""
+      class="appearance-none w-[12px] h-[12px] flex-shrink-0 rounded-full bg-[var(--win98-input-bg)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] checked:after:content-[""] checked:after:block checked:after:w-[4px] checked:after:h-[4px] checked:after:bg-black checked:after:rounded-full checked:after:m-auto checked:after:mt-[2px]"
+      id="radio-Option-1"
+      name="group"
+      type="radio"
+    />
+    <span>
+      Option 1
+    </span>
+  </label>
+</div>
+`;
+
+exports[`Radio98 snapshots > unselected 1`] = `
+<div>
+  <label
+    class="flex items-center gap-[6px] cursor-default select-none font-[family-name:var(--win98-font)] text-[11px]"
+    for="radio-Option-1"
+  >
+    <input
+      class="appearance-none w-[12px] h-[12px] flex-shrink-0 rounded-full bg-[var(--win98-input-bg)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] checked:after:content-[""] checked:after:block checked:after:w-[4px] checked:after:h-[4px] checked:after:bg-black checked:after:rounded-full checked:after:m-auto checked:after:mt-[2px]"
+      id="radio-Option-1"
+      name="group"
+      type="radio"
+    />
+    <span>
+      Option 1
+    </span>
+  </label>
+</div>
+`;
+
+exports[`ScrollBar98 snapshots > horizontal 1`] = `
+<div>
+  <div
+    class="flex bg-[var(--win98-scrollbar-track)] flex-row h-[16px]"
+  >
+    <button
+      class="flex items-center justify-center flex-shrink-0 select-none bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] h-full w-[16px]"
+    >
+      <span
+        class="text-[8px] leading-none"
+      >
+        ◀
+      </span>
+    </button>
+    <div
+      class="relative flex-1"
+    >
+      <div
+        class="absolute bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] top-0 bottom-0"
+        style="left: 20%; width: 33.33333333333333%;"
+      />
+    </div>
+    <button
+      class="flex items-center justify-center flex-shrink-0 select-none bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] h-full w-[16px]"
+    >
+      <span
+        class="text-[8px] leading-none"
+      >
+        ▶
+      </span>
+    </button>
+  </div>
+</div>
+`;
+
+exports[`ScrollBar98 snapshots > vertical 1`] = `
+<div>
+  <div
+    class="flex bg-[var(--win98-scrollbar-track)] flex-col w-[16px]"
+  >
+    <button
+      class="flex items-center justify-center flex-shrink-0 select-none bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] w-full h-[16px]"
+    >
+      <span
+        class="text-[8px] leading-none"
+      >
+        ▲
+      </span>
+    </button>
+    <div
+      class="relative flex-1"
+    >
+      <div
+        class="absolute bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] left-0 right-0"
+        style="top: 0%; height: 33.33333333333333%;"
+      />
+    </div>
+    <button
+      class="flex items-center justify-center flex-shrink-0 select-none bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] w-full h-[16px]"
+    >
+      <span
+        class="text-[8px] leading-none"
+      >
+        ▼
+      </span>
+    </button>
+  </div>
+</div>
+`;
+
+exports[`Select98 snapshots > disabled state 1`] = `
+<div>
+  <select
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-input-bg)] text-[var(--win98-input-text)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] px-[2px] py-[1px] outline-none disabled:bg-[var(--win98-button-face)] disabled:text-[var(--win98-disabled-text)]"
+    disabled=""
+  >
+    <option
+      value="a"
+    >
+      Option A
+    </option>
+  </select>
+</div>
+`;
+
+exports[`Select98 snapshots > with options 1`] = `
+<div>
+  <select
+    class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-input-bg)] text-[var(--win98-input-text)] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] px-[2px] py-[1px] outline-none disabled:bg-[var(--win98-button-face)] disabled:text-[var(--win98-disabled-text)]"
+  >
+    <option
+      value="a"
+    >
+      Option A
+    </option>
+    <option
+      value="b"
+    >
+      Option B
+    </option>
+  </select>
+</div>
+`;
+
+exports[`StatusBar98 snapshots > with multiple panels 1`] = `
+<div>
+  <div
+    class="flex items-center h-[20px] px-[2px] gap-[2px] bg-[var(--win98-button-face)] border-t border-[var(--win98-button-highlight)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="h-[16px] flex items-center px-[4px] truncate border border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] flex-1"
+    >
+      Ready
+    </div>
+    <div
+      class="h-[16px] flex items-center px-[4px] truncate border border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)]"
+      style="width: 100px;"
+    >
+      Ln 1, Col 1
+    </div>
+    <div
+      class="h-[16px] flex items-center px-[4px] truncate border border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] justify-center"
+      style="width: 40px;"
+    >
+      INS
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TabControl98 snapshots > first tab active 1`] = `
+<div>
+  <div
+    class="flex flex-col"
+  >
+    <div
+      class="flex"
+    >
+      <button
+        class="px-3 py-1 text-[11px] font-[family-name:var(--win98-font)] bg-[var(--win98-button-face)] cursor-default select-none border-2 border-solid relative border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_1px_1px_0_var(--win98-button-light)] -mr-[2px] border-b-[var(--win98-button-face)] z-10 pb-[6px] -mb-[2px]"
+      >
+        General
+      </button>
+      <button
+        class="px-3 py-1 text-[11px] font-[family-name:var(--win98-font)] bg-[var(--win98-button-face)] cursor-default select-none border-2 border-solid relative border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_1px_1px_0_var(--win98-button-light)] -mr-[2px] border-b-[var(--win98-button-dark-shadow)] bottom-0"
+      >
+        Advanced
+      </button>
+    </div>
+    <div
+      class="border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] bg-[var(--win98-button-face)] p-3"
+    >
+      <div>
+        General settings
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TabControl98 snapshots > second tab active 1`] = `
+<div>
+  <div
+    class="flex flex-col"
+  >
+    <div
+      class="flex"
+    >
+      <button
+        class="px-3 py-1 text-[11px] font-[family-name:var(--win98-font)] bg-[var(--win98-button-face)] cursor-default select-none border-2 border-solid relative border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_1px_1px_0_var(--win98-button-light)] -mr-[2px] border-b-[var(--win98-button-dark-shadow)] bottom-0"
+      >
+        General
+      </button>
+      <button
+        class="px-3 py-1 text-[11px] font-[family-name:var(--win98-font)] bg-[var(--win98-button-face)] cursor-default select-none border-2 border-solid relative border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_1px_1px_0_var(--win98-button-light)] -mr-[2px] border-b-[var(--win98-button-face)] z-10 pb-[6px] -mb-[2px]"
+      >
+        Advanced
+      </button>
+    </div>
+    <div
+      class="border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] bg-[var(--win98-button-face)] p-3"
+    >
+      <div>
+        Advanced settings
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`Toolbar98 snapshots > with items and separator 1`] = `
+<div>
+  <div
+    class="flex items-center gap-0 px-1 py-[2px] bg-[var(--win98-button-face)] border-b border-[var(--win98-button-shadow)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="w-[4px] h-[20px] mr-1 flex flex-col justify-center gap-[2px] flex-shrink-0"
+    >
+      <div
+        class="w-full h-[1px] bg-[var(--win98-button-highlight)] shadow-[0_1px_0_var(--win98-button-shadow)]"
+      />
+      <div
+        class="w-full h-[1px] bg-[var(--win98-button-highlight)] shadow-[0_1px_0_var(--win98-button-shadow)]"
+      />
+    </div>
+    <button
+      class="flex flex-col items-center justify-center min-w-[24px] h-[22px] px-[2px] border border-transparent cursor-default select-none hover:border-t-[var(--win98-button-highlight)] hover:border-l-[var(--win98-button-highlight)] hover:border-b-[var(--win98-button-shadow)] hover:border-r-[var(--win98-button-shadow)] active:border-t-[var(--win98-button-shadow)] active:border-l-[var(--win98-button-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+    >
+      <div
+        class="w-4 h-4 flex items-center justify-center"
+      >
+        <span>
+          📄
+        </span>
+      </div>
+      <span
+        class="text-[9px] leading-none mt-[1px]"
+      >
+        New
+      </span>
+    </button>
+    <div
+      class="w-[2px] h-[20px] mx-[2px] border-l border-[var(--win98-button-shadow)] border-r border-r-[var(--win98-button-highlight)]"
+    />
+    <button
+      class="flex flex-col items-center justify-center min-w-[24px] h-[22px] px-[2px] border border-transparent cursor-default select-none opacity-50"
+      disabled=""
+    >
+      <div
+        class="w-4 h-4 flex items-center justify-center"
+      >
+        <span>
+          💾
+        </span>
+      </div>
+      <span
+        class="text-[9px] leading-none mt-[1px]"
+      >
+        Save
+      </span>
+    </button>
+  </div>
+</div>
+`;
+
+exports[`Tooltip98 snapshots > rendered (hidden by default) 1`] = `
+<div>
+  <div
+    class="inline-block"
+  >
+    <button>
+      Hover me
+    </button>
+  </div>
+</div>
+`;
+
+exports[`TreeView98 snapshots > expanded (default for root) 1`] = `
+<div>
+  <div
+    class="bg-white overflow-auto border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="p-1"
+    >
+      <div>
+        <div
+          class="flex items-center gap-1 py-[1px] cursor-default select-none"
+          style="padding-left: 0px;"
+        >
+          <button
+            class="w-[9px] h-[9px] border border-[var(--win98-button-shadow)] bg-white flex items-center justify-center text-[9px] leading-none flex-shrink-0"
+          >
+            −
+          </button>
+          <span
+            class="truncate"
+          >
+            My Computer
+          </span>
+        </div>
+        <div
+          class="relative"
+        >
+          <div
+            class="absolute top-0 bottom-0 border-l border-dotted border-[var(--win98-button-shadow)]"
+            style="left: 4px;"
+          />
+          <div>
+            <div
+              class="flex items-center gap-1 py-[1px] cursor-default select-none"
+              style="padding-left: 16px;"
+            >
+              <span
+                class="w-[9px] h-[9px] flex-shrink-0"
+              />
+              <span
+                class="truncate"
+              >
+                C:\\
+              </span>
+            </div>
+          </div>
+          <div>
+            <div
+              class="flex items-center gap-1 py-[1px] cursor-default select-none"
+              style="padding-left: 16px;"
+            >
+              <span
+                class="w-[9px] h-[9px] flex-shrink-0"
+              />
+              <span
+                class="truncate"
+              >
+                D:\\
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TreeView98 snapshots > with selected node 1`] = `
+<div>
+  <div
+    class="bg-white overflow-auto border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] font-[family-name:var(--win98-font)] text-[11px]"
+  >
+    <div
+      class="p-1"
+    >
+      <div>
+        <div
+          class="flex items-center gap-1 py-[1px] cursor-default select-none"
+          style="padding-left: 0px;"
+        >
+          <button
+            class="w-[9px] h-[9px] border border-[var(--win98-button-shadow)] bg-white flex items-center justify-center text-[9px] leading-none flex-shrink-0"
+          >
+            −
+          </button>
+          <span
+            class="truncate"
+          >
+            My Computer
+          </span>
+        </div>
+        <div
+          class="relative"
+        >
+          <div
+            class="absolute top-0 bottom-0 border-l border-dotted border-[var(--win98-button-shadow)]"
+            style="left: 4px;"
+          />
+          <div>
+            <div
+              class="flex items-center gap-1 py-[1px] cursor-default select-none bg-[var(--win98-highlight)] text-[var(--win98-highlight-text)]"
+              style="padding-left: 16px;"
+            >
+              <span
+                class="w-[9px] h-[9px] flex-shrink-0"
+              />
+              <span
+                class="truncate"
+              >
+                C:\\
+              </span>
+            </div>
+          </div>
+          <div>
+            <div
+              class="flex items-center gap-1 py-[1px] cursor-default select-none"
+              style="padding-left: 16px;"
+            >
+              <span
+                class="w-[9px] h-[9px] flex-shrink-0"
+              />
+              <span
+                class="truncate"
+              >
+                D:\\
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;

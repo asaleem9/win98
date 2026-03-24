@@ -1,1 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#000080" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="8" font-weight="bold">▶</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Back window -->
+  <rect x="4" y="1" width="10" height="8" fill="#C0C0C0"/>
+  <rect x="4" y="1" width="10" height="1" fill="#FFFFFF"/>
+  <rect x="4" y="1" width="1" height="8" fill="#FFFFFF"/>
+  <rect x="13" y="1" width="1" height="8" fill="#808080"/>
+  <rect x="4" y="8" width="10" height="1" fill="#808080"/>
+  <rect x="5" y="2" width="8" height="2" fill="#000080"/>
+  <!-- Front window -->
+  <rect x="1" y="5" width="10" height="9" fill="#C0C0C0"/>
+  <rect x="1" y="5" width="10" height="1" fill="#FFFFFF"/>
+  <rect x="1" y="5" width="1" height="9" fill="#FFFFFF"/>
+  <rect x="10" y="5" width="1" height="9" fill="#808080"/>
+  <rect x="1" y="13" width="10" height="1" fill="#808080"/>
+  <rect x="2" y="6" width="8" height="2" fill="#000080"/>
+  <rect x="2" y="8" width="8" height="5" fill="#FFFFFF"/>
+  <!-- Arrow -->
+  <rect x="12" y="10" width="1" height="4" fill="#000000"/>
+  <rect x="11" y="12" width="1" height="1" fill="#000000"/>
+  <rect x="13" y="12" width="1" height="1" fill="#000000"/>
+  <rect x="12" y="13" width="1" height="1" fill="#000000"/>
+</svg>

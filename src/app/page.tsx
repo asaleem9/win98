@@ -46,6 +46,13 @@ export default function Home() {
     return () => window.removeEventListener('win98-bsod', onBsod);
   }, [handleBSOD]);
 
+  // Listen for shutdown events dispatched from Start menu
+  useEffect(() => {
+    const onShutdown = () => handleShutdown();
+    window.addEventListener('win98-shutdown', onShutdown);
+    return () => window.removeEventListener('win98-shutdown', onShutdown);
+  }, [handleShutdown]);
+
   if (systemState === 'booting') {
     return <BootSequence onComplete={handleBootComplete} />;
   }

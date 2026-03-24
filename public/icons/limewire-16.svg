@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <rect width="16" height="16" rx="1" fill="#1a2a1a"/>
+  <circle cx="7" cy="7" r="4" fill="#4caf50"/>
+  <circle cx="7" cy="7" r="3" fill="#66cc66"/>
+  <circle cx="6" cy="5.5" r="1" fill="#88ee88" opacity="0.6"/>
+  <path d="M10 7 Q12 7 13 5" stroke="#aaa" stroke-width="1" fill="none"/>
+  <path d="M10 8 Q12 9 13 11" stroke="#aaa" stroke-width="1" fill="none"/>
+  <text x="8" y="15" text-anchor="middle" fill="#66cc66" font-size="3" font-family="Arial" font-weight="bold">LIME</text>
+</svg>

@@ -195,6 +195,19 @@ export function StartMenu({ onClose }: StartMenuProps) {
             )}
           </div>
 
+          {/* Favorites */}
+          <div
+            className={cn(
+              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
+              'hover:bg-[var(--win98-highlight)] hover:text-white',
+            )}
+            onClick={() => { handleOpenApp('ie5'); }}
+          >
+            <img src="/icons/ie-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+            <span>Favorites</span>
+            <span className="ml-auto">▶</span>
+          </div>
+
           {/* Documents */}
           <div
             className={cn(
@@ -207,6 +220,9 @@ export function StartMenu({ onClose }: StartMenuProps) {
             <span>Documents</span>
           </div>
 
+          {/* Separator */}
+          <div className="mx-[2px] my-[2px] border-t border-[var(--win98-button-shadow)]" />
+
           {/* Settings */}
           {settingsGroup && settingsGroup.apps && settingsGroup.apps.length > 0 && (
             <div
@@ -218,6 +234,7 @@ export function StartMenu({ onClose }: StartMenuProps) {
             >
               <img src="/icons/settings-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
               <span>Settings</span>
+              <span className="ml-auto">▶</span>
             </div>
           )}
 
@@ -230,6 +247,18 @@ export function StartMenu({ onClose }: StartMenuProps) {
           >
             <img src="/icons/find-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
             <span>Find</span>
+            <span className="ml-auto">▶</span>
+          </div>
+
+          {/* Help */}
+          <div
+            className={cn(
+              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
+              'hover:bg-[var(--win98-highlight)] hover:text-white',
+            )}
+          >
+            <img src="/icons/find-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+            <span>Help</span>
           </div>
 
           {/* Run */}
@@ -252,6 +281,10 @@ export function StartMenu({ onClose }: StartMenuProps) {
               'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
               'hover:bg-[var(--win98-highlight)] hover:text-white',
             )}
+            onClick={() => {
+              onClose();
+              window.dispatchEvent(new CustomEvent('win98-shutdown'));
+            }}
           >
             <img src="/icons/shutdown-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
             <span>Shut Down...</span>

@@ -1,1 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#0078D7" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="14" font-weight="bold">FP</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges">
+  <!-- Globe/earth - blue sphere -->
+  <rect x="10" y="2" width="12" height="2" fill="#0000FF"/>
+  <rect x="8" y="4" width="16" height="2" fill="#0000FF"/>
+  <rect x="6" y="6" width="20" height="2" fill="#0000FF"/>
+  <rect x="4" y="8" width="24" height="2" fill="#0000FF"/>
+  <rect x="4" y="10" width="24" height="2" fill="#0000FF"/>
+  <rect x="4" y="12" width="24" height="2" fill="#000080"/>
+  <rect x="4" y="14" width="24" height="2" fill="#000080"/>
+  <rect x="6" y="16" width="20" height="2" fill="#000080"/>
+  <rect x="8" y="18" width="16" height="2" fill="#000080"/>
+  <rect x="10" y="20" width="12" height="2" fill="#000080"/>
+  <!-- Globe latitude lines -->
+  <rect x="4" y="9" width="24" height="1" fill="#008080"/>
+  <rect x="6" y="13" width="20" height="1" fill="#008080"/>
+  <rect x="8" y="17" width="16" height="1" fill="#008080"/>
+  <!-- Globe longitude lines -->
+  <rect x="15" y="2" width="2" height="20" fill="#008080"/>
+  <rect x="10" y="4" width="2" height="16" fill="#008080"/>
+  <rect x="20" y="4" width="2" height="16" fill="#008080"/>
+  <!-- Green land masses -->
+  <rect x="8" y="6" width="4" height="4" fill="#00FF00"/>
+  <rect x="18" y="4" width="4" height="4" fill="#00FF00"/>
+  <rect x="6" y="12" width="6" height="4" fill="#00FF00"/>
+  <rect x="20" y="10" width="4" height="4" fill="#00FF00"/>
+  <!-- Globe highlight -->
+  <rect x="10" y="2" width="4" height="1" fill="#FFFFFF"/>
+  <rect x="8" y="4" width="2" height="1" fill="#FFFFFF"/>
+  <rect x="6" y="6" width="2" height="2" fill="#C0C0C0"/>
+  <!-- Document overlay (bottom-right) -->
+  <rect x="16" y="16" width="14" height="14" fill="#FFFFFF"/>
+  <rect x="16" y="16" width="14" height="1" fill="#C0C0C0"/>
+  <rect x="16" y="16" width="1" height="14" fill="#C0C0C0"/>
+  <rect x="29" y="16" width="1" height="14" fill="#808080"/>
+  <rect x="16" y="29" width="14" height="1" fill="#808080"/>
+  <!-- Document text lines -->
+  <rect x="18" y="19" width="10" height="1" fill="#0000FF"/>
+  <rect x="18" y="22" width="8" height="1" fill="#000000"/>
+  <rect x="18" y="25" width="10" height="1" fill="#000000"/>
+  <rect x="18" y="28" width="6" height="1" fill="#000000"/>
+</svg>

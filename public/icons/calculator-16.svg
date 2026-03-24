@@ -1,1 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#808080" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="8" font-weight="bold">=</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Calculator body -->
+  <rect x="2" y="1" width="12" height="14" fill="#C0C0C0"/>
+  <rect x="2" y="1" width="12" height="1" fill="#FFFFFF"/>
+  <rect x="2" y="1" width="1" height="14" fill="#FFFFFF"/>
+  <rect x="13" y="1" width="1" height="14" fill="#808080"/>
+  <rect x="2" y="14" width="12" height="1" fill="#808080"/>
+  <!-- LCD Display -->
+  <rect x="3" y="2" width="10" height="3" fill="#008080"/>
+  <!-- Button grid -->
+  <rect x="3" y="6" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="6" y="6" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="9" y="6" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="3" y="9" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="6" y="9" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="9" y="9" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="3" y="12" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="6" y="12" width="2" height="2" fill="#FFFFFF"/>
+  <rect x="9" y="12" width="2" height="2" fill="#0000FF"/>
+  <rect x="12" y="6" width="1" height="2" fill="#808080"/>
+  <rect x="12" y="9" width="1" height="2" fill="#808080"/>
+  <rect x="12" y="12" width="1" height="2" fill="#808080"/>
+</svg>

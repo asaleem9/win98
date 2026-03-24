@@ -1,1 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#808080" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#000000" font-family="sans-serif" font-size="14" font-weight="bold">⚙</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges">
+  <!-- Gear outer shape -->
+  <!-- Top tooth -->
+  <rect x="13" y="2" width="6" height="3" fill="#808080"/>
+  <rect x="13" y="2" width="6" height="1" fill="#C0C0C0"/>
+  <!-- Bottom tooth -->
+  <rect x="13" y="27" width="6" height="3" fill="#808080"/>
+  <rect x="13" y="29" width="6" height="1" fill="#000000"/>
+  <!-- Left tooth -->
+  <rect x="2" y="13" width="3" height="6" fill="#808080"/>
+  <rect x="2" y="13" width="1" height="6" fill="#C0C0C0"/>
+  <!-- Right tooth -->
+  <rect x="27" y="13" width="3" height="6" fill="#808080"/>
+  <rect x="29" y="13" width="1" height="6" fill="#000000"/>
+  <!-- Top-left tooth -->
+  <rect x="6" y="5" width="4" height="4" fill="#808080"/>
+  <rect x="6" y="5" width="4" height="1" fill="#C0C0C0"/>
+  <rect x="6" y="5" width="1" height="4" fill="#C0C0C0"/>
+  <!-- Top-right tooth -->
+  <rect x="22" y="5" width="4" height="4" fill="#808080"/>
+  <rect x="22" y="5" width="4" height="1" fill="#C0C0C0"/>
+  <rect x="25" y="5" width="1" height="4" fill="#000000"/>
+  <!-- Bottom-left tooth -->
+  <rect x="6" y="23" width="4" height="4" fill="#808080"/>
+  <rect x="6" y="23" width="1" height="4" fill="#C0C0C0"/>
+  <rect x="6" y="26" width="4" height="1" fill="#000000"/>
+  <!-- Bottom-right tooth -->
+  <rect x="22" y="23" width="4" height="4" fill="#808080"/>
+  <rect x="25" y="23" width="1" height="4" fill="#000000"/>
+  <rect x="22" y="26" width="4" height="1" fill="#000000"/>
+  <!-- Gear body (circle approximation) -->
+  <rect x="7" y="5" width="18" height="22" fill="#808080"/>
+  <rect x="5" y="7" width="22" height="18" fill="#808080"/>
+  <!-- Highlight -->
+  <rect x="7" y="5" width="18" height="1" fill="#C0C0C0"/>
+  <rect x="5" y="7" width="1" height="18" fill="#C0C0C0"/>
+  <!-- Shadow -->
+  <rect x="7" y="26" width="18" height="1" fill="#000000"/>
+  <rect x="26" y="7" width="1" height="18" fill="#000000"/>
+  <!-- Inner circle hole -->
+  <rect x="11" y="10" width="10" height="12" fill="#C0C0C0"/>
+  <rect x="10" y="11" width="12" height="10" fill="#C0C0C0"/>
+  <!-- Inner highlight -->
+  <rect x="11" y="10" width="10" height="1" fill="#FFFFFF"/>
+  <rect x="10" y="11" width="1" height="10" fill="#FFFFFF"/>
+  <!-- Inner shadow -->
+  <rect x="11" y="21" width="10" height="1" fill="#808080"/>
+  <rect x="21" y="11" width="1" height="10" fill="#808080"/>
+  <!-- Center hole -->
+  <rect x="13" y="13" width="6" height="6" fill="#808080"/>
+  <rect x="13" y="13" width="6" height="1" fill="#000000"/>
+  <rect x="13" y="13" width="1" height="6" fill="#000000"/>
+  <rect x="18" y="13" width="1" height="6" fill="#C0C0C0"/>
+  <rect x="13" y="18" width="6" height="1" fill="#C0C0C0"/>
+</svg>

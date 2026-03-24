@@ -1,1 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="#D04423" rx="2"/><text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="sans-serif" font-size="8" font-weight="bold">PP</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- Document page -->
+  <rect x="2" y="1" width="12" height="14" fill="#FFFFFF"/>
+  <rect x="2" y="1" width="12" height="1" fill="#C0C0C0"/>
+  <rect x="2" y="1" width="1" height="14" fill="#C0C0C0"/>
+  <rect x="13" y="1" width="1" height="14" fill="#808080"/>
+  <rect x="2" y="14" width="12" height="1" fill="#808080"/>
+  <!-- Slide area -->
+  <rect x="4" y="4" width="8" height="5" fill="#FFFFFF"/>
+  <rect x="4" y="4" width="8" height="1" fill="#C0C0C0"/>
+  <rect x="4" y="8" width="8" height="1" fill="#808080"/>
+  <!-- Text lines -->
+  <rect x="4" y="10" width="8" height="1" fill="#C0C0C0"/>
+  <rect x="4" y="12" width="6" height="1" fill="#C0C0C0"/>
+  <!-- Red/Orange "P" -->
+  <rect x="4" y="3" width="2" height="7" fill="#FF0000"/>
+  <rect x="6" y="3" width="3" height="1" fill="#FF0000"/>
+  <rect x="9" y="3" width="2" height="1" fill="#FF0000"/>
+  <rect x="9" y="4" width="2" height="1" fill="#FF0000"/>
+  <rect x="9" y="5" width="2" height="1" fill="#FF0000"/>
+  <rect x="6" y="6" width="3" height="1" fill="#FF0000"/>
+  <!-- Highlight -->
+  <rect x="4" y="3" width="7" height="1" fill="#FFFF00"/>
+  <rect x="4" y="3" width="1" height="7" fill="#FFFF00"/>
+</svg>

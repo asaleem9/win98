@@ -1,0 +1,282 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`BSOD snapshots > custom error message 1`] = `
+<div>
+  <div
+    class="fixed inset-0 z-[99999] bg-[#0000AA] flex items-center justify-center p-8 cursor-default"
+  >
+    <div
+      class="max-w-[600px] text-white font-[family-name:var(--win98-font-fixedsys)] text-[14px] leading-relaxed"
+    >
+      <div
+        class="text-center mb-4"
+      >
+        <span
+          class="bg-[#A8A8A8] text-[#0000AA] px-2"
+        >
+           Windows 
+        </span>
+      </div>
+      <p
+        class="mb-4"
+      >
+        A problem has been detected and Windows has been shut down
+         in VxD VMCPD(01) + 00010E36. The current application will be terminated.
+      </p>
+      <p
+        class="mb-4"
+      >
+        * Press any key to terminate the current application.
+        <br />
+        * Press CTRL+ALT+DEL to restart your computer. You will
+        <br />
+          lose any unsaved information in all applications.
+      </p>
+      <p
+        class="text-center mt-8"
+      >
+        Press any key to continue 
+        <span
+          class="animate-pulse"
+        >
+          _
+        </span>
+      </p>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`BSOD snapshots > default error message 1`] = `
+<div>
+  <div
+    class="fixed inset-0 z-[99999] bg-[#0000AA] flex items-center justify-center p-8 cursor-default"
+  >
+    <div
+      class="max-w-[600px] text-white font-[family-name:var(--win98-font-fixedsys)] text-[14px] leading-relaxed"
+    >
+      <div
+        class="text-center mb-4"
+      >
+        <span
+          class="bg-[#A8A8A8] text-[#0000AA] px-2"
+        >
+           Windows 
+        </span>
+      </div>
+      <p
+        class="mb-4"
+      >
+        A fatal exception 0E has occurred at 0028:C0034B03
+         in VxD VMCPD(01) + 00010E36. The current application will be terminated.
+      </p>
+      <p
+        class="mb-4"
+      >
+        * Press any key to terminate the current application.
+        <br />
+        * Press CTRL+ALT+DEL to restart your computer. You will
+        <br />
+          lose any unsaved information in all applications.
+      </p>
+      <p
+        class="text-center mt-8"
+      >
+        Press any key to continue 
+        <span
+          class="animate-pulse"
+        >
+          _
+        </span>
+      </p>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`BootSequence snapshots > initial POST phase render 1`] = `
+<div>
+  <div
+    class="fixed inset-0 z-[99999] bg-black text-white font-[family-name:var(--win98-font-fixedsys)] text-[14px] p-4 cursor-pointer"
+  >
+    <div
+      class="mb-4"
+    >
+      <div>
+        Award Modular BIOS v4.51PG
+      </div>
+      <pre
+        class="mt-2 text-[10px] leading-[10px] text-[#00AA00]"
+      >
+        
+  ████████████████████████████
+  █                          █
+  █   ★  E N E R G Y        █
+  █      S T A R  ®         █
+  █                          █
+  ████████████████████████████
+      </pre>
+    </div>
+    <div
+      class="mb-4"
+    >
+      <div>
+        Intel Pentium II 450MHz
+      </div>
+      <div
+        class="mt-2"
+      >
+        Memory Test: 
+        0
+        K OK
+      </div>
+    </div>
+    <div
+      class="mt-8 text-[var(--win98-disabled-text)]"
+    >
+      Press any key to skip...
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ErrorDialog snapshots > default illegal-operation type 1`] = `
+<div>
+  <div
+    class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20"
+  >
+    <div
+      class="bg-[var(--win98-button-face)] min-w-[380px] max-w-[460px] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] font-[family-name:var(--win98-font)] text-[11px]"
+    >
+      <div
+        class="h-[18px] bg-[var(--win98-active-title)] px-[2px] flex items-center"
+      >
+        <span
+          class="text-white text-[11px] font-bold truncate"
+        >
+          Notepad
+        </span>
+      </div>
+      <div
+        class="p-4"
+      >
+        <div
+          class="flex gap-3 items-start mb-4"
+        >
+          <div
+            class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-[28px]"
+          >
+            ⚠️
+          </div>
+          <div>
+            <p
+              class="mb-2 font-bold"
+            >
+              Notepad has performed an illegal operation and will be shut down.
+            </p>
+            <p>
+              If the problem persists, contact the program vendor.
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex justify-center gap-2"
+        >
+          <button
+            class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-w-[75px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px]"
+          >
+            Close
+          </button>
+          <button
+            class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-w-[75px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px]"
+          >
+            Details &gt;&gt;
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ErrorDialog snapshots > not-responding type 1`] = `
+<div>
+  <div
+    class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20"
+  >
+    <div
+      class="bg-[var(--win98-button-face)] min-w-[380px] max-w-[460px] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] font-[family-name:var(--win98-font)] text-[11px]"
+    >
+      <div
+        class="h-[18px] bg-[var(--win98-active-title)] px-[2px] flex items-center"
+      >
+        <span
+          class="text-white text-[11px] font-bold truncate"
+        >
+          Internet Explorer
+        </span>
+      </div>
+      <div
+        class="p-4"
+      >
+        <div
+          class="flex gap-3 items-start mb-4"
+        >
+          <div
+            class="w-8 h-8 flex-shrink-0 flex items-center justify-center text-[28px]"
+          >
+            ⚠️
+          </div>
+          <div>
+            <p
+              class="mb-2 font-bold"
+            >
+              Internet Explorer is not responding.
+            </p>
+            <p>
+              If you choose to end the program now, you will lose any unsaved data. If you choose to wait, the program may respond.
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex justify-center gap-2"
+        >
+          <button
+            class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-w-[75px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px]"
+          >
+            Close
+          </button>
+          <button
+            class="font-[family-name:var(--win98-font)] text-[11px] bg-[var(--win98-button-face)] text-[var(--win98-button-text)] px-[6px] py-[1px] min-w-[75px] min-h-[23px] flex items-center justify-center gap-1 outline-none select-none focus-visible:outline-1 focus-visible:outline-dotted focus-visible:outline-black focus-visible:-outline-offset-4 border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] active:shadow-[inset_1px_1px_0_var(--win98-button-shadow)] active:pt-[2px] active:pl-[2px]"
+          >
+            End Now
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`ShutdownScreen snapshots > default render 1`] = `
+<div>
+  <div
+    class="fixed inset-0 z-[99999] bg-black flex items-center justify-center cursor-pointer"
+  >
+    <div
+      class="text-center"
+    >
+      <div
+        class="text-[#FF8C00] text-[20px] font-[family-name:var(--win98-font)]"
+      >
+        It's now safe to turn off your computer.
+      </div>
+      <div
+        class="text-[var(--win98-disabled-text)] text-[11px] mt-4 font-[family-name:var(--win98-font)]"
+      >
+        Click anywhere to restart
+      </div>
+    </div>
+  </div>
+</div>
+`;
