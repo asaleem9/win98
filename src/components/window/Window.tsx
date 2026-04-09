@@ -28,10 +28,15 @@ export function Window({ windowState, icon16, children }: WindowProps) {
   const { id, title, position, size, zIndex, state, isFocused, minSize } = windowState;
 
   // Drag handling
+  const dragTargetRef = useRef<HTMLElement | null>(null);
+
   const handleTitlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (state === 'maximized') return;
       e.preventDefault();
+      const target = e.currentTarget as HTMLElement;
+      target.setPointerCapture(e.pointerId);
+      dragTargetRef.current = target;
       setDragging(true);
       dragStart.current = { x: e.clientX, y: e.clientY, winX: position.x, winY: position.y };
       focusWindow(id);
@@ -40,31 +45,42 @@ export function Window({ windowState, icon16, children }: WindowProps) {
   );
 
   useEffect(() => {
-    if (!dragging) return;
-    const handleMove = (e: MouseEvent) => {
+    const target = dragTargetRef.current;
+    if (!dragging || !target) return;
+    const handleMove = (e: PointerEvent) => {
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
-      let newX = dragStart.current.winX + dx;
+      const newX = dragStart.current.winX + dx;
       let newY = dragStart.current.winY + dy;
       // Keep at least 50px of titlebar visible
       newY = Math.max(-size.height + WINDOW_DEFAULTS.minVisibleTitlebar, newY);
       moveWindow(id, newX, newY);
     };
-    const handleUp = () => setDragging(false);
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    const handleUp = (e: PointerEvent) => {
+      target.releasePointerCapture(e.pointerId);
+      setDragging(false);
+    };
+    target.addEventListener('pointermove', handleMove);
+    target.addEventListener('pointerup', handleUp);
+    target.addEventListener('lostpointercapture', () => setDragging(false));
     return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      target.removeEventListener('pointermove', handleMove);
+      target.removeEventListener('pointerup', handleUp);
+      target.removeEventListener('lostpointercapture', () => setDragging(false));
     };
   }, [dragging, id, moveWindow, size.height]);
 
   // Resize handling
+  const resizeTargetRef = useRef<HTMLElement | null>(null);
+
   const handleResizePointerDown = useCallback(
     (direction: ResizeDirection) => (e: React.PointerEvent) => {
       if (state === 'maximized') return;
       e.preventDefault();
       e.stopPropagation();
+      const target = e.currentTarget as HTMLElement;
+      target.setPointerCapture(e.pointerId);
+      resizeTargetRef.current = target;
       setResizing(direction);
       resizeStart.current = {
         x: e.clientX,
@@ -80,8 +96,9 @@ export function Window({ windowState, icon16, children }: WindowProps) {
   );
 
   useEffect(() => {
-    if (!resizing) return;
-    const handleMove = (e: MouseEvent) => {
+    const target = resizeTargetRef.current;
+    if (!resizing || !target) return;
+    const handleMove = (e: PointerEvent) => {
       const dx = e.clientX - resizeStart.current.x;
       const dy = e.clientY - resizeStart.current.y;
       let newWidth = resizeStart.current.width;
@@ -116,12 +133,17 @@ export function Window({ windowState, icon16, children }: WindowProps) {
         moveWindow(id, newX, newY);
       }
     };
-    const handleUp = () => setResizing(null);
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    const handleUp = (e: PointerEvent) => {
+      target.releasePointerCapture(e.pointerId);
+      setResizing(null);
+    };
+    target.addEventListener('pointermove', handleMove);
+    target.addEventListener('pointerup', handleUp);
+    target.addEventListener('lostpointercapture', () => setResizing(null));
     return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      target.removeEventListener('pointermove', handleMove);
+      target.removeEventListener('pointerup', handleUp);
+      target.removeEventListener('lostpointercapture', () => setResizing(null));
     };
   }, [resizing, id, minSize, moveWindow, resizeWindow]);
 
