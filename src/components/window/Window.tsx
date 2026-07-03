@@ -33,6 +33,9 @@ export function Window({ windowState, icon16, children }: WindowProps) {
 
   const handleTitlePointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // Presses on the min/max/close buttons must not start a drag — capturing
+      // the pointer here would swallow their click events
+      if ((e.target as HTMLElement).closest('button')) return;
       if (state === 'maximized') return;
       e.preventDefault();
       const target = e.currentTarget as HTMLElement;

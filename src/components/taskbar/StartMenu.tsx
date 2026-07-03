@@ -60,7 +60,9 @@ export function buildStartMenuTree(apps: AppDefinition[]): { programs: MenuNode;
 }
 
 const flyoutClass = cn(
-  'absolute left-full top-0 min-w-[180px] max-h-[calc(100vh-60px)] overflow-y-auto',
+  // NOTE: no overflow-y here — it would clip nested flyouts positioned outside
+  // this box. Anchored bottom so long lists grow upward from the taskbar.
+  'absolute left-full bottom-0 min-w-[180px]',
   'bg-[var(--win98-button-face)] py-[2px]',
   'border-2 border-solid',
   'border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)]',
