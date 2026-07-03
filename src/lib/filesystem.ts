@@ -1,4 +1,5 @@
 import { FSNode } from '@/types/filesystem';
+import { resolvePathIn } from '@/lib/fs/fsOperations';
 
 export const virtualFileSystem: FSNode = {
   name: 'C:',
@@ -25,7 +26,15 @@ export const virtualFileSystem: FSNode = {
             { name: 'family.bmp', type: 'file', icon: '/icons/image-16.svg', created: '1999-02-14', modified: '1999-02-14', size: 2359296, content: '[Bitmap Image - 1280x960]' },
           ],
         },
-        { name: 'letter.doc', type: 'file', icon: '/icons/doc-16.svg', created: '1999-03-01', modified: '1999-03-10', size: 28672, content: 'Dear Sir/Madam,\n\nI am writing to inform you...' },
+        {
+          name: 'Downloads',
+          type: 'directory',
+          icon: '/icons/folder-16.svg',
+          created: '1999-01-01',
+          modified: '1999-03-14',
+          children: [],
+        },
+        { name: 'letter.doc', type: 'file', icon: '/icons/doc-16.svg', created: '1999-03-01', modified: '1999-03-10', size: 28672, content: 'Dear Sir/Madam,\n\nI am writing to inform you that my Y2K preparations are complete. I have stockpiled 47 cans of beans and printed out the entire internet.\n\nSincerely,\nA Concerned Citizen' },
         { name: 'budget.xls', type: 'file', icon: '/icons/xls-16.svg', created: '1999-02-20', modified: '1999-03-05', size: 45056, content: '[Excel Spreadsheet]' },
         { name: 'readme.txt', type: 'file', icon: '/icons/txt-16.svg', created: '1998-06-25', modified: '1998-06-25', size: 1024, content: 'Welcome to Windows 98!\n\nThis is your My Documents folder.\nYou can store your personal files here.' },
       ],
@@ -157,22 +166,7 @@ export const virtualFileSystem: FSNode = {
 };
 
 export function resolvePath(path: string): FSNode | null {
-  const normalized = path.replace(/\//g, '\\').replace(/\\+$/, '');
-  if (normalized === 'C:' || normalized === 'C:\\') return virtualFileSystem;
-
-  const parts = normalized.replace(/^C:\\?/i, '').split('\\').filter(Boolean);
-  let current = virtualFileSystem;
-
-  for (const part of parts) {
-    if (current.type !== 'directory' || !current.children) return null;
-    const child = current.children.find(
-      (c) => c.name.toLowerCase() === part.toLowerCase(),
-    );
-    if (!child) return null;
-    current = child;
-  }
-
-  return current;
+  return resolvePathIn(virtualFileSystem, path);
 }
 
 export function formatSize(bytes: number): string {

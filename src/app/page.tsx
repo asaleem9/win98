@@ -2,28 +2,49 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { WindowProvider } from '@/contexts/WindowContext';
+import { FileSystemProvider } from '@/contexts/FileSystemContext';
+import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import { WindowManager } from '@/components/window/WindowManager';
 import { Taskbar } from '@/components/taskbar/Taskbar';
 import { Desktop } from '@/components/desktop/Desktop';
 import { BootSequence } from '@/components/system/BootSequence';
-import { ShutdownScreen } from '@/components/system/ShutdownScreen';
+import { ShutdownScreen, ShutdownDialog } from '@/components/system/ShutdownScreen';
 import { BSOD } from '@/components/system/BSOD';
+import { ShellShortcuts } from '@/components/system/ShellShortcuts';
+import { SystemDialogs } from '@/components/system/SystemDialogs';
+import { ScreenSaverManager } from '@/components/system/ScreenSaverManager';
+import { playSound } from '@/lib/sounds';
 
 type SystemState = 'booting' | 'running' | 'shutdown' | 'bsod';
+
+function ScreenSaverHost() {
+  const { settings } = useSettings();
+  return (
+    <ScreenSaverManager
+      selectedSaver={settings.screenSaver.id}
+      timeoutMs={settings.screenSaver.timeoutMinutes * 60000}
+    />
+  );
+}
 
 export default function Home() {
   const [systemState, setSystemState] = useState<SystemState>('booting');
   const [bsodMessage, setBsodMessage] = useState<string | undefined>();
+  const [shutdownDialogOpen, setShutdownDialogOpen] = useState(false);
 
   const handleBootComplete = useCallback(() => {
     setSystemState('running');
+    playSound('startup');
   }, []);
 
   const handleShutdown = useCallback(() => {
+    setShutdownDialogOpen(false);
+    playSound('shutdown');
     setSystemState('shutdown');
   }, []);
 
   const handleRestart = useCallback(() => {
+    setShutdownDialogOpen(false);
     setSystemState('booting');
   }, []);
 
@@ -46,11 +67,16 @@ export default function Home() {
     return () => window.removeEventListener('win98-bsod', onBsod);
   }, [handleBSOD]);
 
-  // Listen for shutdown events dispatched from Start menu
+  // Immediate shutdown (legacy event) and the Shut Down Windows dialog
   useEffect(() => {
     const onShutdown = () => handleShutdown();
+    const onShutdownDialog = () => setShutdownDialogOpen(true);
     window.addEventListener('win98-shutdown', onShutdown);
-    return () => window.removeEventListener('win98-shutdown', onShutdown);
+    window.addEventListener('win98-shutdown-dialog', onShutdownDialog);
+    return () => {
+      window.removeEventListener('win98-shutdown', onShutdown);
+      window.removeEventListener('win98-shutdown-dialog', onShutdownDialog);
+    };
   }, [handleShutdown]);
 
   if (systemState === 'booting') {
@@ -62,22 +88,44 @@ export default function Home() {
   }
 
   return (
-    <WindowProvider>
-      <div className="h-screen w-screen overflow-hidden bg-[var(--win98-desktop)] relative">
-        {/* Desktop with icons */}
-        <Desktop />
+    <SettingsProvider>
+      <FileSystemProvider>
+        <WindowProvider>
+          <div className="h-screen w-screen overflow-hidden bg-[var(--win98-desktop)] relative">
+            {/* Desktop with icons */}
+            <Desktop />
 
-        {/* Windows */}
-        <WindowManager />
+            {/* Windows */}
+            <WindowManager />
 
-        {/* Taskbar */}
-        <Taskbar />
+            {/* Taskbar */}
+            <Taskbar />
 
-        {/* BSOD overlay */}
-        {systemState === 'bsod' && (
-          <BSOD message={bsodMessage} onDismiss={handleBSODDismiss} />
-        )}
-      </div>
-    </WindowProvider>
+            {/* Global keyboard shortcuts + Alt+Tab overlay */}
+            <ShellShortcuts />
+
+            {/* Globally-dispatched system dialogs */}
+            <SystemDialogs />
+
+            {/* Idle screensaver */}
+            <ScreenSaverHost />
+
+            {/* Shut Down Windows dialog */}
+            {shutdownDialogOpen && (
+              <ShutdownDialog
+                onShutdown={handleShutdown}
+                onRestart={handleRestart}
+                onCancel={() => setShutdownDialogOpen(false)}
+              />
+            )}
+
+            {/* BSOD overlay */}
+            {systemState === 'bsod' && (
+              <BSOD message={bsodMessage} onDismiss={handleBSODDismiss} />
+            )}
+          </div>
+        </WindowProvider>
+      </FileSystemProvider>
+    </SettingsProvider>
   );
 }

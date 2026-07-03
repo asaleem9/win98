@@ -1,5 +1,5 @@
 import { expectTypeOf, describe, test } from 'vitest';
-import type { WindowState, WindowAction, WindowManagerState } from '@/types/window';
+import type { WindowState, WindowAction, WindowManagerState, LaunchParams } from '@/types/window';
 import type { AppCategory, AppDefinition, AppComponentProps } from '@/types/app';
 import type { FileType, FSNode } from '@/types/filesystem';
 import { cn } from '@/lib/cn';
@@ -78,8 +78,12 @@ describe('AppCategory', () => {
 });
 
 describe('AppComponentProps', () => {
-  test('is { windowId: string }', () => {
-    expectTypeOf<AppComponentProps>().toEqualTypeOf<{ windowId: string }>();
+  test('has required windowId and optional launch props', () => {
+    expectTypeOf<AppComponentProps>().toEqualTypeOf<{
+      windowId: string;
+      launchParams?: LaunchParams;
+      launchCount?: number;
+    }>();
   });
 });
 

@@ -1,3 +1,9 @@
+export interface LaunchParams {
+  filePath?: string;
+  url?: string;
+  [key: string]: unknown;
+}
+
 export interface WindowState {
   id: string;
   appId: string;
@@ -10,10 +16,12 @@ export interface WindowState {
   isFocused: boolean;
   restoredPosition?: { x: number; y: number };
   restoredSize?: { width: number; height: number };
+  launchParams?: LaunchParams;
+  launchCount: number;
 }
 
 export type WindowAction =
-  | { type: 'OPEN_WINDOW'; payload: { appId: string; title?: string; position?: { x: number; y: number } } }
+  | { type: 'OPEN_WINDOW'; payload: { appId: string; title?: string; position?: { x: number; y: number }; launchParams?: LaunchParams } }
   | { type: 'CLOSE_WINDOW'; payload: { id: string } }
   | { type: 'FOCUS_WINDOW'; payload: { id: string } }
   | { type: 'MINIMIZE_WINDOW'; payload: { id: string } }

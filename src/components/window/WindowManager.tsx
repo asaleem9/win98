@@ -24,7 +24,7 @@ export function WindowManager() {
                 </div>
               }
             >
-              <AppComponent windowId={win.id} />
+              <AppComponent windowId={win.id} launchParams={win.launchParams} launchCount={win.launchCount} />
             </Suspense>
           </Window>
         );

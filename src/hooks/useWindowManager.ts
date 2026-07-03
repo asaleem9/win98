@@ -1,7 +1,7 @@
 'use client';
 
 import { useReducer, useCallback } from 'react';
-import { WindowState, WindowAction, WindowManagerState } from '@/types/window';
+import { WindowState, WindowAction, WindowManagerState, LaunchParams } from '@/types/window';
 import { WINDOW_DEFAULTS } from '@/lib/constants';
 
 // App registry is imported lazily to avoid circular deps
@@ -25,14 +25,27 @@ let windowCounter = 0;
 function windowReducer(state: WindowManagerState, action: WindowAction): WindowManagerState {
   switch (action.type) {
     case 'OPEN_WINDOW': {
-      const { appId, title, position } = action.payload;
+      const { appId, title, position, launchParams } = action.payload;
       const appDef = appRegistryCache?.[appId];
 
-      // Singleton check: if app already open, focus it
+      // Singleton check: if app already open, focus it and hand it the new launch params
       if (appDef?.singleton) {
         const existing = state.windows.find((w) => w.appId === appId);
         if (existing) {
-          return windowReducer(state, { type: 'FOCUS_WINDOW', payload: { id: existing.id } });
+          const focused = windowReducer(state, { type: 'FOCUS_WINDOW', payload: { id: existing.id } });
+          return {
+            ...focused,
+            windows: focused.windows.map((w) =>
+              w.id === existing.id
+                ? {
+                    ...w,
+                    launchParams: launchParams ?? w.launchParams,
+                    launchCount: w.launchCount + 1,
+                    ...(title ? { title } : {}),
+                  }
+                : w,
+            ),
+          };
         }
       }
 
@@ -53,6 +66,8 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
         zIndex: state.nextZIndex,
         state: 'normal',
         isFocused: true,
+        launchParams,
+        launchCount: 1,
       };
 
       // Unfocus all other windows
@@ -195,8 +210,11 @@ export function useWindowManager() {
   const [state, dispatch] = useReducer(windowReducer, initialState);
 
   const openWindow = useCallback(
-    (appId: string, options?: { title?: string; position?: { x: number; y: number } }) => {
-      dispatch({ type: 'OPEN_WINDOW', payload: { appId, title: options?.title, position: options?.position } });
+    (appId: string, options?: { title?: string; position?: { x: number; y: number }; launchParams?: LaunchParams }) => {
+      dispatch({
+        type: 'OPEN_WINDOW',
+        payload: { appId, title: options?.title, position: options?.position, launchParams: options?.launchParams },
+      });
     },
     [],
   );

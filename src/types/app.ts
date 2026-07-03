@@ -1,4 +1,5 @@
 import { ComponentType, LazyExoticComponent } from 'react';
+import { LaunchParams } from './window';
 
 export type AppCategory =
   | 'accessories'
@@ -33,4 +34,6 @@ export interface AppDefinition {
 
 export interface AppComponentProps {
   windowId: string;
+  launchParams?: LaunchParams;
+  launchCount?: number;
 }

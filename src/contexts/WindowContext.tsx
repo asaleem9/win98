@@ -1,12 +1,12 @@
 'use client';
 
 import { createContext, useContext, ReactNode } from 'react';
-import { WindowState } from '@/types/window';
+import { WindowState, LaunchParams } from '@/types/window';
 import { useWindowManager } from '@/hooks/useWindowManager';
 
 interface WindowContextType {
   windows: WindowState[];
-  openWindow: (appId: string, options?: { title?: string; position?: { x: number; y: number } }) => void;
+  openWindow: (appId: string, options?: { title?: string; position?: { x: number; y: number }; launchParams?: LaunchParams }) => void;
   closeWindow: (id: string) => void;
   focusWindow: (id: string) => void;
   minimizeWindow: (id: string) => void;
