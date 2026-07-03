@@ -15,6 +15,12 @@ import {
   goalTier,
   finalScore,
   SCORE_GOALS,
+  TONY_LEVELS,
+  tierRank,
+  higherTier,
+  isLevelUnlocked,
+  unlockedLevelCount,
+  type GoalTier,
 } from '../engine/trick';
 
 describe('trick base points', () => {
@@ -137,5 +143,103 @@ describe('final score', () => {
   it('sums every banked combo', () => {
     expect(finalScore([])).toBe(0);
     expect(finalScore([440, 0, 1200, 360])).toBe(2000);
+  });
+});
+
+describe('level definitions', () => {
+  it('ships eight levels', () => {
+    expect(TONY_LEVELS).toHaveLength(8);
+  });
+
+  it('has ascending medal goals on every level', () => {
+    for (const level of TONY_LEVELS) {
+      expect(level.goals.bronze).toBeLessThan(level.goals.silver);
+      expect(level.goals.silver).toBeLessThan(level.goals.gold);
+    }
+  });
+
+  it('uses positive feature weights and sane ranges', () => {
+    for (const level of TONY_LEVELS) {
+      const w = level.featureWeights;
+      expect(w.rail).toBeGreaterThan(0);
+      expect(w.ramp).toBeGreaterThan(0);
+      expect(w.gap).toBeGreaterThan(0);
+      expect(w.flat).toBeGreaterThan(0);
+      expect(level.scroll).toBeGreaterThan(0);
+      expect(level.railHeightRange[0]).toBeLessThanOrEqual(level.railHeightRange[1]);
+      expect(level.gapWidthRange[0]).toBeLessThanOrEqual(level.gapWidthRange[1]);
+      expect(level.palette.sky).toHaveLength(3);
+    }
+  });
+
+  it('ramps difficulty upward — later levels scroll faster with steeper gold goals', () => {
+    for (let i = 1; i < TONY_LEVELS.length; i++) {
+      expect(TONY_LEVELS[i].scroll).toBeGreaterThan(TONY_LEVELS[i - 1].scroll);
+      expect(TONY_LEVELS[i].goals.gold).toBeGreaterThan(TONY_LEVELS[i - 1].goals.gold);
+    }
+  });
+
+  it('wires each level to its own goal thresholds', () => {
+    for (const level of TONY_LEVELS) {
+      const { bronze, silver, gold } = level.goals;
+      expect(goalTier(bronze - 1, level.goals)).toBe('none');
+      expect(goalTier(bronze, level.goals)).toBe('bronze');
+      expect(goalTier(silver, level.goals)).toBe('silver');
+      expect(goalTier(gold, level.goals)).toBe('gold');
+    }
+  });
+});
+
+describe('tier comparison', () => {
+  it('orders the tiers', () => {
+    expect(tierRank('none')).toBe(0);
+    expect(tierRank('bronze')).toBe(1);
+    expect(tierRank('silver')).toBe(2);
+    expect(tierRank('gold')).toBe(3);
+  });
+
+  it('keeps the better of two tiers', () => {
+    expect(higherTier('none', 'bronze')).toBe('bronze');
+    expect(higherTier('gold', 'silver')).toBe('gold');
+    expect(higherTier('silver', 'silver')).toBe('silver');
+  });
+});
+
+describe('medal-gated progression', () => {
+  const none: GoalTier[] = new Array(TONY_LEVELS.length).fill('none');
+
+  it('opens only the first level with no medals', () => {
+    expect(isLevelUnlocked(0, none)).toBe(true);
+    expect(isLevelUnlocked(1, none)).toBe(false);
+    expect(unlockedLevelCount(none)).toBe(1);
+  });
+
+  it('unlocks the next level once the prior one earns bronze', () => {
+    const tiers = [...none];
+    tiers[0] = 'bronze';
+    expect(isLevelUnlocked(1, tiers)).toBe(true);
+    expect(isLevelUnlocked(2, tiers)).toBe(false);
+    expect(unlockedLevelCount(tiers)).toBe(2);
+  });
+
+  it('treats silver and gold as unlocking too', () => {
+    const tiers = [...none];
+    tiers[0] = 'gold';
+    tiers[1] = 'silver';
+    expect(unlockedLevelCount(tiers)).toBe(3);
+  });
+
+  it('unlocks the whole ladder when every level is cleared', () => {
+    const all: GoalTier[] = new Array(TONY_LEVELS.length).fill('gold');
+    expect(unlockedLevelCount(all)).toBe(TONY_LEVELS.length);
+    expect(isLevelUnlocked(TONY_LEVELS.length, all)).toBe(false);
+  });
+
+  it('stops at the first level without a medal', () => {
+    const tiers = [...none];
+    tiers[0] = 'bronze';
+    tiers[1] = 'none';
+    tiers[2] = 'gold'; // stranded — should not count while level 1 is unearned
+    expect(unlockedLevelCount(tiers)).toBe(2);
   });
 });

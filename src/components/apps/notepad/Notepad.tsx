@@ -11,7 +11,7 @@ import { addRecentDoc } from '@/lib/recentDocs';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { playSound } from '@/lib/sounds';
 import { normalizePath } from '@/lib/fs/fsOperations';
-import { FilePickerDialog } from './FilePickerDialog';
+import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
 
 function baseName(path: string): string {
   const parts = normalizePath(path).split('\\');

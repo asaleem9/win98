@@ -1,6 +1,22 @@
 'use client';
 
+import type { SiteDef } from './registry';
+
 import { useEffect, useState } from 'react';
+
+export const site: SiteDef = {
+  key: 'geocities',
+  urls: [
+    'http://www.geocities.com',
+    'www.geocities.com',
+    'geocities.com',
+    'http://www.geocities.com/area51/vault/4827',
+  ],
+  title: "Dave's Cool Page - GeoCities",
+  keywords: ['geocities', 'homepage', 'personal', 'guestbook', 'webpage'],
+  description: 'A personal GeoCities homepage, complete with visitor counter.',
+  render: () => <GeoCities />,
+};
 
 export default function GeoCities() {
   const [visitorCount] = useState(3847);

@@ -591,3 +591,141 @@ export function applyDeath(char: Character): { char: Character; goldLost: number
     goldLost,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Combat turn resolution
+// ---------------------------------------------------------------------------
+
+/** Sounds a single combat turn can cue; a subset of the app's SoundId set. */
+export type CombatSound = 'ding' | 'menuClick' | 'chord' | 'cardWin' | 'error';
+
+/** A log line and/or sound to surface, in the order it happened. */
+export interface CombatEvent {
+  log?: string;
+  sound?: CombatSound;
+}
+
+export interface CombatTurnResult {
+  /** Enemy roster after the turn (target removed on a kill, emptied on death). */
+  enemies: Enemy[];
+  /** Character after xp/gold/hp/death changes are folded in. */
+  character: Character;
+  /** Ordered log/sound cues to fire once each. */
+  events: CombatEvent[];
+  /** Item dropped by a slain enemy, if any. */
+  drop: Item | null;
+  goldGained: number;
+  xpGained: number;
+  leveledUp: boolean;
+  /** The target enemy was slain this turn. */
+  enemyDefeated: boolean;
+  /** The boss was the slain enemy. */
+  bossDown: boolean;
+  /** The player was killed by the retaliation. */
+  died: boolean;
+  /** Gold lost to the death penalty (0 unless `died`). */
+  goldLost: number;
+}
+
+/**
+ * Resolve one player attack against `enemyId` as a single pure step. All
+ * randomness flows through `rand`, and every consequence — new roster, updated
+ * character, loot, log/sound cues — is returned rather than applied, so the UI
+ * can commit each effect exactly once. Returns null if the target is gone.
+ */
+export function resolveCombatTurn(
+  character: Character,
+  enemies: Enemy[],
+  enemyId: string,
+  rand: Rand,
+): CombatTurnResult | null {
+  const idx = enemies.findIndex((e) => e.id === enemyId);
+  if (idx === -1) return null;
+  const enemy = enemies[idx];
+  const combat = playerCombat(character);
+  const events: CombatEvent[] = [];
+
+  // Player strikes.
+  const hit = resolveAttack(
+    { minDamage: combat.minDamage, maxDamage: combat.maxDamage, attackRating: combat.attackRating, defense: combat.defense },
+    enemy,
+    rand,
+  );
+  const newHp = enemy.hp - hit.damage;
+  if (hit.hit) events.push({ sound: 'ding', log: `You hit ${enemy.name} for ${hit.damage}.` });
+  else events.push({ sound: 'menuClick', log: `You miss ${enemy.name}.` });
+
+  if (newHp <= 0) {
+    // Enemy dies: xp, gold, loot.
+    events.push({ log: `${enemy.name} dies!` });
+    const drop = rollLootDrop(enemy, rand);
+    const goldGained = grantGold(enemy, rand);
+    const xpRes = applyXpGain({ ...character, gold: character.gold + goldGained }, enemy.xp);
+    const updated = xpRes.char;
+    if (xpRes.leveled) {
+      events.push({
+        sound: 'chord',
+        log: `Welcome to level ${updated.level}! ${xpRes.levelsGained * STAT_POINTS_PER_LEVEL} stat points to spend.`,
+      });
+    }
+    if (drop) {
+      const rareDrop = drop.rarity === 'rare' || drop.rarity === 'unique';
+      events.push({ sound: rareDrop ? 'cardWin' : undefined, log: `${enemy.name} drops ${drop.name}.` });
+    }
+    if (enemy.isBoss) {
+      events.push({ sound: 'cardWin', log: 'Andariel is slain! The Maiden of Anguish falls.' });
+    }
+    return {
+      enemies: enemies.filter((e) => e.id !== enemyId),
+      character: updated,
+      events,
+      drop,
+      goldGained,
+      xpGained: enemy.xp,
+      leveledUp: xpRes.leveled,
+      enemyDefeated: true,
+      bossDown: enemy.isBoss,
+      died: false,
+      goldLost: 0,
+    };
+  }
+
+  // Enemy survives and retaliates.
+  const retaliate = resolveAttack(enemy, combat, rand);
+  let playerHp = character.hp;
+  if (retaliate.hit) {
+    playerHp = character.hp - retaliate.damage;
+    events.push({ log: `${enemy.name} hits you for ${retaliate.damage}.` });
+    if (playerHp <= 0) {
+      const { char: revived, goldLost } = applyDeath(character);
+      events.push({ sound: 'error' });
+      return {
+        enemies: [],
+        character: revived,
+        events,
+        drop: null,
+        goldGained: 0,
+        xpGained: 0,
+        leveledUp: false,
+        enemyDefeated: false,
+        bossDown: false,
+        died: true,
+        goldLost,
+      };
+    }
+  }
+
+  return {
+    enemies: enemies.map((e, i) => (i === idx ? { ...e, hp: newHp } : e)),
+    character: { ...character, hp: playerHp },
+    events,
+    drop: null,
+    goldGained: 0,
+    xpGained: 0,
+    leveledUp: false,
+    enemyDefeated: false,
+    bossDown: false,
+    died: false,
+    goldLost: 0,
+  };
+}

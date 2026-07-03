@@ -23,12 +23,15 @@ import {
   quaffPotion,
   buyPotion,
   applyDeath,
+  resolveCombatTurn,
   STAT_POINTS_PER_LEVEL,
   BOSS_LEVEL,
   RARITY_ORDER,
   type Item,
   type Rarity,
   type Combatant,
+  type Enemy,
+  type CombatTurnResult,
 } from '../engine/diablo';
 
 describe('character creation', () => {
@@ -335,5 +338,86 @@ describe('potions, gold and death', () => {
     expect(goldLost).toBe(100);
     expect(char.gold).toBe(300);
     expect(char.hp).toBe(playerCombat(char).maxLife);
+  });
+});
+
+describe('resolveCombatTurn', () => {
+  // A one-hp mob dies to any landed blow; a 500-hp mob survives one.
+  const softMob = (): Enemy => ({ ...makeEnemy(0, 1), id: 'target', hp: 1, maxHp: 1 });
+  const tankMob = (): Enemy => ({ ...makeEnemy(0, 1), id: 'target', hp: 500, maxHp: 500 });
+
+  /** Find the first seed whose turn satisfies `want`, so tests don't hinge on RNG luck. */
+  function turnMatching(hero: ReturnType<typeof createCharacter>, enemy: Enemy, want: (r: CombatTurnResult) => boolean): CombatTurnResult {
+    for (let s = 1; s < 500; s++) {
+      const r = resolveCombatTurn(hero, [enemy], 'target', makeRng(s));
+      if (r && want(r)) return r;
+    }
+    throw new Error('no seed produced the requested outcome');
+  }
+
+  it('returns null when the target enemy is gone', () => {
+    const hero = createCharacter('Barbarian');
+    expect(resolveCombatTurn(hero, [softMob()], 'missing', makeRng(1))).toBeNull();
+  });
+
+  it('grants exactly one xp and gold application and at most one drop on a killing blow', () => {
+    const hero = createCharacter('Barbarian');
+    const enemy = softMob();
+    const res = turnMatching(hero, enemy, (r) => r.enemyDefeated);
+
+    expect(res.died).toBe(false);
+    expect(res.enemies).toHaveLength(0);
+
+    // xp is applied once: character xp moves by exactly the enemy's bounty
+    expect(res.xpGained).toBe(enemy.xp);
+    expect(res.character.xp).toBe(hero.xp + enemy.xp);
+
+    // gold is applied once: within the enemy's band, added a single time
+    expect(res.goldGained).toBeGreaterThanOrEqual(enemy.goldMin);
+    expect(res.goldGained).toBeLessThanOrEqual(enemy.goldMax);
+    expect(res.character.gold).toBe(hero.gold + res.goldGained);
+
+    // at most one drop — the field is a single item or null by construction
+    if (res.drop) expect(res.drop.id).toBeTruthy();
+  });
+
+  it('is a pure function: same inputs and seed yield an identical result', () => {
+    const hero = createCharacter('Barbarian');
+    const enemy = softMob();
+    const a = resolveCombatTurn(hero, [enemy], 'target', makeRng(42));
+    const b = resolveCombatTurn(hero, [enemy], 'target', makeRng(42));
+    expect(a).toEqual(b);
+    // and it must not mutate the inputs it was handed
+    expect(hero.xp).toBe(0);
+    expect(hero.gold).toBe(0);
+    expect(enemy.hp).toBe(1);
+  });
+
+  it('leaves loot, xp and gold untouched on a non-killing hit', () => {
+    const hero = createCharacter('Barbarian');
+    const enemy = tankMob();
+    const res = turnMatching(hero, enemy, (r) => r.enemyDefeated === false && r.died === false && r.events.some((e) => e.log?.startsWith('You hit')));
+
+    expect(res.enemyDefeated).toBe(false);
+    expect(res.drop).toBeNull();
+    expect(res.xpGained).toBe(0);
+    expect(res.goldGained).toBe(0);
+    expect(res.leveledUp).toBe(false);
+    expect(res.character.xp).toBe(hero.xp);
+    expect(res.character.gold).toBe(hero.gold);
+    // the wounded enemy stays on the field with reduced hp
+    expect(res.enemies).toHaveLength(1);
+    expect(res.enemies[0].hp).toBeLessThan(enemy.hp);
+  });
+
+  it('slays the boss with a bossDown flag and a guaranteed rare+ drop', () => {
+    const hero = createCharacter('Barbarian');
+    const boss: Enemy = { ...makeBoss(5), id: 'target', hp: 1, maxHp: 1 };
+    const res = turnMatching(hero, boss, (r) => r.enemyDefeated);
+
+    expect(res.bossDown).toBe(true);
+    expect(res.drop).not.toBeNull();
+    expect(RARITY_ORDER.indexOf((res.drop as Item).rarity)).toBeGreaterThanOrEqual(RARITY_ORDER.indexOf('rare'));
+    expect(res.events.some((e) => e.log === 'Andariel is slain! The Maiden of Anguish falls.')).toBe(true);
   });
 });

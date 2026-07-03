@@ -35,7 +35,10 @@ export function useKeyboardShortcuts(): AltTabState | null {
         e.preventDefault();
         const current = altTabRef.current;
         if (!current) {
-          const candidates = [...windowsRef.current].sort((a, b) => b.zIndex - a.zIndex);
+          // Owned dialogs travel with their opener and never appear in the switcher
+          const candidates = windowsRef.current
+            .filter((w) => !w.ownerId)
+            .sort((a, b) => b.zIndex - a.zIndex);
           if (candidates.length === 0) return;
           setAltTab({ windows: candidates, selectedIndex: candidates.length > 1 ? 1 : 0 });
         } else {

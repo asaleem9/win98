@@ -3,31 +3,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { MusicPlayer } from '@/lib/audio/player';
-import { MusicTrack, musicTracks, getTrackByFileName } from '@/lib/audio/tracks';
-import { manualStep, formatTime, basename } from '@/lib/audio/playlist';
+import { MusicTrack, musicTracks } from '@/lib/audio/tracks';
+import { manualStep, formatTime, playlistForLaunch } from '@/lib/audio/playlist';
+import { useFileSystem } from '@/contexts/FileSystemContext';
 import { showSystemError } from '@/hooks/useFileOpener';
 
 type Status = 'Stopped' | 'Playing' | 'Paused' | 'Ready';
 
-/** Resolve a launched .mid/.avi/.mpg path to a bundled track + display name. */
-function resolveLaunch(filePath?: string): { list: MusicTrack[]; index: number; displayName?: string } {
-  if (!filePath) return { list: [...musicTracks], index: 0 };
-  const name = basename(filePath);
-  const match = getTrackByFileName(name);
-  if (match) {
-    return { list: [...musicTracks], index: musicTracks.findIndex((t) => t.id === match.id) };
-  }
-  // Non-mp3 media (.mid/.avi/.mpg): show the requested clip name, sound a track.
-  const stand = musicTracks[0];
-  const faux: MusicTrack = { ...stand, id: `launch-${name}`, title: name, artist: '', fileName: name };
-  return { list: [faux, ...musicTracks], index: 0, displayName: name };
-}
-
 export default function MediaPlayer({ launchParams, launchCount }: AppComponentProps) {
   const playerRef = useRef<MusicPlayer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { readFile } = useFileSystem();
 
-  const initial = useRef(resolveLaunch(launchParams?.filePath));
+  // Resolve a launched clip's FS content so a 'track:<id>' reference is honored.
+  const readContent = useCallback((fp?: string) => (fp ? readFile(fp) : null), [readFile]);
+
+  const initial = useRef(playlistForLaunch(launchParams?.filePath, readContent(launchParams?.filePath)));
   const [playlist, setPlaylist] = useState<MusicTrack[]>(initial.current.list);
   const [index, setIndex] = useState(initial.current.index);
   const [status, setStatus] = useState<Status>('Ready');
@@ -72,7 +63,7 @@ export default function MediaPlayer({ launchParams, launchCount }: AppComponentP
 
   useEffect(() => {
     if (launchCount === undefined) return;
-    const r = resolveLaunch(launchParams?.filePath);
+    const r = playlistForLaunch(launchParams?.filePath, readContent(launchParams?.filePath));
     setPlaylist(r.list);
     setIndex(r.index);
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -6,7 +6,7 @@ import { useWindowManager } from '@/hooks/useWindowManager';
 
 interface WindowContextType {
   windows: WindowState[];
-  openWindow: (appId: string, options?: { title?: string; position?: { x: number; y: number }; launchParams?: LaunchParams }) => void;
+  openWindow: (appId: string, options?: { title?: string; position?: { x: number; y: number }; launchParams?: LaunchParams; id?: string; ownerId?: string; modal?: boolean }) => void;
   closeWindow: (id: string) => void;
   focusWindow: (id: string) => void;
   minimizeWindow: (id: string) => void;
@@ -15,6 +15,8 @@ interface WindowContextType {
   moveWindow: (id: string, x: number, y: number) => void;
   resizeWindow: (id: string, width: number, height: number) => void;
   updateTitle: (id: string, title: string) => void;
+  minimizeAll: () => void;
+  restoreAll: () => void;
 }
 
 const WindowContext = createContext<WindowContextType | null>(null);

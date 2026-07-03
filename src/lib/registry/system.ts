@@ -1,0 +1,207 @@
+import { lazy } from 'react';
+import { AppDefinition } from '@/types/app';
+
+const MSDOSApp = lazy(() => import('@/components/apps/msdos/MSDOSPrompt'));
+const ExplorerApp = lazy(() => import('@/components/apps/explorer/Explorer'));
+const MyComputerApp = lazy(() => import('@/components/apps/my-computer/MyComputer'));
+const MyDocumentsApp = lazy(() => import('@/components/apps/my-documents/MyDocuments'));
+const RecycleBinApp = lazy(() => import('@/components/apps/recycle-bin/RecycleBin'));
+const NetworkNeighborhoodApp = lazy(() => import('@/components/apps/network-neighborhood/NetworkNeighborhood'));
+const ControlPanelApp = lazy(() => import('@/components/apps/control-panel/ControlPanel'));
+const DiskDefragmenter = lazy(() => import('@/components/apps/defrag/DiskDefragmenter'));
+const TaskManagerApp = lazy(() => import('@/components/apps/task-manager/TaskManager'));
+const RegistryEditor = lazy(() => import('@/components/apps/regedit/RegistryEditor'));
+const DisplayProperties = lazy(() => import('@/components/apps/display-properties/DisplayProperties'));
+const AddRemoveProgramsApp = lazy(() => import('@/components/apps/add-remove-programs/AddRemovePrograms'));
+const ScanDiskApp = lazy(() => import('@/components/apps/scandisk/ScanDisk'));
+const SystemInformationApp = lazy(() => import('@/components/apps/sysinfo/SystemInformation'));
+const DeviceManagerApp = lazy(() => import('@/components/apps/device-manager/DeviceManager'));
+const FindFilesApp = lazy(() => import('@/components/apps/find-files/FindFiles'));
+const HelpApp = lazy(() => import('@/components/apps/help/Help'));
+
+export const systemApps: Record<string, AppDefinition> = {
+  'msdos': {
+    id: 'msdos',
+    name: 'MS-DOS Prompt',
+    icon: '/icons/msdos-32.svg',
+    icon16: '/icons/msdos-16.svg',
+    category: 'system',
+    component: MSDOSApp,
+    defaultWindow: { title: 'MS-DOS Prompt', width: 520, height: 340, minWidth: 320, minHeight: 200 },
+    startMenuPath: ['Programs'],
+    singleton: false,
+  },
+  'explorer': {
+    id: 'explorer',
+    name: 'Windows Explorer',
+    icon: '/icons/explorer-32.svg',
+    icon16: '/icons/explorer-16.svg',
+    category: 'system',
+    component: ExplorerApp,
+    defaultWindow: { title: 'Exploring - C:\\', width: 640, height: 480, minWidth: 350, minHeight: 250 },
+    startMenuPath: ['Programs'],
+    singleton: false,
+  },
+  'my-computer': {
+    id: 'my-computer',
+    name: 'My Computer',
+    icon: '/icons/my-computer-32.svg',
+    icon16: '/icons/my-computer-16.svg',
+    category: 'system',
+    component: MyComputerApp,
+    defaultWindow: { title: 'My Computer', width: 500, height: 400, minWidth: 300, minHeight: 250 },
+    singleton: true,
+    desktopIcon: true,
+  },
+  'my-documents': {
+    id: 'my-documents',
+    name: 'My Documents',
+    icon: '/icons/my-documents-32.svg',
+    icon16: '/icons/my-documents-16.svg',
+    category: 'system',
+    component: MyDocumentsApp,
+    defaultWindow: { title: 'My Documents', width: 500, height: 400, minWidth: 300, minHeight: 250 },
+    singleton: true,
+    desktopIcon: true,
+  },
+  'recycle-bin': {
+    id: 'recycle-bin',
+    name: 'Recycle Bin',
+    icon: '/icons/recycle-bin-32.svg',
+    icon16: '/icons/recycle-bin-16.svg',
+    category: 'system',
+    component: RecycleBinApp,
+    defaultWindow: { title: 'Recycle Bin', width: 400, height: 300, minWidth: 250, minHeight: 200 },
+    singleton: true,
+    desktopIcon: true,
+  },
+  'network-neighborhood': {
+    id: 'network-neighborhood',
+    name: 'Network Neighborhood',
+    icon: '/icons/network-32.svg',
+    icon16: '/icons/network-16.svg',
+    category: 'system',
+    component: NetworkNeighborhoodApp,
+    defaultWindow: { title: 'Network Neighborhood', width: 500, height: 400, minWidth: 300, minHeight: 250 },
+    singleton: true,
+    desktopIcon: true,
+  },
+  'control-panel': {
+    id: 'control-panel',
+    name: 'Control Panel',
+    icon: '/icons/control-panel-32.svg',
+    icon16: '/icons/control-panel-16.svg',
+    category: 'system',
+    component: ControlPanelApp,
+    defaultWindow: { title: 'Control Panel', width: 500, height: 400, minWidth: 300, minHeight: 250 },
+    startMenuPath: ['Settings'],
+    singleton: true,
+  },
+  'defrag': {
+    id: 'defrag',
+    name: 'Disk Defragmenter',
+    icon: '/icons/defrag-32.svg',
+    icon16: '/icons/defrag-16.svg',
+    category: 'system',
+    component: DiskDefragmenter,
+    defaultWindow: { title: 'Disk Defragmenter', width: 500, height: 400, minWidth: 400, minHeight: 300 },
+    startMenuPath: ['Programs', 'Accessories', 'System Tools'],
+    singleton: true,
+  },
+  'task-manager': {
+    id: 'task-manager',
+    name: 'Task Manager',
+    icon: '/icons/taskman-32.svg',
+    icon16: '/icons/taskman-16.svg',
+    category: 'system',
+    component: TaskManagerApp,
+    defaultWindow: { title: 'Windows Task Manager', width: 400, height: 350, minWidth: 300, minHeight: 250 },
+    singleton: true,
+  },
+  'regedit': {
+    id: 'regedit',
+    name: 'Registry Editor',
+    icon: '/icons/regedit-32.svg',
+    icon16: '/icons/regedit-16.svg',
+    category: 'system',
+    component: RegistryEditor,
+    defaultWindow: { title: 'Registry Editor', width: 600, height: 400, minWidth: 400, minHeight: 250 },
+    startMenuPath: ['Programs', 'Accessories', 'System Tools'],
+    singleton: true,
+  },
+  'display-properties': {
+    id: 'display-properties',
+    name: 'Display Properties',
+    icon: '/icons/display-32.svg',
+    icon16: '/icons/display-16.svg',
+    category: 'system',
+    component: DisplayProperties,
+    defaultWindow: { title: 'Display Properties', width: 400, height: 440, minWidth: 380, minHeight: 400, resizable: false },
+    startMenuPath: ['Settings', 'Control Panel'],
+    singleton: true,
+  },
+  'add-remove-programs': {
+    id: 'add-remove-programs',
+    name: 'Add/Remove Programs',
+    icon: '/icons/addremove-32.svg',
+    icon16: '/icons/addremove-16.svg',
+    category: 'system',
+    component: AddRemoveProgramsApp,
+    defaultWindow: { title: 'Add/Remove Programs Properties', width: 420, height: 450, minWidth: 380, minHeight: 350 },
+    startMenuPath: ['Settings', 'Control Panel'],
+    singleton: true,
+  },
+  'scandisk': {
+    id: 'scandisk',
+    name: 'ScanDisk',
+    icon: '/icons/scandisk-32.svg',
+    icon16: '/icons/scandisk-16.svg',
+    category: 'system',
+    component: ScanDiskApp,
+    defaultWindow: { title: 'ScanDisk', width: 420, height: 440, minWidth: 350, minHeight: 350 },
+    startMenuPath: ['Programs', 'Accessories', 'System Tools'],
+    singleton: true,
+  },
+  'sysinfo': {
+    id: 'sysinfo',
+    name: 'System Information',
+    icon: '/icons/sysinfo-32.svg',
+    icon16: '/icons/sysinfo-16.svg',
+    category: 'system',
+    component: SystemInformationApp,
+    defaultWindow: { title: 'Microsoft System Information', width: 600, height: 400, minWidth: 400, minHeight: 300 },
+    startMenuPath: ['Programs', 'Accessories', 'System Tools'],
+    singleton: true,
+  },
+  'device-manager': {
+    id: 'device-manager',
+    name: 'Device Manager',
+    icon: '/icons/devmgr-32.svg',
+    icon16: '/icons/devmgr-16.svg',
+    category: 'system',
+    component: DeviceManagerApp,
+    defaultWindow: { title: 'System Properties - Device Manager', width: 420, height: 480, minWidth: 350, minHeight: 350 },
+    startMenuPath: ['Settings', 'Control Panel'],
+    singleton: true,
+  },
+  'find-files': {
+    id: 'find-files',
+    name: 'Find: Files or Folders',
+    icon: '/icons/find-32.svg',
+    icon16: '/icons/find-16.svg',
+    category: 'system',
+    component: FindFilesApp,
+    defaultWindow: { title: 'Find: All Files', width: 520, height: 420, minWidth: 400, minHeight: 300 },
+    singleton: true,
+  },
+  'help': {
+    id: 'help',
+    name: 'Windows Help',
+    icon: '/icons/find-32.svg',
+    icon16: '/icons/find-16.svg',
+    category: 'system',
+    component: HelpApp,
+    defaultWindow: { title: 'Windows Help', width: 600, height: 440, minWidth: 420, minHeight: 300 },
+    singleton: true,
+  },
+};

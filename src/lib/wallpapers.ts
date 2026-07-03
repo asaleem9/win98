@@ -7,6 +7,38 @@ export interface WallpaperDef {
   style: CSSProperties;
 }
 
+export type WallpaperMode = 'tile' | 'center' | 'stretch';
+
+/** A user-supplied bitmap wallpaper. `source` is a data: URL or an fs path. */
+export interface ImageWallpaper {
+  type: 'image';
+  source: string;
+  mode: WallpaperMode;
+}
+
+/**
+ * Persisted wallpaper value. Named CSS wallpapers stay as a plain id string
+ * (or null for none) for backward compat; image wallpapers use the object form.
+ */
+export type WallpaperSetting = string | null | ImageWallpaper;
+
+export function isImageWallpaper(value: WallpaperSetting): value is ImageWallpaper {
+  return typeof value === 'object' && value !== null && value.type === 'image';
+}
+
+/** Background CSS for a bitmap wallpaper. `url` must already be a usable URL. */
+export function imageWallpaperStyle(url: string, mode: WallpaperMode): CSSProperties {
+  const backgroundImage = `url("${url}")`;
+  switch (mode) {
+    case 'tile':
+      return { backgroundImage, backgroundRepeat: 'repeat' };
+    case 'center':
+      return { backgroundImage, backgroundRepeat: 'no-repeat', backgroundPosition: 'center' };
+    case 'stretch':
+      return { backgroundImage, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: '100% 100%' };
+  }
+}
+
 // Period-flavored wallpapers recreated with CSS gradients/patterns.
 export const WALLPAPERS: WallpaperDef[] = [
   {

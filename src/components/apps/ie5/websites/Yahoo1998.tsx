@@ -1,5 +1,16 @@
 'use client';
 
+import type { SiteDef } from './registry';
+
+export const site: SiteDef = {
+  key: 'yahoo',
+  urls: ['http://www.yahoo.com', 'www.yahoo.com', 'yahoo.com'],
+  title: 'Yahoo!',
+  keywords: ['yahoo', 'search', 'portal', 'directory', 'email', 'news'],
+  description: 'The Yahoo! web portal — search, directory, and services.',
+  render: () => <Yahoo1998 />,
+};
+
 export default function Yahoo1998() {
   return (
     <div className="bg-white text-black font-[Arial,sans-serif] text-[12px] min-h-full">

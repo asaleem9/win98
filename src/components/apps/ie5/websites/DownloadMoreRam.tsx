@@ -1,5 +1,7 @@
 'use client';
 
+import type { SiteDef } from './registry';
+
 import { useState } from 'react';
 
 const RAM_OPTIONS = [
@@ -9,6 +11,15 @@ const RAM_OPTIONS = [
   { size: '512 MB', price: 'FREE', note: 'EXTREME performance' },
   { size: '1 GB', price: 'FREE', note: 'Why not?!' },
 ];
+
+export const site: SiteDef = {
+  key: 'downloadram',
+  urls: ['http://www.downloadmoreram.com', 'www.downloadmoreram.com', 'downloadmoreram.com'],
+  title: 'DownloadMoreRAM.com',
+  keywords: ['ram', 'memory', 'download', 'upgrade', 'free'],
+  description: 'Definitely-real free RAM downloads for your PC.',
+  render: () => <DownloadMoreRam />,
+};
 
 export default function DownloadMoreRam() {
   const [downloading, setDownloading] = useState<string | null>(null);

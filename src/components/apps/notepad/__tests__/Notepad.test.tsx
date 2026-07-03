@@ -28,8 +28,8 @@ describe('Notepad', () => {
     renderWithProviders(<Notepad windowId="np-4" />);
     await user.type(screen.getByRole('textbox'), 'unsaved work');
 
-    await user.click(screen.getByRole('button', { name: 'File' }));
-    await user.click(screen.getByRole('button', { name: /New/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'File' }));
+    await user.click(screen.getByRole('menuitem', { name: /New/ }));
 
     expect(await screen.findByText(/has changed/)).toBeInTheDocument();
   });
@@ -40,8 +40,8 @@ describe('Notepad', () => {
     const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
     await user.type(ta, 'temp');
 
-    await user.click(screen.getByRole('button', { name: 'File' }));
-    await user.click(screen.getByRole('button', { name: /New/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'File' }));
+    await user.click(screen.getByRole('menuitem', { name: /New/ }));
     await user.click(await screen.findByRole('button', { name: 'No' }));
 
     await waitFor(() => expect(ta.value).toBe(''));
@@ -50,8 +50,8 @@ describe('Notepad', () => {
   it('shows an About dialog', async () => {
     const user = userEvent.setup();
     renderWithProviders(<Notepad windowId="np-6" />);
-    await user.click(screen.getByRole('button', { name: 'Help' }));
-    await user.click(screen.getByRole('button', { name: 'About Notepad' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Help' }));
+    await user.click(screen.getByRole('menuitem', { name: 'About Notepad' }));
     expect(await screen.findByText(/Version 4\.10\.1998/)).toBeInTheDocument();
   });
 });

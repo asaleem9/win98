@@ -1,5 +1,7 @@
 'use client';
 
+import type { SiteDef } from './registry';
+
 import { useEffect, useRef, useState } from 'react';
 import { playSound } from '@/lib/sounds';
 
@@ -13,6 +15,15 @@ const ROWS = [
   { count: 9, delay: 0.1, size: 30 },
   { count: 11, delay: 0.22, size: 26 },
 ];
+
+export const site: SiteDef = {
+  key: 'hampster',
+  urls: ['http://www.hampsterdance.com', 'www.hampsterdance.com', 'hampsterdance.com'],
+  title: 'The Hampster Dance',
+  keywords: ['hampster', 'hamster', 'dance', 'meme', 'gif', 'music'],
+  description: 'The original dancing hamster meme page.',
+  render: () => <HampsterDance />,
+};
 
 export default function HampsterDance() {
   const [musicOn, setMusicOn] = useState(true);

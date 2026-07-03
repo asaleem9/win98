@@ -9,67 +9,14 @@ import { Button98 } from '@/components/ui/Button98';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useWindows } from '@/contexts/WindowContext';
 import { showSystemError } from '@/hooks/useFileOpener';
-import Yahoo1998 from './websites/Yahoo1998';
-import GeoCities from './websites/GeoCities';
-import AltaVista from './websites/AltaVista';
-import HampsterDance from './websites/HampsterDance';
-import AskJeeves from './websites/AskJeeves';
-import WebRing from './websites/WebRing';
-import DownloadMoreRam from './websites/DownloadMoreRam';
-
-type PageKey =
-  | 'yahoo'
-  | 'geocities'
-  | 'altavista'
-  | 'hampster'
-  | 'askjeeves'
-  | 'webring'
-  | 'downloadram'
-  | 'error'
-  | 'blank';
-
-const KNOWN_URLS: Record<string, PageKey> = {
-  'http://www.yahoo.com': 'yahoo',
-  'www.yahoo.com': 'yahoo',
-  'yahoo.com': 'yahoo',
-  'http://www.geocities.com': 'geocities',
-  'www.geocities.com': 'geocities',
-  'geocities.com': 'geocities',
-  'http://www.geocities.com/area51/vault/4827': 'geocities',
-  'http://www.altavista.com': 'altavista',
-  'www.altavista.com': 'altavista',
-  'altavista.com': 'altavista',
-  'http://www.hampsterdance.com': 'hampster',
-  'www.hampsterdance.com': 'hampster',
-  'hampsterdance.com': 'hampster',
-  'http://www.askjeeves.com': 'askjeeves',
-  'www.askjeeves.com': 'askjeeves',
-  'askjeeves.com': 'askjeeves',
-  'ask.com': 'askjeeves',
-  'www.ask.com': 'askjeeves',
-  'http://www.webring.org': 'webring',
-  'www.webring.org': 'webring',
-  'webring.org': 'webring',
-  'http://www.downloadmoreram.com': 'downloadram',
-  'www.downloadmoreram.com': 'downloadram',
-  'downloadmoreram.com': 'downloadram',
-  'about:blank': 'blank',
-};
+import { findSiteByUrl } from './websites/registry';
 
 const DEFAULT_HOME = 'http://www.yahoo.com';
 
-// Pretty title shown in the address history / favorites for a known page.
-const PAGE_TITLES: Record<PageKey, string> = {
-  yahoo: 'Yahoo!',
-  geocities: "Dave's Cool Page - GeoCities",
-  altavista: 'AltaVista - The Search Engine',
-  hampster: 'The Hampster Dance',
-  askjeeves: 'Ask Jeeves',
-  webring: 'WebRing Directory',
-  downloadram: 'DownloadMoreRAM.com',
-  error: 'The page cannot be displayed',
-  blank: 'Blank Page',
-};
+// Title shown in the address history / favorites; unknown URLs show the raw URL.
+function titleForUrl(u: string): string {
+  return findSiteByUrl(u)?.title ?? u;
+}
 
 interface Favorite {
   title: string;
@@ -85,10 +32,6 @@ const DEFAULT_FAVORITES: Favorite[] = [
 
 function normalizeUrl(u: string): string {
   return u.trim().toLowerCase().replace(/\/+$/, '');
-}
-
-function pageKeyFor(url: string): PageKey {
-  return KNOWN_URLS[normalizeUrl(url)] ?? 'error';
 }
 
 function ArrowLeft() {
@@ -137,7 +80,7 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
 
   const favorites = getAppPref<Favorite[]>('ie5', 'favorites', DEFAULT_FAVORITES);
 
-  const currentPage = useMemo((): PageKey => pageKeyFor(url), [url]);
+  const currentSite = useMemo(() => findSiteByUrl(url), [url]);
 
   const beginLoad = useCallback((target: string) => {
     if (loadTimer.current) clearTimeout(loadTimer.current);
@@ -211,9 +154,9 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
   }, [addressBarValue, navigate]);
 
   const openAddFavorite = useCallback(() => {
-    setFavNameInput(PAGE_TITLES[currentPage] === 'The page cannot be displayed' ? url : PAGE_TITLES[currentPage]);
+    setFavNameInput(currentSite ? currentSite.title : url);
     setDialog('addFav');
-  }, [currentPage, url]);
+  }, [currentSite, url]);
 
   const confirmAddFavorite = useCallback(() => {
     const title = favNameInput.trim() || url;
@@ -283,7 +226,7 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
       label: 'History',
       items: visited.length
         ? visited.map((u) => ({
-            label: PAGE_TITLES[pageKeyFor(u)] === 'The page cannot be displayed' ? u : PAGE_TITLES[pageKeyFor(u)],
+            label: titleForUrl(u),
             onClick: () => navigate(u),
           }))
         : [{ label: '(No history)', disabled: true }],
@@ -328,15 +271,7 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
         {loading && (
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--win98-highlight)] animate-pulse z-10" />
         )}
-        {currentPage === 'blank' && <div className="h-full bg-white" />}
-        {currentPage === 'yahoo' && <Yahoo1998 />}
-        {currentPage === 'geocities' && <GeoCities />}
-        {currentPage === 'altavista' && <AltaVista />}
-        {currentPage === 'hampster' && <HampsterDance />}
-        {currentPage === 'askjeeves' && <AskJeeves onNavigate={navigate} />}
-        {currentPage === 'webring' && <WebRing onNavigate={navigate} />}
-        {currentPage === 'downloadram' && <DownloadMoreRam />}
-        {currentPage === 'error' && <ErrorPage url={url} />}
+        {currentSite ? currentSite.render({ onNavigate: navigate }) : <ErrorPage url={url} />}
       </div>
 
       {showStatusBar && (

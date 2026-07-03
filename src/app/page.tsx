@@ -12,7 +12,7 @@ import { ShutdownScreen, ShutdownDialog } from '@/components/system/ShutdownScre
 import { BSOD } from '@/components/system/BSOD';
 import { ShellShortcuts } from '@/components/system/ShellShortcuts';
 import { ShellEventHost } from '@/components/system/ShellEventHost';
-import { SystemDialogs } from '@/components/system/SystemDialogs';
+import { DialogHost } from '@/components/dialogs/DialogHost';
 import { ScreenSaverManager } from '@/components/system/ScreenSaverManager';
 import { playSound } from '@/lib/sounds';
 
@@ -118,8 +118,8 @@ export default function Home() {
             {/* Global keyboard shortcuts + Alt+Tab overlay */}
             <ShellShortcuts />
 
-            {/* Globally-dispatched system dialogs */}
-            <SystemDialogs />
+            {/* Globally-dispatched system, About, Properties, and error dialogs */}
+            <DialogHost />
 
             {/* Run dialog + open-file event bridge */}
             <ShellEventHost />

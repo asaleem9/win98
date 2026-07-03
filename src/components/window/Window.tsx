@@ -16,17 +16,109 @@ interface WindowProps {
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null;
 
+type SystemMenuItem =
+  | { separator: true }
+  | { label: string; disabled?: boolean; bold?: boolean; shortcut?: string; run?: () => void };
+
+interface SystemMenuProps {
+  windowState: 'normal' | 'minimized' | 'maximized';
+  resizable: boolean;
+  onClose: () => void;
+  onRestore: () => void;
+  onMinimize: () => void;
+  onMaximize: () => void;
+  onCloseWindow: () => void;
+}
+
+// The dropdown opened from the title-bar icon (or Alt+Space). Styled to match
+// the desktop context menu; Move/Size are cosmetic placeholders as in Win98.
+function SystemMenu({
+  windowState,
+  resizable,
+  onClose,
+  onRestore,
+  onMinimize,
+  onMaximize,
+  onCloseWindow,
+}: SystemMenuProps) {
+  useEffect(() => {
+    const handleDown = () => onClose();
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('mousedown', handleDown);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('mousedown', handleDown);
+      window.removeEventListener('keydown', handleKey);
+    };
+  }, [onClose]);
+
+  const items: SystemMenuItem[] = [
+    { label: 'Restore', disabled: windowState === 'normal', run: onRestore },
+    { label: 'Move', disabled: true },
+    { label: 'Size', disabled: true },
+    { label: 'Minimize', disabled: windowState === 'minimized', run: onMinimize },
+    { label: 'Maximize', disabled: windowState === 'maximized' || !resizable, run: onMaximize },
+    { separator: true },
+    { label: 'Close', bold: true, shortcut: 'Alt+F4', run: onCloseWindow },
+  ];
+
+  return (
+    <div
+      className={cn(
+        'absolute left-0 top-[18px] z-50 min-w-[150px]',
+        'bg-[var(--win98-button-face)] py-[2px]',
+        'border-2 border-solid',
+        'border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)]',
+        'border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]',
+        'shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)]',
+        'font-[family-name:var(--win98-font)] text-[11px]',
+      )}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {items.map((item, i) =>
+        'separator' in item ? (
+          <div key={i} className="mx-[2px] my-[2px] border-t border-[var(--win98-button-shadow)] border-b border-b-[var(--win98-button-highlight)]" />
+        ) : (
+          <button
+            key={i}
+            disabled={item.disabled}
+            className={cn(
+              'flex items-center w-full pl-[24px] pr-[12px] py-[2px] cursor-default select-none text-left gap-6',
+              'hover:bg-[var(--win98-highlight)] hover:text-white',
+              item.disabled && 'text-[var(--win98-disabled-text)] hover:bg-transparent hover:text-[var(--win98-disabled-text)]',
+              item.bold && 'font-bold',
+            )}
+            onClick={() => {
+              if (!item.disabled && item.run) {
+                item.run();
+                onClose();
+              }
+            }}
+          >
+            <span>{item.label}</span>
+            {item.shortcut && <span className="ml-auto">{item.shortcut}</span>}
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
 export function Window({ windowState, icon16, children }: WindowProps) {
-  const { focusWindow, closeWindow, minimizeWindow, maximizeWindow, restoreWindow, moveWindow, resizeWindow } =
+  const { windows, focusWindow, closeWindow, minimizeWindow, maximizeWindow, restoreWindow, moveWindow, resizeWindow } =
     useWindows();
 
   const windowRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState<ResizeDirection>(null);
+  const [sysMenuOpen, setSysMenuOpen] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, winX: 0, winY: 0 });
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0, winX: 0, winY: 0 });
 
   const { id, title, position, size, zIndex, state, isFocused, minSize } = windowState;
+  const resizable = windowState.resizable !== false;
+  // An open modal dialog spawned by this window blocks its content
+  const modalChild = windows.find((w) => w.ownerId === id && w.modal && w.state !== 'minimized');
 
   // Drag handling
   const dragTargetRef = useRef<HTMLElement | null>(null);
@@ -36,6 +128,8 @@ export function Window({ windowState, icon16, children }: WindowProps) {
       // Presses on the min/max/close buttons must not start a drag — capturing
       // the pointer here would swallow their click events
       if ((e.target as HTMLElement).closest('button')) return;
+      // The title-bar icon opens the system menu; it must not begin a drag
+      if ((e.target as HTMLElement).tagName === 'IMG') return;
       if (state === 'maximized') return;
       e.preventDefault();
       const target = e.currentTarget as HTMLElement;
@@ -156,6 +250,19 @@ export function Window({ windowState, icon16, children }: WindowProps) {
     };
   }, [resizing, id, minSize, moveWindow, resizeWindow]);
 
+  // Alt+Space opens the system menu of the focused window
+  useEffect(() => {
+    if (!isFocused) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === ' ' || e.code === 'Space')) {
+        e.preventDefault();
+        setSysMenuOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isFocused]);
+
   if (state === 'minimized') return null;
 
   const isMaximized = state === 'maximized';
@@ -186,24 +293,52 @@ export function Window({ windowState, icon16, children }: WindowProps) {
         icon16={icon16}
         isFocused={isFocused}
         windowState={state}
+        showMaximize={resizable}
         onMinimize={() => { playSound('minimize'); minimizeWindow(id); }}
         onMaximize={() => { playSound('maximize'); maximizeWindow(id); }}
         onRestore={() => { playSound('restoreDown'); restoreWindow(id); }}
         onClose={() => closeWindow(id)}
         onDoubleClick={() => {
           if (state === 'maximized') restoreWindow(id);
-          else maximizeWindow(id);
+          else if (resizable) maximizeWindow(id);
         }}
         onPointerDown={handleTitlePointerDown}
+        onIconClick={() => setSysMenuOpen((open) => !open)}
+        onIconDoubleClick={() => closeWindow(id)}
       />
+
+      {sysMenuOpen && (
+        <SystemMenu
+          windowState={state}
+          resizable={resizable}
+          onClose={() => setSysMenuOpen(false)}
+          onRestore={() => { playSound('restoreDown'); restoreWindow(id); }}
+          onMinimize={() => { playSound('minimize'); minimizeWindow(id); }}
+          onMaximize={() => { playSound('maximize'); maximizeWindow(id); }}
+          onCloseWindow={() => closeWindow(id)}
+        />
+      )}
 
       {/* Window content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {children}
       </div>
 
-      {/* Resize handles (only when not maximized) */}
-      {!isMaximized && (
+      {/* Modal guard: blocks the content while an owned modal dialog is open */}
+      {modalChild && (
+        <div
+          className="absolute left-0 right-0 top-[18px] bottom-0 z-40"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            playSound('ding');
+            window.dispatchEvent(new CustomEvent('win98-flash-window', { detail: { id: modalChild.id } }));
+            focusWindow(modalChild.id);
+          }}
+        />
+      )}
+
+      {/* Resize handles (only when not maximized and window is resizable) */}
+      {!isMaximized && resizable && (
         <>
           <div className={cn(resizeEdgeClass, 'cursor-n-resize')} style={{ top: 0, left: edgeSize, right: edgeSize, height: edgeSize }} onPointerDown={handleResizePointerDown('n')} />
           <div className={cn(resizeEdgeClass, 'cursor-s-resize')} style={{ bottom: 0, left: edgeSize, right: edgeSize, height: edgeSize }} onPointerDown={handleResizePointerDown('s')} />

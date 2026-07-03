@@ -16,34 +16,35 @@ import {
   emptyCombo,
   goalTier,
   grindHasBailed,
-  SCORE_GOALS,
+  higherTier,
+  isLevelUnlocked,
+  TONY_LEVELS as LEVELS,
   trickName,
   trickSpin,
   updateGrindBalance,
   validateLanding,
   type ComboState,
   type GoalTier,
+  type LevelDef,
 } from './engine/trick';
 
 const GAME_ID = 'tony-hawk-2';
 
-const LEVELS = [
-  { name: 'The Hangar', location: 'Mulhawk Airfield' },
-  { name: 'School II', location: 'Southern California' },
-  { name: 'Marseille', location: 'Marseille, France' },
-  { name: 'NY City', location: 'New York City, NY' },
-  { name: 'Venice Beach', location: 'Venice, CA' },
-  { name: 'Skatestreet', location: 'Ventura, CA' },
-  { name: 'Philadelphia', location: 'Philadelphia, PA' },
-  { name: 'The Bullring', location: 'Mexico' },
-];
+/** Best score and medal a player has banked on a given level. */
+interface LevelRecord {
+  best: number;
+  tier: GoalTier;
+}
+
+function defaultRecords(): LevelRecord[] {
+  return LEVELS.map(() => ({ best: 0, tier: 'none' as GoalTier }));
+}
 
 // ---- world / physics constants (canvas logical coordinates) ----
 const W = 640;
 const H = 340;
 const GROUND_Y = 252;
 const PLAYER_X = 150;
-const SCROLL = 178; // px/s auto-scroll
 const GRAVITY = 1350; // px/s^2
 const JUMP_V = 470;
 const RAMP_V = 660;
@@ -67,6 +68,7 @@ interface Flash {
 
 interface Sim {
   rand: Rand;
+  level: LevelDef;
   time: number;
   worldX: number; // player's world position
   // skater
@@ -93,39 +95,43 @@ interface Sim {
   features: Feature[];
 }
 
-function genFeatures(rand: Rand): Feature[] {
+function genFeatures(rand: Rand, level: LevelDef): Feature[] {
   const feats: Feature[] = [];
   let x = 700;
   const total = 22500;
+  const w = level.featureWeights;
+  const [railMin, railMax] = level.railHeightRange;
+  const [gapMin, gapMax] = level.gapWidthRange;
   while (x < total) {
     const t = weightedPick<FeatureType | 'flat'>(rand, [
-      ['rail', 3],
-      ['ramp', 2],
-      ['gap', 1.4],
-      ['flat', 2],
+      ['rail', w.rail],
+      ['ramp', w.ramp],
+      ['gap', w.gap],
+      ['flat', w.flat],
     ]);
     if (t === 'rail') {
-      const w = randInt(rand, 150, 280);
-      feats.push({ type: 'rail', x, w, h: randInt(rand, 56, 96) });
-      x += w;
+      const rw = randInt(rand, 150, 280);
+      feats.push({ type: 'rail', x, w: rw, h: randInt(rand, railMin, railMax) });
+      x += rw;
     } else if (t === 'ramp') {
-      const w = randInt(rand, 60, 90);
-      feats.push({ type: 'ramp', x, w, h: 0 });
-      x += w;
+      const rw = randInt(rand, 60, 90);
+      feats.push({ type: 'ramp', x, w: rw, h: 0 });
+      x += rw;
     } else if (t === 'gap') {
-      const w = randInt(rand, 70, 130);
-      feats.push({ type: 'gap', x, w, h: 0 });
-      x += w;
+      const rw = randInt(rand, gapMin, gapMax);
+      feats.push({ type: 'gap', x, w: rw, h: 0 });
+      x += rw;
     }
     x += randInt(rand, 280, 540);
   }
   return feats;
 }
 
-function createSim(seed: number): Sim {
+function createSim(seed: number, level: LevelDef): Sim {
   const rand = makeRng(seed);
   return {
     rand,
+    level,
     time: 0,
     worldX: 0,
     y: 0,
@@ -146,7 +152,7 @@ function createSim(seed: number): Sim {
     reached: { bronze: false, silver: false, gold: false },
     flash: null,
     ended: false,
-    features: genFeatures(rand),
+    features: genFeatures(rand, level),
   };
 }
 
@@ -157,6 +163,12 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
   const [screen, setScreen] = useState<'title' | 'run' | 'summary'>('title');
   const [selectedLevel, setSelectedLevel] = useState(0);
   const [best, setBest] = useState<number>(() => getAppPref<number>(GAME_ID, 'highScore', 0));
+  const [records, setRecords] = useState<LevelRecord[]>(() => {
+    const stored = getAppPref<LevelRecord[]>(GAME_ID, 'levelRecords', []);
+    return defaultRecords().map((d, i) => stored[i] ?? d);
+  });
+
+  const tiers = records.map((r) => r.tier);
 
   const [hud, setHud] = useState({
     score: 0,
@@ -201,7 +213,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
 
   const checkGoals = useCallback(
     (sim: Sim) => {
-      const tier = goalTier(sim.score);
+      const tier = goalTier(sim.score, sim.level.goals);
       if (tier === 'gold' && !sim.reached.gold) {
         sim.reached.gold = sim.reached.silver = sim.reached.bronze = true;
         flash(sim, 'GOLD MEDAL!', '#ffd700');
@@ -220,32 +232,42 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
   );
 
   const startRun = useCallback(() => {
-    simRef.current = createSim((Date.now() ^ (selectedLevel * 2654435761)) >>> 0);
+    if (!isLevelUnlocked(selectedLevel, records.map((r) => r.tier))) return;
+    simRef.current = createSim((Date.now() ^ (selectedLevel * 2654435761)) >>> 0, LEVELS[selectedLevel]);
     keysRef.current = { left: false, right: false };
     hudAccumRef.current = 0;
     setHud({ score: 0, timeLeft: RUN_TIME, comboVal: 0, mult: 1, tier: 'none', grinding: false });
     setScreen('run');
-  }, [selectedLevel]);
+  }, [selectedLevel, records]);
 
   const endRun = useCallback(
     (sim: Sim) => {
       sim.ended = true;
       const finalScore = sim.score;
+      const tier = goalTier(finalScore, sim.level.goals);
       const newBest = finalScore > best;
       if (newBest) {
         setBest(finalScore);
         setAppPref<number>(GAME_ID, 'highScore', finalScore);
         playSound('chord');
       }
+      const cur = records[selectedLevel] ?? { best: 0, tier: 'none' as GoalTier };
+      const nextRecords = records.map((r, i) =>
+        i === selectedLevel
+          ? { best: Math.max(cur.best, finalScore), tier: higherTier(cur.tier, tier) }
+          : r,
+      );
+      setRecords(nextRecords);
+      setAppPref<LevelRecord[]>(GAME_ID, 'levelRecords', nextRecords);
       setSummary({
         score: finalScore,
         bestCombo: sim.bestCombo,
         newBest,
-        tier: goalTier(finalScore),
+        tier,
       });
       setScreen('summary');
     },
-    [best, setAppPref],
+    [best, setAppPref, selectedLevel, records],
   );
 
   // ---- input ----
@@ -331,7 +353,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
   const step = useCallback(
     (sim: Sim, dt: number) => {
       sim.time += dt;
-      sim.worldX += SCROLL * dt;
+      sim.worldX += sim.level.scroll * dt;
       if (sim.flash) {
         sim.flash.t -= dt;
         if (sim.flash.t <= 0) sim.flash = null;
@@ -450,26 +472,30 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
   const draw = useCallback((ctx: CanvasRenderingContext2D, sim: Sim) => {
     const camX = sim.worldX - PLAYER_X;
     const sx = (wx: number) => wx - camX;
+    const { sky: skyStops, ground, accent } = sim.level.palette;
 
     // sky
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#0a0a16');
-    sky.addColorStop(0.6, '#181410');
-    sky.addColorStop(1, '#211a08');
+    sky.addColorStop(0, skyStops[0]);
+    sky.addColorStop(0.6, skyStops[1]);
+    sky.addColorStop(1, skyStops[2]);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
     // parallax skyline
-    ctx.fillStyle = 'rgba(204,255,0,0.05)';
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = accent;
     const pOff = (sim.worldX * 0.25) % 120;
     for (let i = -1; i < W / 60 + 1; i++) {
       const bx = i * 60 - pOff;
       const bh = 40 + ((i * 37) % 60);
       ctx.fillRect(bx, GROUND_Y - bh, 46, bh);
     }
+    ctx.restore();
 
     // ground
-    ctx.fillStyle = '#16161c';
+    ctx.fillStyle = ground;
     ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
 
     // carve gaps + draw features
@@ -480,19 +506,19 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
         ctx.fillStyle = '#05050a';
         ctx.fillRect(fx, GROUND_Y, f.w, H - GROUND_Y);
       } else if (f.type === 'ramp') {
-        ctx.fillStyle = '#2a2a12';
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
         ctx.beginPath();
         ctx.moveTo(fx, GROUND_Y);
         ctx.quadraticCurveTo(fx + f.w, GROUND_Y, fx + f.w, GROUND_Y - 54);
         ctx.lineTo(fx + f.w, GROUND_Y);
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = '#ccff00';
+        ctx.strokeStyle = accent;
         ctx.lineWidth = 2;
         ctx.stroke();
       } else if (f.type === 'rail') {
         const ry = GROUND_Y - f.h;
-        ctx.strokeStyle = '#4a3a1a';
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(fx + 6, GROUND_Y);
@@ -500,7 +526,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
         ctx.moveTo(fx + f.w - 6, GROUND_Y);
         ctx.lineTo(fx + f.w - 6, ry);
         ctx.stroke();
-        ctx.strokeStyle = '#ff5cf0';
+        ctx.strokeStyle = accent;
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(fx, ry);
@@ -510,7 +536,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
     }
 
     // neon ground edge (skip gaps)
-    ctx.strokeStyle = '#ccff00';
+    ctx.strokeStyle = accent;
     ctx.lineWidth = 2;
     ctx.beginPath();
     let penDown = false;
@@ -560,7 +586,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
     if (sim.combo.tricks.length > 0) {
       const val = comboValue(sim.combo);
       const mult = comboMultiplier(sim.combo);
-      ctx.fillStyle = '#ccff00';
+      ctx.fillStyle = sim.level.palette.accent;
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(`${val.toLocaleString()}  x${mult}`, PLAYER_X, feetY - 46);
@@ -592,7 +618,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
       // marker (balance -2..2 mapped across bar, bail at +/-1)
       const t = (sim.balance / 2 + 0.5);
       const mx = bx + Math.max(0, Math.min(1, t)) * bw;
-      ctx.fillStyle = '#ccff00';
+      ctx.fillStyle = sim.level.palette.accent;
       ctx.fillRect(mx - 3, by - 3, 6, 18);
       ctx.fillStyle = '#7fdfff';
       ctx.font = 'bold 10px sans-serif';
@@ -623,7 +649,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
             timeLeft: Math.max(0, RUN_TIME - sim.time),
             comboVal: comboValue(sim.combo),
             mult: comboMultiplier(sim.combo),
-            tier: goalTier(sim.score),
+            tier: goalTier(sim.score, sim.level.goals),
             grinding: sim.grinding,
           });
         }
@@ -721,29 +747,48 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
 
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col gap-[2px]">
-            {LEVELS.map((level, i) => (
-              <button
-                key={level.name}
-                onClick={() => setSelectedLevel(i)}
-                onDoubleClick={startRun}
-                onMouseEnter={() => setSelectedLevel(i)}
-                className="py-[5px] px-3 text-left cursor-pointer border transition-colors flex justify-between items-center"
-                style={{
-                  background: selectedLevel === i ? 'linear-gradient(to right, rgba(204,255,0,0.15), transparent)' : 'transparent',
-                  borderColor: selectedLevel === i ? '#ccff00' : 'transparent',
-                  color: selectedLevel === i ? '#ccff00' : '#666',
-                }}
-              >
-                <span className="text-[12px] font-bold">{level.name}</span>
-                <span className="text-[10px] opacity-60">{level.location}</span>
-              </button>
-            ))}
+            {LEVELS.map((level, i) => {
+              const unlocked = isLevelUnlocked(i, tiers);
+              const record = records[i];
+              const active = selectedLevel === i;
+              return (
+                <button
+                  key={level.name}
+                  disabled={!unlocked}
+                  onClick={() => unlocked && setSelectedLevel(i)}
+                  onDoubleClick={() => unlocked && startRun()}
+                  onMouseEnter={() => unlocked && setSelectedLevel(i)}
+                  className={cn(
+                    'py-[5px] px-3 text-left border transition-colors flex justify-between items-center',
+                    unlocked ? 'cursor-pointer' : 'cursor-not-allowed',
+                  )}
+                  style={{
+                    background: active ? 'linear-gradient(to right, rgba(204,255,0,0.15), transparent)' : 'transparent',
+                    borderColor: active ? '#ccff00' : 'transparent',
+                    color: !unlocked ? '#444' : active ? '#ccff00' : '#666',
+                  }}
+                >
+                  <span className="flex items-center gap-1.5 text-[12px] font-bold">
+                    {!unlocked && <span aria-hidden className="text-[11px]">🔒</span>}
+                    {level.name}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {unlocked && record && record.tier !== 'none' && (
+                      <LevelMedal tier={record.tier} />
+                    )}
+                    <span className="text-[10px] opacity-60">
+                      {unlocked ? level.location : 'LOCKED'}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="flex justify-between items-center mt-3 pt-2 border-t border-[#333]">
           <div className="text-[10px] text-[#555]">
-            Goals: {SCORE_GOALS.bronze.toLocaleString()} / {SCORE_GOALS.silver.toLocaleString()} / {SCORE_GOALS.gold.toLocaleString()}
+            Goals: {LEVELS[selectedLevel].goals.bronze.toLocaleString()} / {LEVELS[selectedLevel].goals.silver.toLocaleString()} / {LEVELS[selectedLevel].goals.gold.toLocaleString()}
           </div>
           <div className="text-[10px] text-[#ccff00]">Best {best.toLocaleString()}</div>
         </div>
@@ -752,6 +797,26 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+const TIER_COLOR: Record<GoalTier, string> = {
+  none: '#333',
+  bronze: '#cd7f32',
+  silver: '#d8d8e0',
+  gold: '#ffd700',
+};
+
+function LevelMedal({ tier }: { tier: GoalTier }) {
+  const color = TIER_COLOR[tier];
+  return (
+    <span
+      className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full text-[9px] font-black uppercase"
+      title={`${tier} medal`}
+      style={{ background: color, color: '#000', boxShadow: `0 0 6px ${color}` }}
+    >
+      {tier.charAt(0)}
+    </span>
   );
 }
 

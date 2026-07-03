@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, CSSProperties } from 'react';
 import { useWindows } from '@/contexts/WindowContext';
 import { useFileSystem } from '@/contexts/FileSystemContext';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -8,7 +8,7 @@ import { getDesktopApps } from '@/lib/appRegistry';
 import { DesktopIcon } from './DesktopIcon';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { DESKTOP_GRID, WINDOW_DEFAULTS } from '@/lib/constants';
-import { getWallpaper } from '@/lib/wallpapers';
+import { getWallpaper, isImageWallpaper, imageWallpaperStyle } from '@/lib/wallpapers';
 import { requestOpenFile } from '@/lib/recentDocs';
 import { playSound } from '@/lib/sounds';
 
@@ -52,7 +52,7 @@ function rectsIntersect(a: { left: number; top: number; right: number; bottom: n
 
 export function Desktop() {
   const { openWindow } = useWindows();
-  const { listDir, createFolder, createFile, deleteToRecycleBin, rename } = useFileSystem();
+  const { listDir, createFolder, createFile, deleteToRecycleBin, rename, readFile } = useFileSystem();
   const { settings, getAppPref, setAppPref } = useSettings();
 
   const [selectedIcons, setSelectedIcons] = useState<Set<string>>(new Set());
@@ -322,7 +322,19 @@ export function Desktop() {
     [rename, positions, setAppPref],
   );
 
-  const wallpaper = getWallpaper(settings.wallpaper);
+  // Resolve the active wallpaper to a background style. Image wallpapers pull
+  // their bitmap from a data: URL directly, or from the filesystem when the
+  // source is an fs path; a missing/invalid source falls back to the flat color.
+  const wallpaperStyle = useMemo<CSSProperties>(() => {
+    const w = settings.wallpaper;
+    if (isImageWallpaper(w)) {
+      const src = w.source.startsWith('data:') ? w.source : readFile(w.source);
+      if (src && src.startsWith('data:')) return imageWallpaperStyle(src, w.mode);
+      return {};
+    }
+    return getWallpaper(w)?.style ?? {};
+  }, [settings.wallpaper, readFile]);
+
   const marqueeRect = marquee
     ? {
         left: Math.min(marquee.start.x, marquee.end.x),
@@ -336,7 +348,7 @@ export function Desktop() {
     <div
       ref={desktopRef}
       className="absolute inset-0 bottom-[28px] overflow-hidden"
-      style={{ backgroundColor: settings.desktopColor, ...wallpaper?.style }}
+      style={{ backgroundColor: settings.desktopColor, ...wallpaperStyle }}
       onClick={handleDesktopClick}
       onContextMenu={handleDesktopContextMenu}
       onPointerDown={handleDesktopPointerDown}

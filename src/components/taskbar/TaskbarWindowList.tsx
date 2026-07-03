@@ -12,13 +12,14 @@ export function TaskbarWindowList() {
 
   return (
     <div className="flex-1 flex items-center gap-[2px] overflow-hidden px-[2px]">
-      {windows.map((win) => {
+      {windows.filter((win) => !win.ownerId).map((win) => {
         const app = getApp(win.appId);
         const isActive = win.isFocused && win.state !== 'minimized';
 
         return (
           <button
             key={win.id}
+            data-taskbar-button-for={win.id}
             onClick={() => {
               if (win.isFocused && win.state !== 'minimized') {
                 minimizeWindow(win.id);

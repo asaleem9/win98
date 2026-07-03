@@ -2,7 +2,7 @@
 // HTMLAudioElement routed through Web Audio so visualizers get real
 // frequency data via the analyser node.
 
-import { getAudioContext } from '@/lib/sounds';
+import { getAudioContext, getMasterGain } from '@/lib/sounds';
 import { MusicTrack } from './tracks';
 
 export class MusicPlayer {
@@ -30,7 +30,11 @@ export class MusicPlayer {
         this.analyser = ctx.createAnalyser();
         this.analyser.fftSize = 256;
         this.gain = ctx.createGain();
-        this.source.connect(this.analyser).connect(this.gain).connect(ctx.destination);
+        this.source.connect(this.analyser).connect(this.gain);
+        // Route through the shared master gain so system volume/mute also apply;
+        // fall back to the raw destination if the master node is unavailable.
+        const master = getMasterGain();
+        this.gain.connect(master ?? ctx.destination);
       } catch {
         // graph construction failed — audio element still plays directly
       }

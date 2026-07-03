@@ -1,5 +1,7 @@
 'use client';
 
+import type { SiteDef } from './registry';
+
 interface WebRingProps {
   onNavigate: (url: string) => void;
 }
@@ -19,6 +21,15 @@ const RINGS = [
   'Anime & Manga WebRing',
   'Beanie Baby Collectors Ring',
 ];
+
+export const site: SiteDef = {
+  key: 'webring',
+  urls: ['http://www.webring.org', 'www.webring.org', 'webring.org'],
+  title: 'WebRing Directory',
+  keywords: ['webring', 'directory', 'links', 'sites', 'ring'],
+  description: 'A WebRing directory linking themed personal sites together.',
+  render: ({ onNavigate }) => <WebRing onNavigate={onNavigate} />,
+};
 
 export default function WebRing({ onNavigate }: WebRingProps) {
   return (

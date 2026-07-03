@@ -7,12 +7,17 @@ interface TitleBarProps {
   icon16?: string;
   isFocused: boolean;
   windowState: 'normal' | 'minimized' | 'maximized';
+  // Fixed-size windows hide Maximize, matching the real Win98 chrome
+  showMaximize?: boolean;
   onMinimize: () => void;
   onMaximize: () => void;
   onRestore: () => void;
   onClose: () => void;
   onDoubleClick: () => void;
   onPointerDown: (e: React.PointerEvent) => void;
+  // Clicking the title-bar icon opens the system menu; double-click closes
+  onIconClick?: (e: React.MouseEvent) => void;
+  onIconDoubleClick?: () => void;
 }
 
 export function TitleBar({
@@ -20,12 +25,15 @@ export function TitleBar({
   icon16,
   isFocused,
   windowState,
+  showMaximize = true,
   onMinimize,
   onMaximize,
   onRestore,
   onClose,
   onDoubleClick,
   onPointerDown,
+  onIconClick,
+  onIconDoubleClick,
 }: TitleBarProps) {
   const isActive = isFocused;
 
@@ -47,6 +55,9 @@ export function TitleBar({
           className="w-[14px] h-[14px] flex-shrink-0"
           style={{ imageRendering: 'pixelated' }}
           draggable={false}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onIconClick?.(e); }}
+          onDoubleClick={(e) => { e.stopPropagation(); onIconDoubleClick?.(); }}
         />
       )}
       <span
@@ -75,32 +86,35 @@ export function TitleBar({
           <div className="w-[6px] h-[2px] bg-black" />
         </button>
         {/* Maximize / Restore */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            windowState === 'maximized' ? onRestore() : onMaximize();
-          }}
-          className={cn(
-            'w-[16px] h-[14px] flex items-center justify-center',
-            'bg-[var(--win98-button-face)]',
-            'border border-solid',
-            'border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)]',
-            'border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]',
-            'active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)]',
-            'active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]',
-          )}
-        >
-          {windowState === 'maximized' ? (
-            // Restore icon: two overlapping rectangles
-            <div className="relative w-[8px] h-[8px]">
-              <div className="absolute top-0 right-0 w-[6px] h-[6px] border border-black border-t-2" />
-              <div className="absolute bottom-0 left-0 w-[6px] h-[6px] border border-black border-t-2 bg-[var(--win98-button-face)]" />
-            </div>
-          ) : (
-            // Maximize icon: single rectangle
-            <div className="w-[8px] h-[7px] border border-black border-t-2" />
-          )}
-        </button>
+        {showMaximize && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (windowState === 'maximized') onRestore();
+              else onMaximize();
+            }}
+            className={cn(
+              'w-[16px] h-[14px] flex items-center justify-center',
+              'bg-[var(--win98-button-face)]',
+              'border border-solid',
+              'border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)]',
+              'border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]',
+              'active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)]',
+              'active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]',
+            )}
+          >
+            {windowState === 'maximized' ? (
+              // Restore icon: two overlapping rectangles
+              <div className="relative w-[8px] h-[8px]">
+                <div className="absolute top-0 right-0 w-[6px] h-[6px] border border-black border-t-2" />
+                <div className="absolute bottom-0 left-0 w-[6px] h-[6px] border border-black border-t-2 bg-[var(--win98-button-face)]" />
+              </div>
+            ) : (
+              // Maximize icon: single rectangle
+              <div className="w-[8px] h-[7px] border border-black border-t-2" />
+            )}
+          </button>
+        )}
         {/* Close */}
         <button
           onClick={(e) => { e.stopPropagation(); onClose(); }}

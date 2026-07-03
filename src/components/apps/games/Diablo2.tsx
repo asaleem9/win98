@@ -12,20 +12,17 @@ import {
   CLASS_DATA,
   RARITY_COLORS,
   POTION_COST,
+  BOSS_LEVEL,
   createCharacter,
   playerCombat,
-  resolveAttack,
   generateRoom,
-  rollLootDrop,
-  grantGold,
-  applyXpGain,
+  resolveCombatTurn,
   allocateStat,
   equipItem,
   unequipItem,
   sellItem,
   quaffPotion,
   buyPotion,
-  applyDeath,
   totalXpForLevel,
   isBossLevel,
   type CharClass,
@@ -148,75 +145,33 @@ export default function Diablo2({ windowId }: AppComponentProps) {
     (enemyId: string) => {
       if (!character) return;
       const rng = makeRng(freshSeed());
-      const combat = playerCombat(character);
+      // Resolve the whole turn once, then commit each effect a single time.
+      // Rolling inside a state updater double-fires under StrictMode.
+      const result = resolveCombatTurn(character, enemies, enemyId, rng);
+      if (!result) return;
 
-      setEnemies((prevEnemies) => {
-        const idx = prevEnemies.findIndex((e) => e.id === enemyId);
-        if (idx === -1) return prevEnemies;
-        const enemy = prevEnemies[idx];
+      for (const ev of result.events) {
+        if (ev.sound) playSound(ev.sound);
+        if (ev.log) pushLog(ev.log);
+      }
 
-        // Player strikes.
-        const hit = resolveAttack(
-          { minDamage: combat.minDamage, maxDamage: combat.maxDamage, attackRating: combat.attackRating, defense: combat.defense },
-          enemy,
-          rng,
-        );
-        const newHp = enemy.hp - hit.damage;
-        playSound(hit.hit ? 'ding' : 'menuClick');
-        if (hit.hit) pushLog(`You hit ${enemy.name} for ${hit.damage}.`);
-        else pushLog(`You miss ${enemy.name}.`);
+      setEnemies(result.enemies);
+      if (result.bossDown) setBossDown(true);
 
-        if (newHp <= 0) {
-          // Enemy dies: xp, gold, loot.
-          pushLog(`${enemy.name} dies!`);
-          const drop = rollLootDrop(enemy, rng);
-          const goldGain = grantGold(enemy, rng);
-          const xpRes = applyXpGain({ ...character, gold: character.gold + goldGain }, enemy.xp);
-          const updated = xpRes.char;
-          if (xpRes.leveled) {
-            playSound('chord');
-            pushLog(`Welcome to level ${updated.level}! ${xpRes.levelsGained * 5} stat points to spend.`);
-          }
-          if (drop) {
-            setFloorLoot((f) => [drop, ...f]);
-            if (drop.rarity === 'rare' || drop.rarity === 'unique') playSound('cardWin');
-            pushLog(`${enemy.name} drops ${drop.name}.`);
-          }
-          if (enemy.isBoss) {
-            setBossDown(true);
-            playSound('cardWin');
-            const best = Math.max(bestLevel, dungeonLevel);
-            persist(updated, best);
-            pushLog('Andariel is slain! The Maiden of Anguish falls.');
-          } else {
-            const best = Math.max(bestLevel, dungeonLevel);
-            persist(updated, best);
-          }
-          return prevEnemies.filter((e) => e.id !== enemyId);
-        }
-
-        // Enemy survives and retaliates.
-        const retaliate = resolveAttack(enemy, combat, rng);
-        let playerHp = character.hp;
-        if (retaliate.hit) {
-          playerHp = character.hp - retaliate.damage;
-          pushLog(`${enemy.name} hits you for ${retaliate.damage}.`);
-          if (playerHp <= 0) {
-            const { char: revived, goldLost } = applyDeath(character);
-            playSound('error');
-            persist(revived);
-            setDeathMsg(`You have died. Lost ${goldLost} gold. You awaken in town.`);
-            setView('town');
-            setEnemies([]);
-            setFloorLoot([]);
-            return prevEnemies;
-          }
-        }
-        persist({ ...character, hp: playerHp });
-        return prevEnemies.map((e, i) => (i === idx ? { ...e, hp: newHp } : e));
-      });
+      const drop = result.drop;
+      if (result.died) {
+        persist(result.character);
+        setFloorLoot([]);
+        setDeathMsg(`You have died. Lost ${result.goldLost} gold. You awaken in town.`);
+        setView('town');
+      } else if (result.enemyDefeated) {
+        if (drop) setFloorLoot((f) => [drop, ...f]);
+        persist(result.character, Math.max(bestLevel, dungeonLevel));
+      } else {
+        persist(result.character);
+      }
     },
-    [character, pushLog, persist, bestLevel, dungeonLevel],
+    [character, enemies, pushLog, persist, bestLevel, dungeonLevel],
   );
 
   // ---- item / character actions ------------------------------------------
@@ -555,7 +510,7 @@ function DungeonPanel({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-[#ffaa44] text-[12px] font-bold">
-          {isBossLevel(level) ? 'The Catacombs — Level 4' : `Dungeon Level ${level}`}
+          {isBossLevel(level) ? `The Catacombs — Level ${BOSS_LEVEL}` : `Dungeon Level ${level}`}
         </span>
         <span className="text-[#665544] text-[10px]">{enemies.length} foes</span>
       </div>

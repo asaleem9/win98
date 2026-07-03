@@ -20,6 +20,8 @@ interface SearchResult {
   suspicious: boolean;
   virus: boolean;
   playable: boolean;
+  /** Bundled track id, present only for playable results. */
+  trackId?: string;
 }
 
 interface DownloadItem {
@@ -29,6 +31,7 @@ interface DownloadItem {
   status: 'downloading' | 'stalled' | 'failed' | 'complete';
   virus: boolean;
   playable: boolean;
+  trackId?: string;
 }
 
 const PLAYABLE_RESULTS: SearchResult[] = musicTracks.map((t, i) => ({
@@ -39,6 +42,7 @@ const PLAYABLE_RESULTS: SearchResult[] = musicTracks.map((t, i) => ({
   suspicious: false,
   virus: false,
   playable: true,
+  trackId: t.id,
 }));
 
 const FILE_RESULTS: Omit<SearchResult, 'virus' | 'playable'>[] = [
@@ -118,6 +122,7 @@ export default function LimeWire({ windowId }: AppComponentProps) {
       status: 'downloading',
       virus: result.virus,
       playable: result.playable,
+      trackId: result.trackId,
     };
     setDownloads((prev) => [...prev, item]);
     setActiveTab('downloads');
@@ -170,7 +175,9 @@ export default function LimeWire({ windowId }: AppComponentProps) {
       }
       if (!dl.virus && !persistedRef.current.has(i)) {
         persistedRef.current.add(i);
-        createFile(DOWNLOADS_DIR, dl.filename, '[MP3 Audio]');
+        // Bundled tracks store a 'track:<id>' reference; other files use a
+        // placeholder that players resolve by filename.
+        createFile(DOWNLOADS_DIR, dl.filename, dl.trackId ? `track:${dl.trackId}` : '[MP3 Audio]');
       }
     });
   }, [downloads, createFile, openWindow]);

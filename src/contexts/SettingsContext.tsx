@@ -2,14 +2,18 @@
 
 import { createContext, useCallback, useContext, ReactNode } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { setSoundsMuted, setMasterVolume } from '@/lib/sounds';
+import { setSoundsMuted, setMasterVolume, setSoundOverride, SoundId } from '@/lib/sounds';
+import { WallpaperSetting } from '@/lib/wallpapers';
 import { useEffect } from 'react';
+
+// Per-app prefs bucket that stores sound-scheme overrides ({ [SoundId]: url }).
+const SOUND_OVERRIDE_APP_ID = 'system-sounds';
 
 export type ColorScheme = 'standard' | 'desert' | 'eggplant' | 'rainy-day' | 'high-contrast';
 export type ScreenSaverId = 'flying-windows' | 'starfield' | 'pipes' | 'none';
 
 export interface Settings {
-  wallpaper: string | null;
+  wallpaper: WallpaperSetting;
   desktopColor: string;
   colorScheme: ColorScheme;
   soundsEnabled: boolean;
@@ -44,6 +48,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSoundsMuted(!settings.soundsEnabled);
     setMasterVolume(settings.volume);
   }, [settings.soundsEnabled, settings.volume]);
+
+  // Push persisted per-cue sound overrides into the sound layer on hydration.
+  useEffect(() => {
+    const overrides = prefs[SOUND_OVERRIDE_APP_ID] ?? {};
+    for (const [id, url] of Object.entries(overrides)) {
+      setSoundOverride(id as SoundId, typeof url === 'string' ? url : null);
+    }
+  }, [prefs]);
 
   const setSetting = useCallback(
     <K extends keyof Settings>(key: K, value: Settings[K]) => {

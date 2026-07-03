@@ -11,6 +11,8 @@ export function createMockWindowState(overrides?: Partial<WindowState>): WindowS
     zIndex: 10,
     state: 'normal',
     isFocused: true,
+    resizable: true,
+    launchCount: 1,
     ...overrides,
   };
 }

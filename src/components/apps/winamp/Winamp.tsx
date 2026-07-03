@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { MusicPlayer } from '@/lib/audio/player';
-import { MusicTrack, musicTracks, getTrackByFileName } from '@/lib/audio/tracks';
-import { RepeatMode, autoNext, manualStep, formatTime, totalDuration, basename } from '@/lib/audio/playlist';
+import { MusicTrack, musicTracks } from '@/lib/audio/tracks';
+import { RepeatMode, autoNext, manualStep, formatTime, totalDuration, playlistForLaunch } from '@/lib/audio/playlist';
+import { useFileSystem } from '@/contexts/FileSystemContext';
 
 const APP_ID = 'winamp';
 
@@ -16,26 +17,16 @@ const EQ_PRESETS: Record<string, number[]> = {
   Classical: [0, 0, 0, 0, 0, 0, -4, -4, -4, -6],
 };
 
-/** Build the working playlist; if a launched file isn't one of ours, keep its
- *  display name but play a bundled track so something actually sounds. */
-function playlistForLaunch(filePath?: string): { list: MusicTrack[]; index: number } {
-  if (!filePath) return { list: [...musicTracks], index: 0 };
-  const name = basename(filePath);
-  const match = getTrackByFileName(name);
-  if (match) {
-    return { list: [...musicTracks], index: musicTracks.findIndex((t) => t.id === match.id) };
-  }
-  // Unknown mp3: front the requested name, sound a real track underneath.
-  const stand = musicTracks[0];
-  const faux: MusicTrack = { ...stand, id: `launch-${name}`, title: name, artist: 'Unknown Artist', fileName: name };
-  return { list: [faux, ...musicTracks], index: 0 };
-}
-
 export default function Winamp({ launchParams, launchCount }: AppComponentProps) {
   const playerRef = useRef<MusicPlayer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { readFile } = useFileSystem();
 
-  const initial = useRef(playlistForLaunch(launchParams?.filePath));
+  // Reads a launched file's FS content so playlistForLaunch can honor a
+  // 'track:<id>' reference; missing files fall back to filename matching.
+  const readContent = useCallback((fp?: string) => (fp ? readFile(fp) : null), [readFile]);
+
+  const initial = useRef(playlistForLaunch(launchParams?.filePath, readContent(launchParams?.filePath)));
   const [playlist, setPlaylist] = useState<MusicTrack[]>(initial.current.list);
   const [index, setIndex] = useState(initial.current.index);
   const [playing, setPlaying] = useState(false);
@@ -131,7 +122,7 @@ export default function Winamp({ launchParams, launchCount }: AppComponentProps)
   // Honor re-launches (Open on an already-running singleton bumps launchCount).
   useEffect(() => {
     if (launchCount === undefined) return;
-    const { list, index: i } = playlistForLaunch(launchParams?.filePath);
+    const { list, index: i } = playlistForLaunch(launchParams?.filePath, readContent(launchParams?.filePath));
     setPlaylist(list);
     setIndex(i);
     // load happens via the index effect below

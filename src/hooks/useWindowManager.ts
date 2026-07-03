@@ -5,7 +5,7 @@ import { WindowState, WindowAction, WindowManagerState, LaunchParams } from '@/t
 import { WINDOW_DEFAULTS } from '@/lib/constants';
 
 // App registry is imported lazily to avoid circular deps
-let appRegistryCache: Record<string, { defaultWindow: { title: string; width: number; height: number; minWidth?: number; minHeight?: number }; singleton?: boolean }> | null = null;
+let appRegistryCache: Record<string, { defaultWindow: { title: string; width: number; height: number; minWidth?: number; minHeight?: number; resizable?: boolean }; singleton?: boolean }> | null = null;
 
 export function setAppRegistry(registry: typeof appRegistryCache) {
   appRegistryCache = registry;
@@ -20,12 +20,36 @@ function getNextCascadePosition(windows: WindowState[]): { x: number; y: number 
   };
 }
 
+// Every window transitively owned by `rootId` (dialogs, and dialogs of dialogs)
+function collectOwnedIds(windows: WindowState[], rootId: string): Set<string> {
+  const owned = new Set<string>();
+  let frontier = [rootId];
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const w of windows) {
+      if (w.ownerId && frontier.includes(w.ownerId) && !owned.has(w.id)) {
+        owned.add(w.id);
+        next.push(w.id);
+      }
+    }
+    frontier = next;
+  }
+  return owned;
+}
+
+// The deepest open modal dialog spawned (directly or indirectly) by `id`
+function findOpenModalDescendant(windows: WindowState[], id: string): string | null {
+  const child = windows.find((w) => w.ownerId === id && w.modal && w.state !== 'minimized');
+  if (!child) return null;
+  return findOpenModalDescendant(windows, child.id) ?? child.id;
+}
+
 let windowCounter = 0;
 
 function windowReducer(state: WindowManagerState, action: WindowAction): WindowManagerState {
   switch (action.type) {
     case 'OPEN_WINDOW': {
-      const { appId, title, position, launchParams } = action.payload;
+      const { appId, title, position, launchParams, id, ownerId, modal } = action.payload;
       const appDef = appRegistryCache?.[appId];
 
       // Singleton check: if app already open, focus it and hand it the new launch params
@@ -51,7 +75,7 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
 
       const cascadePos = position || getNextCascadePosition(state.windows);
       const newWindow: WindowState = {
-        id: `window-${++windowCounter}`,
+        id: id ?? `window-${++windowCounter}`,
         appId,
         title: title || appDef?.defaultWindow.title || appId,
         position: cascadePos,
@@ -66,6 +90,9 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
         zIndex: state.nextZIndex,
         state: 'normal',
         isFocused: true,
+        resizable: appDef?.defaultWindow.resizable ?? true,
+        ownerId,
+        modal,
         launchParams,
         launchCount: 1,
       };
@@ -80,13 +107,15 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
     }
 
     case 'CLOSE_WINDOW': {
-      const remaining = state.windows.filter((w) => w.id !== action.payload.id);
-      // Auto-focus topmost remaining window
+      // Closing a window takes its owned dialogs down with it
+      const doomed = collectOwnedIds(state.windows, action.payload.id);
+      doomed.add(action.payload.id);
+      const remaining = state.windows.filter((w) => !doomed.has(w.id));
+      // Auto-focus topmost remaining top-level window
       if (remaining.length > 0) {
-        const topWindow = remaining.reduce((top, w) =>
-          w.state !== 'minimized' && w.zIndex > top.zIndex ? w : top,
-          remaining[0],
-        );
+        const candidates = remaining.filter((w) => w.state !== 'minimized' && !w.ownerId);
+        const pool = candidates.length > 0 ? candidates : remaining;
+        const topWindow = pool.reduce((top, w) => (w.zIndex > top.zIndex ? w : top), pool[0]);
         return {
           ...state,
           windows: remaining.map((w) => ({
@@ -99,26 +128,39 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
     }
 
     case 'FOCUS_WINDOW': {
-      const target = state.windows.find((w) => w.id === action.payload.id);
-      if (!target || target.isFocused) return state;
+      const targetId = action.payload.id;
+      const target = state.windows.find((w) => w.id === targetId);
+      if (!target) return state;
 
+      // A window guarded by an open modal dialog hands focus to that dialog
+      const modalId = findOpenModalDescendant(state.windows, targetId);
+      const focusId = modalId ?? targetId;
+      const focusTarget = state.windows.find((w) => w.id === focusId)!;
+      if (focusId === targetId && focusTarget.isFocused) return state;
+
+      // Restoring a window brings its owned dialogs back up with it
+      const reveal = collectOwnedIds(state.windows, focusId);
       return {
         windows: state.windows.map((w) => ({
           ...w,
-          isFocused: w.id === action.payload.id,
-          zIndex: w.id === action.payload.id ? state.nextZIndex : w.zIndex,
-          state: w.id === action.payload.id && w.state === 'minimized' ? 'normal' : w.state,
+          isFocused: w.id === focusId,
+          zIndex: w.id === focusId ? state.nextZIndex : w.zIndex,
+          state:
+            (w.id === focusId || reveal.has(w.id)) && w.state === 'minimized' ? 'normal' : w.state,
         })),
         nextZIndex: state.nextZIndex + 1,
       };
     }
 
     case 'MINIMIZE_WINDOW': {
+      // Owned dialogs follow their opener down to the taskbar
+      const hide = collectOwnedIds(state.windows, action.payload.id);
+      hide.add(action.payload.id);
       const windows = state.windows.map((w) =>
-        w.id === action.payload.id ? { ...w, state: 'minimized' as const, isFocused: false } : w,
+        hide.has(w.id) ? { ...w, state: 'minimized' as const, isFocused: false } : w,
       );
-      // Focus next topmost
-      const visible = windows.filter((w) => w.state !== 'minimized');
+      // Focus next topmost top-level window
+      const visible = windows.filter((w) => w.state !== 'minimized' && !w.ownerId);
       if (visible.length > 0) {
         const topWindow = visible.reduce((top, w) => (w.zIndex > top.zIndex ? w : top), visible[0]);
         return {
@@ -145,16 +187,23 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
     }
 
     case 'RESTORE_WINDOW': {
+      const reveal = collectOwnedIds(state.windows, action.payload.id);
       return {
         ...state,
         windows: state.windows.map((w) => {
-          if (w.id !== action.payload.id) return w;
-          return {
-            ...w,
-            state: 'normal',
-            position: w.restoredPosition || w.position,
-            size: w.restoredSize || w.size,
-          };
+          if (w.id === action.payload.id) {
+            return {
+              ...w,
+              state: 'normal',
+              position: w.restoredPosition || w.position,
+              size: w.restoredSize || w.size,
+            };
+          }
+          // Owned dialogs come back from the taskbar with their opener
+          if (reveal.has(w.id) && w.state === 'minimized') {
+            return { ...w, state: 'normal' as const };
+          }
+          return w;
         }),
       };
     }
@@ -171,6 +220,9 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
     }
 
     case 'RESIZE_WINDOW': {
+      const target = state.windows.find((w) => w.id === action.payload.id);
+      // Fixed-size windows (Calculator, Minesweeper, …) ignore resize entirely
+      if (!target || !target.resizable) return state;
       return {
         ...state,
         windows: state.windows.map((w) =>
@@ -196,6 +248,34 @@ function windowReducer(state: WindowManagerState, action: WindowAction): WindowM
       };
     }
 
+    case 'MINIMIZE_ALL': {
+      // Show-desktop: send every top-level window to the taskbar. Owned dialogs
+      // are left alone here (they ride along with their opener's state).
+      return {
+        ...state,
+        windows: state.windows.map((w) =>
+          !w.ownerId && w.state !== 'minimized'
+            ? { ...w, state: 'minimized' as const, isFocused: false }
+            : w,
+        ),
+      };
+    }
+
+    case 'RESTORE_ALL': {
+      const windows = state.windows.map((w) =>
+        w.state === 'minimized' ? { ...w, state: 'normal' as const } : w,
+      );
+      const visible = windows.filter((w) => !w.ownerId);
+      if (visible.length > 0) {
+        const topWindow = visible.reduce((top, w) => (w.zIndex > top.zIndex ? w : top), visible[0]);
+        return {
+          ...state,
+          windows: windows.map((w) => ({ ...w, isFocused: w.id === topWindow.id })),
+        };
+      }
+      return { ...state, windows };
+    }
+
     default:
       return state;
   }
@@ -210,10 +290,28 @@ export function useWindowManager() {
   const [state, dispatch] = useReducer(windowReducer, initialState);
 
   const openWindow = useCallback(
-    (appId: string, options?: { title?: string; position?: { x: number; y: number }; launchParams?: LaunchParams }) => {
+    (
+      appId: string,
+      options?: {
+        title?: string;
+        position?: { x: number; y: number };
+        launchParams?: LaunchParams;
+        id?: string;
+        ownerId?: string;
+        modal?: boolean;
+      },
+    ) => {
       dispatch({
         type: 'OPEN_WINDOW',
-        payload: { appId, title: options?.title, position: options?.position, launchParams: options?.launchParams },
+        payload: {
+          appId,
+          title: options?.title,
+          position: options?.position,
+          launchParams: options?.launchParams,
+          id: options?.id,
+          ownerId: options?.ownerId,
+          modal: options?.modal,
+        },
       });
     },
     [],
@@ -251,6 +349,14 @@ export function useWindowManager() {
     dispatch({ type: 'UPDATE_TITLE', payload: { id, title } });
   }, []);
 
+  const minimizeAll = useCallback(() => {
+    dispatch({ type: 'MINIMIZE_ALL' });
+  }, []);
+
+  const restoreAll = useCallback(() => {
+    dispatch({ type: 'RESTORE_ALL' });
+  }, []);
+
   return {
     windows: state.windows,
     openWindow,
@@ -262,5 +368,7 @@ export function useWindowManager() {
     moveWindow,
     resizeWindow,
     updateTitle,
+    minimizeAll,
+    restoreAll,
   };
 }

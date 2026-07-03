@@ -22,6 +22,8 @@ interface SearchResult {
   fileName: string;
   /** True for the bundled tracks that actually play in Winamp. */
   playable: boolean;
+  /** Bundled track id, present only for playable results. */
+  trackId?: string;
 }
 
 interface Download {
@@ -29,6 +31,7 @@ interface Download {
   artist: string;
   fileName: string;
   playable: boolean;
+  trackId?: string;
   progress: number;
   stalled: boolean;
   complete: boolean;
@@ -49,6 +52,7 @@ const REAL_TRACKS: SearchResult[] = musicTracks.map((t) => ({
   size: '3.4 MB',
   fileName: t.fileName,
   playable: true,
+  trackId: t.id,
 }));
 
 const JOKE_DATABASE: Omit<SearchResult, 'fileName' | 'playable'>[] = [
@@ -132,6 +136,7 @@ export default function Napster({ windowId }: AppComponentProps) {
       artist: result.artist,
       fileName: result.fileName,
       playable: result.playable,
+      trackId: result.trackId,
       progress: 0,
       stalled: false,
       complete: false,
@@ -170,7 +175,9 @@ export default function Napster({ windowId }: AppComponentProps) {
     downloads.forEach((dl, i) => {
       if (dl.complete && dl.fileName && !persistedRef.current.has(i)) {
         persistedRef.current.add(i);
-        createFile(DOWNLOADS_DIR, dl.fileName, '[MP3 Audio]');
+        // Bundled tracks store a 'track:<id>' reference; everything else is a
+        // placeholder that players resolve by filename.
+        createFile(DOWNLOADS_DIR, dl.fileName, dl.trackId ? `track:${dl.trackId}` : '[MP3 Audio]');
       }
     });
   }, [downloads, createFile]);

@@ -57,12 +57,32 @@ const soundFiles: Partial<Record<SoundId, string>> = {
 // Known-missing files fall through to synth without a network attempt
 const missingFiles = new Set<string>();
 
+// Per-sound overrides (typically data: URLs pulled from the virtual filesystem).
+// When set, they take priority over the bundled file for that cue.
+const soundOverrides: Partial<Record<SoundId, string>> = {};
+
 let muted = false;
 let masterVolume = 0.7;
 let ctx: AudioContext | null = null;
+let masterGain: GainNode | null = null;
+
+/** Point a cue at a custom sound (data: URL or path); pass null to clear it. */
+export function setSoundOverride(id: SoundId, url: string | null): void {
+  if (url) soundOverrides[id] = url;
+  else delete soundOverrides[id];
+}
+
+export function getSoundOverride(id: SoundId): string | null {
+  return soundOverrides[id] ?? null;
+}
+
+function applyMasterGain(): void {
+  if (masterGain) masterGain.gain.value = muted ? 0 : masterVolume;
+}
 
 export function setSoundsMuted(m: boolean): void {
   muted = m;
+  applyMasterGain();
 }
 
 export function getSoundsMuted(): boolean {
@@ -71,6 +91,7 @@ export function getSoundsMuted(): boolean {
 
 export function setMasterVolume(v: number): void {
   masterVolume = Math.min(1, Math.max(0, v));
+  applyMasterGain();
 }
 
 export function getMasterVolume(): number {
@@ -90,6 +111,19 @@ export function getAudioContext(): AudioContext | null {
   }
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
   return ctx;
+}
+
+// Shared master gain node — the last stage before the speakers for synth cues
+// and (via getMasterGain) the music engine, so system volume/mute govern both.
+export function getMasterGain(): GainNode | null {
+  const audioCtx = getAudioContext();
+  if (!audioCtx) return null;
+  if (!masterGain) {
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = muted ? 0 : masterVolume;
+    masterGain.connect(audioCtx.destination);
+  }
+  return masterGain;
 }
 
 type Note = { freq: number; at: number; dur: number; type?: OscillatorType; gain?: number };
@@ -200,6 +234,8 @@ const synthRecipes: Record<SoundId, Note[]> = {
 function playSynth(id: SoundId): void {
   const audioCtx = getAudioContext();
   if (!audioCtx) return;
+  // Master gain applies system volume; per-note gains stay at their raw levels.
+  const dest: AudioNode = getMasterGain() ?? audioCtx.destination;
   const notes = synthRecipes[id];
   const now = audioCtx.currentTime;
   for (const note of notes) {
@@ -207,12 +243,12 @@ function playSynth(id: SoundId): void {
     const gain = audioCtx.createGain();
     osc.type = note.type ?? 'sine';
     osc.frequency.value = note.freq;
-    const peak = (note.gain ?? 0.15) * masterVolume;
+    const peak = note.gain ?? 0.15;
     const start = now + note.at;
     gain.gain.setValueAtTime(0, start);
     gain.gain.linearRampToValueAtTime(peak, start + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.001, start + note.dur);
-    osc.connect(gain).connect(audioCtx.destination);
+    osc.connect(gain).connect(dest);
     osc.start(start);
     osc.stop(start + note.dur + 0.05);
   }
@@ -221,7 +257,7 @@ function playSynth(id: SoundId): void {
 export function playSound(id: SoundId): void {
   if (muted || typeof window === 'undefined') return;
 
-  const file = soundFiles[id];
+  const file = soundOverrides[id] ?? soundFiles[id];
   if (file && !missingFiles.has(file)) {
     try {
       const audio = new Audio(file);

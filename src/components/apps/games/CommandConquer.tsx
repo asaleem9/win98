@@ -7,23 +7,23 @@ import { playSound } from '@/lib/sounds';
 import RtsGame from './engine/RtsGame';
 import { RtsConfig } from './engine/rts';
 
-// Same engine as StarCraft, re-skinned with Tiberium/GDI-vs-Nod flavour, a
+// Same engine as StarCraft, re-skinned with Ore/Allies-vs-Soviets flavour, a
 // different map layout and its own win text.
 const CNC_CONFIG: RtsConfig = {
   gameId: 'command-conquer',
-  resourceName: 'Tiberium',
-  workerName: 'Harvester',
-  soldierName: 'Minigunner',
+  resourceName: 'Ore',
+  workerName: 'Ore Truck',
+  soldierName: 'Rifle Infantry',
   baseName: 'Construction Yard',
   depotName: 'Power Plant',
-  prodName: 'War Factory',
-  enemyBaseName: 'Nod Temple',
+  prodName: 'Barracks',
+  enemyBaseName: 'Soviet Command Center',
   colors: {
-    player: '#e8c020',
+    player: '#3a7fd0',
     enemy: '#c02020',
-    resource: '#4ce04c',
+    resource: '#e0c840',
     terrain: '#3a2c18',
-    grid: 'rgba(200,170,90,0.10)',
+    grid: 'rgba(120,150,200,0.10)',
   },
   costs: { worker: 60, depot: 100, prod: 200, soldier: 50 },
   supplyPerDepot: 10,
@@ -58,8 +58,8 @@ const CNC_CONFIG: RtsConfig = {
   waveIntervalSec: 85,
   startResource: 200,
   startWorkers: 3,
-  winText: 'The Nod Temple lies in rubble. GDI controls the Tiberium fields. Well done, Commander.',
-  loseText: 'Your Construction Yard is destroyed. The Brotherhood of Nod advances.',
+  winText: 'The Soviet Command Center lies in ruins. Allied forces hold the ore fields. Well done, Commander.',
+  loseText: 'Your Construction Yard is destroyed. The Soviet advance cannot be stopped, Comrade.',
 };
 
 export default function CommandConquer({ windowId }: AppComponentProps) {
@@ -116,12 +116,12 @@ export default function CommandConquer({ windowId }: AppComponentProps) {
               <polygon
                 points="50,10 61,35 90,35 67,55 76,80 50,65 24,80 33,55 10,35 39,35"
                 fill="none"
-                stroke="#e8c020"
+                stroke="#5599dd"
                 strokeWidth="3"
               />
             </svg>
-            <span className="text-[13px] font-bold text-[#e8c020]">GDI</span>
-            <span className="text-[9px] text-[#886]">Skirmish</span>
+            <span className="text-[13px] font-bold text-[#5599dd]">ALLIES</span>
+            <span className="text-[9px] text-[#789]">Skirmish</span>
           </button>
 
           <button
@@ -135,7 +135,7 @@ export default function CommandConquer({ windowId }: AppComponentProps) {
             <svg width="40" height="40" viewBox="0 0 100 100">
               <polygon points="50,10 61,35 90,35 67,55 76,80 50,65 24,80 33,55 10,35 39,35" fill="#cc0000" />
             </svg>
-            <span className="text-[13px] font-bold text-[#cc4444]">NOD</span>
+            <span className="text-[13px] font-bold text-[#cc4444]">SOVIET</span>
             <span className="text-[9px] text-[#844]">Campaign</span>
           </button>
         </div>
@@ -148,7 +148,7 @@ export default function CommandConquer({ windowId }: AppComponentProps) {
           <Dialog98
             title="Command & Conquer: Red Alert"
             icon="error"
-            message="The Nod campaign is on Disc 2. Please insert the Nod disc. (Try a GDI Skirmish instead.)"
+            message="The Soviet campaign is on Disc 2. Please insert the Soviet disc. (Try an Allied Skirmish instead.)"
             buttons={[{ label: 'OK', onClick: () => setShowError(false), default: true }]}
           />
         </div>

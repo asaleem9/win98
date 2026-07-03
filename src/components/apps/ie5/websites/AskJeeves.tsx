@@ -1,5 +1,7 @@
 'use client';
 
+import type { SiteDef } from './registry';
+
 import { useState } from 'react';
 
 interface AskJeevesProps {
@@ -28,6 +30,15 @@ const SUGGESTIONS = [
   'What is the meaning of life?',
   'How do I make my computer faster?',
 ];
+
+export const site: SiteDef = {
+  key: 'askjeeves',
+  urls: ['http://www.askjeeves.com', 'www.askjeeves.com', 'askjeeves.com', 'ask.com', 'www.ask.com'],
+  title: 'Ask Jeeves',
+  keywords: ['ask', 'jeeves', 'search', 'butler', 'questions', 'answers'],
+  description: 'Ask Jeeves — the natural-language search butler.',
+  render: ({ onNavigate }) => <AskJeeves onNavigate={onNavigate} />,
+};
 
 export default function AskJeeves({ onNavigate }: AskJeevesProps) {
   const [query, setQuery] = useState('');

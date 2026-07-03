@@ -172,3 +172,176 @@ export function goalTier(score: number, goals: ScoreGoals = SCORE_GOALS): GoalTi
 export function finalScore(banked: readonly number[]): number {
   return banked.reduce((sum, v) => sum + v, 0);
 }
+
+// ---------------------------------------------------------------------------
+// Levels
+// ---------------------------------------------------------------------------
+
+/** Relative frequency each feature is rolled when a level's course is generated. */
+export interface FeatureWeights {
+  rail: number;
+  ramp: number;
+  gap: number;
+  flat: number;
+}
+
+/** Canvas colors that give a level its own look. */
+export interface LevelPalette {
+  /** Sky gradient stops, top → horizon. */
+  sky: readonly [string, string, string];
+  /** Flat ground fill. */
+  ground: string;
+  /** Neon accent for rails, ramps, the ground edge and combo readout. */
+  accent: string;
+}
+
+/**
+ * A full level definition. Everything that makes one course feel different from
+ * another lives here — auto-scroll speed, what the terrain throws at you, how
+ * generous the medal goals are, and the palette the canvas paints with.
+ */
+export interface LevelDef {
+  name: string;
+  location: string;
+  /** Auto-scroll speed in px/s. Higher = less reaction time. */
+  scroll: number;
+  featureWeights: FeatureWeights;
+  /** Inclusive [min, max] rail height above the ground. */
+  railHeightRange: readonly [number, number];
+  /** Inclusive [min, max] gap width. */
+  gapWidthRange: readonly [number, number];
+  goals: ScoreGoals;
+  palette: LevelPalette;
+}
+
+/**
+ * The eight levels, ordered by difficulty. Early stages are slow, rail-heavy and
+ * forgiving; later ones crank the scroll speed, lean on gaps and set steep gold
+ * goals. Each carries its own palette so it reads differently at a glance.
+ */
+export const TONY_LEVELS: readonly LevelDef[] = [
+  {
+    name: 'The Hangar',
+    location: 'Mulhawk Airfield',
+    scroll: 150,
+    featureWeights: { rail: 4, ramp: 2, gap: 0.6, flat: 3 },
+    railHeightRange: [48, 80],
+    gapWidthRange: [60, 100],
+    goals: { bronze: 3000, silver: 8000, gold: 15000 },
+    palette: { sky: ['#0a0a16', '#181410', '#211a08'], ground: '#16161c', accent: '#ccff00' },
+  },
+  {
+    name: 'School II',
+    location: 'Southern California',
+    scroll: 158,
+    featureWeights: { rail: 3.5, ramp: 2, gap: 0.9, flat: 2.6 },
+    railHeightRange: [52, 86],
+    gapWidthRange: [70, 110],
+    goals: { bronze: 4000, silver: 10000, gold: 18000 },
+    palette: { sky: ['#1a2a44', '#2a4468', '#3a5a80'], ground: '#2a2e38', accent: '#ffd23f' },
+  },
+  {
+    name: 'Marseille',
+    location: 'Marseille, France',
+    scroll: 166,
+    featureWeights: { rail: 3, ramp: 2.4, gap: 1.2, flat: 2.2 },
+    railHeightRange: [56, 92],
+    gapWidthRange: [80, 120],
+    goals: { bronze: 5500, silver: 13000, gold: 23000 },
+    palette: { sky: ['#0a2436', '#0e3a4a', '#116b6b'], ground: '#183034', accent: '#ff7ac2' },
+  },
+  {
+    name: 'NY City',
+    location: 'New York City, NY',
+    scroll: 174,
+    featureWeights: { rail: 2.6, ramp: 2.4, gap: 1.6, flat: 2 },
+    railHeightRange: [60, 96],
+    gapWidthRange: [90, 135],
+    goals: { bronze: 7000, silver: 16000, gold: 28000 },
+    palette: { sky: ['#0a0616', '#160a2a', '#241040'], ground: '#141018', accent: '#7c5cff' },
+  },
+  {
+    name: 'Venice Beach',
+    location: 'Venice, CA',
+    scroll: 182,
+    featureWeights: { rail: 2.2, ramp: 3, gap: 1.8, flat: 1.8 },
+    railHeightRange: [64, 104],
+    gapWidthRange: [100, 145],
+    goals: { bronze: 9000, silver: 20000, gold: 34000 },
+    palette: { sky: ['#2a1030', '#5a1e40', '#a83a2e'], ground: '#241820', accent: '#ff5c3a' },
+  },
+  {
+    name: 'Skatestreet',
+    location: 'Ventura, CA',
+    scroll: 190,
+    featureWeights: { rail: 2.6, ramp: 3.2, gap: 2, flat: 1.5 },
+    railHeightRange: [68, 112],
+    gapWidthRange: [95, 140],
+    goals: { bronze: 11000, silver: 24000, gold: 40000 },
+    palette: { sky: ['#101820', '#182430', '#243848'], ground: '#181c22', accent: '#3ad6ff' },
+  },
+  {
+    name: 'Philadelphia',
+    location: 'Philadelphia, PA',
+    scroll: 200,
+    featureWeights: { rail: 2.2, ramp: 2.2, gap: 2.8, flat: 1.2 },
+    railHeightRange: [64, 108],
+    gapWidthRange: [110, 160],
+    goals: { bronze: 13000, silver: 27000, gold: 45000 },
+    palette: { sky: ['#12161a', '#1c2228', '#2a3238'], ground: '#161a1c', accent: '#9bff5c' },
+  },
+  {
+    name: 'The Bullring',
+    location: 'Mexico',
+    scroll: 210,
+    featureWeights: { rail: 2, ramp: 2.4, gap: 3.4, flat: 1 },
+    railHeightRange: [72, 120],
+    gapWidthRange: [120, 175],
+    goals: { bronze: 15000, silver: 30000, gold: 50000 },
+    palette: { sky: ['#1a0608', '#3a0e10', '#661a12'], ground: '#20100c', accent: '#ffb020' },
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Medal-gated progression
+// ---------------------------------------------------------------------------
+
+/** Orders the tiers so two can be compared or a best-of picked. */
+export function tierRank(tier: GoalTier): number {
+  switch (tier) {
+    case 'gold':
+      return 3;
+    case 'silver':
+      return 2;
+    case 'bronze':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+/** The better of two tiers (ties keep the first). */
+export function higherTier(a: GoalTier, b: GoalTier): GoalTier {
+  return tierRank(a) >= tierRank(b) ? a : b;
+}
+
+/**
+ * Whether a level is playable given the best tier earned on each earlier level.
+ * The first level is always open; every other unlocks once the one before it has
+ * earned at least a bronze medal.
+ */
+export function isLevelUnlocked(index: number, tiers: readonly GoalTier[]): boolean {
+  if (index <= 0) return true;
+  if (index >= TONY_LEVELS.length) return false;
+  return tierRank(tiers[index - 1] ?? 'none') >= tierRank('bronze');
+}
+
+/** How many levels are currently unlocked (they open in order). */
+export function unlockedLevelCount(tiers: readonly GoalTier[]): number {
+  let count = 1;
+  for (let i = 1; i < TONY_LEVELS.length; i++) {
+    if (!isLevelUnlocked(i, tiers)) break;
+    count++;
+  }
+  return count;
+}

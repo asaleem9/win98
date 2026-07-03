@@ -1,7 +1,42 @@
 // Pure playlist navigation helpers shared by Winamp and Media Player.
 // Kept free of React/DOM so they can be unit-tested directly.
 
+import { MusicTrack, musicTracks, getTrackByFileName } from './tracks';
+
 export type RepeatMode = 'off' | 'all' | 'one';
+
+// Filesystem content conventions for media files:
+//   'data:...'    → real inline binary (the Paint convention)
+//   'track:<id>'  → reference to a bundled track by id (downloads use this)
+// Anything else (e.g. '[MP3 Audio]') is an opaque placeholder resolved by name.
+const TRACK_REF_PREFIX = 'track:';
+
+/** Resolve 'track:<id>' file content to a bundled track, or undefined. */
+export function resolveTrackFromContent(content: string | null | undefined): MusicTrack | undefined {
+  if (!content || !content.startsWith(TRACK_REF_PREFIX)) return undefined;
+  const id = content.slice(TRACK_REF_PREFIX.length).trim();
+  return musicTracks.find((t) => t.id === id);
+}
+
+/**
+ * Build the working playlist for a launched file. A 'track:<id>' content
+ * reference wins; otherwise we match by filename. Unknown files keep their
+ * display name but sound a bundled track underneath so playback isn't silent.
+ */
+export function playlistForLaunch(
+  filePath?: string,
+  content?: string | null,
+): { list: MusicTrack[]; index: number } {
+  if (!filePath) return { list: [...musicTracks], index: 0 };
+  const name = basename(filePath);
+  const match = resolveTrackFromContent(content) ?? getTrackByFileName(name);
+  if (match) {
+    return { list: [...musicTracks], index: musicTracks.findIndex((t) => t.id === match.id) };
+  }
+  const stand = musicTracks[0];
+  const faux: MusicTrack = { ...stand, id: `launch-${name}`, title: name, artist: 'Unknown Artist', fileName: name };
+  return { list: [faux, ...musicTracks], index: 0 };
+}
 
 /** Format seconds as mm:ss; negative/NaN render as a placeholder. */
 export function formatTime(totalSeconds: number, placeholder = '0:00'): string {

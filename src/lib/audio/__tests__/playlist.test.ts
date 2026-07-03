@@ -1,4 +1,13 @@
-import { formatTime, manualStep, autoNext, totalDuration, basename } from '@/lib/audio/playlist';
+import {
+  formatTime,
+  manualStep,
+  autoNext,
+  totalDuration,
+  basename,
+  resolveTrackFromContent,
+  playlistForLaunch,
+} from '@/lib/audio/playlist';
+import { musicTracks } from '@/lib/audio/tracks';
 
 describe('formatTime', () => {
   it('formats seconds as mm:ss', () => {
@@ -69,5 +78,47 @@ describe('basename', () => {
   it('extracts the filename from a Windows path', () => {
     expect(basename('C:\\My Documents\\Downloads\\song.mp3')).toBe('song.mp3');
     expect(basename('song.mp3')).toBe('song.mp3');
+  });
+});
+
+describe('resolveTrackFromContent', () => {
+  it('resolves a track: reference to the bundled track', () => {
+    expect(resolveTrackFromContent('track:y2k-panic')?.id).toBe('y2k-panic');
+    expect(resolveTrackFromContent('track:midnight-midi ')?.id).toBe('midnight-midi');
+  });
+
+  it('returns undefined for unknown ids and non-reference content', () => {
+    expect(resolveTrackFromContent('track:not-a-real-track')).toBeUndefined();
+    expect(resolveTrackFromContent('[MP3 Audio]')).toBeUndefined();
+    expect(resolveTrackFromContent('data:audio/mpeg;base64,AAAA')).toBeUndefined();
+    expect(resolveTrackFromContent(null)).toBeUndefined();
+    expect(resolveTrackFromContent(undefined)).toBeUndefined();
+  });
+});
+
+describe('playlistForLaunch', () => {
+  it('returns all tracks starting at 0 with no launch file', () => {
+    const { list, index } = playlistForLaunch();
+    expect(list).toHaveLength(musicTracks.length);
+    expect(index).toBe(0);
+  });
+
+  it('honors a track: content reference over the filename', () => {
+    const target = musicTracks.find((t) => t.id === 'midnight-midi')!;
+    const { list, index } = playlistForLaunch('C:\\Downloads\\anything.mp3', 'track:midnight-midi');
+    expect(list[index].id).toBe(target.id);
+  });
+
+  it('falls back to filename matching when there is no track: reference', () => {
+    const y2k = musicTracks.find((t) => t.id === 'y2k-panic')!;
+    const { list, index } = playlistForLaunch(`C:\\Downloads\\${y2k.fileName}`, '[MP3 Audio]');
+    expect(list[index].id).toBe('y2k-panic');
+  });
+
+  it('fronts an unknown file with its own name and a stand-in track', () => {
+    const { list, index } = playlistForLaunch('C:\\Downloads\\mystery.mp3', null);
+    expect(index).toBe(0);
+    expect(list[0].title).toBe('mystery.mp3');
+    expect(list.length).toBe(musicTracks.length + 1);
   });
 });

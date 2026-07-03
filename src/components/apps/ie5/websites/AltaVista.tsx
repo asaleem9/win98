@@ -1,5 +1,16 @@
 'use client';
 
+import type { SiteDef } from './registry';
+
+export const site: SiteDef = {
+  key: 'altavista',
+  urls: ['http://www.altavista.com', 'www.altavista.com', 'altavista.com'],
+  title: 'AltaVista - The Search Engine',
+  keywords: ['altavista', 'search', 'engine', 'web', 'query'],
+  description: 'AltaVista, one of the early web search engines.',
+  render: () => <AltaVista />,
+};
+
 export default function AltaVista() {
   return (
     <div className="bg-white text-black font-[Arial,sans-serif] text-[12px] min-h-full">
