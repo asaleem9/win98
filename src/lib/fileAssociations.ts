@@ -29,6 +29,8 @@ export const fileAssociations: Record<string, string> = {
   zip: 'winzip',
   rar: 'winrar',
   reg: 'regedit',
+  psd: 'photoshop5',
+  prn: 'notepad',
 };
 
 export const exeAppMap: Record<string, string> = {
@@ -74,6 +76,8 @@ export const exeAppMap: Record<string, string> = {
   'msconfig': 'sysinfo',
   'winword.exe': 'word97',
   'winword': 'word97',
+  'photoshop.exe': 'photoshop5',
+  'photoshp.exe': 'photoshop5',
   'excel.exe': 'excel',
   'excel': 'excel',
   'powerpnt.exe': 'powerpoint',

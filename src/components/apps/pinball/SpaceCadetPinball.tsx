@@ -6,6 +6,8 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { playSound } from '@/lib/sounds';
 import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
 import { Dialog98 } from '@/components/ui/Dialog98';
+import { compileSprite, drawSprite } from '@/components/apps/games/engine/sprites';
+import { PINBALL_SPRITES } from '@/components/apps/games/engine/sprites/pinball';
 import {
   BallState,
   Bumper,
@@ -13,9 +15,42 @@ import {
   Vec2,
   collideBumper,
   collideSegment,
-  rankFromScore,
   stepBall,
 } from './physics';
+import {
+  MissionState,
+  createMissionState,
+  resetMissionRun,
+  lightLane,
+  beginMission,
+  recordHit,
+  tickMission,
+  failMission,
+  acknowledgeMission,
+  currentMission,
+  rankFromMissions,
+  lanesLitCount,
+  missionProgressText,
+  MissionEventType,
+} from './missions';
+import { PlayBall, scoreMultiplier, pushTrail } from './multiball';
+import {
+  LAUNCH_LANES,
+  LANE_POINTS,
+  SPINNER,
+  SPINNER_POINTS,
+  SPIN_COOLDOWN_MS,
+  HYPERSPACE,
+  HYPERSPACE_POINTS,
+  HYPERSPACE_HOLD_MS,
+  HYPERSPACE_EJECT,
+  RAMP_LANE,
+  RAMP_POINTS,
+  RAMP_ASSIST,
+  laneAt,
+  overSpinner,
+  inHyperspace,
+} from './table';
 
 const APP_ID = 'pinball';
 
@@ -65,13 +100,37 @@ const PLUNGER_REST_Y = 440;
 const PLUNGER_MAX_PULL = 30;
 const PLUNGER_CHARGE_RATE = 1 / 0.8; // full charge in 0.8s
 
-type BallPhase = 'idle' | 'onPlunger' | 'inPlay';
+// flashRef keys: bumpers 0..2, targets 100.., slings 200.., lanes 300.., ramp 400, kicker 500.
+const KEY_LANE = 300;
+const KEY_RAMP = 400;
+const KEY_KICKER = 500;
 
 interface FlipperState {
   angleDeg: number;
   held: boolean;
   pivot: Vec2;
   sign: 1 | -1; // -1 mirrors the geometry for the right flipper
+}
+
+interface Star {
+  x: number;
+  y: number;
+  r: number;
+  tw: number; // twinkle phase offset
+}
+
+// Deterministic starfield so the backdrop is stable across renders.
+function makeStars(): Star[] {
+  const stars: Star[] = [];
+  let seed = 1337;
+  const rnd = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  for (let i = 0; i < 60; i++) {
+    stars.push({ x: rnd() * TABLE_WIDTH, y: rnd() * TABLE_HEIGHT, r: rnd() < 0.15 ? 1.4 : 0.8, tw: rnd() * Math.PI * 2 });
+  }
+  return stars;
 }
 
 function flipperSegment(f: FlipperState): Segment {
@@ -87,14 +146,77 @@ function degToRad(d: number) {
   return (d * Math.PI) / 180;
 }
 
+// 7-segment lookup, segment order [a, b, c, d, e, f, g].
+const SEVEN_SEG: Record<string, number[]> = {
+  '0': [1, 1, 1, 1, 1, 1, 0],
+  '1': [0, 1, 1, 0, 0, 0, 0],
+  '2': [1, 1, 0, 1, 1, 0, 1],
+  '3': [1, 1, 1, 1, 0, 0, 1],
+  '4': [0, 1, 1, 0, 0, 1, 1],
+  '5': [1, 0, 1, 1, 0, 1, 1],
+  '6': [1, 0, 1, 1, 1, 1, 1],
+  '7': [1, 1, 1, 0, 0, 0, 0],
+  '8': [1, 1, 1, 1, 1, 1, 1],
+  '9': [1, 1, 1, 1, 0, 1, 1],
+};
+
+function drawSevenSegDigit(
+  ctx: CanvasRenderingContext2D,
+  ch: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  on: string,
+  off: string,
+) {
+  const segs = SEVEN_SEG[ch] ?? [0, 0, 0, 0, 0, 0, 0];
+  const t = Math.max(1, w * 0.16);
+  const half = h / 2;
+  const seg = (i: number, sx: number, sy: number, sw: number, sh: number) => {
+    ctx.fillStyle = segs[i] ? on : off;
+    ctx.fillRect(sx, sy, sw, sh);
+  };
+  seg(0, x + t, y, w - 2 * t, t); // a  top
+  seg(1, x + w - t, y + t, t, half - t); // b  top-right
+  seg(2, x + w - t, y + half, t, half - t); // c  bottom-right
+  seg(3, x + t, y + h - t, w - 2 * t, t); // d  bottom
+  seg(4, x, y + half, t, half - t); // e  bottom-left
+  seg(5, x, y + t, t, half - t); // f  top-left
+  seg(6, x + t, y + half - t / 2, w - 2 * t, t); // g  middle
+}
+
+function drawSevenSegNumber(
+  ctx: CanvasRenderingContext2D,
+  value: number,
+  cx: number,
+  y: number,
+  digits: number,
+  dh: number,
+  on: string,
+  off: string,
+) {
+  const text = String(Math.min(value, 10 ** digits - 1)).padStart(digits, '0');
+  const dw = dh * 0.6;
+  const gap = dw * 0.34;
+  const total = digits * dw + (digits - 1) * gap;
+  let dx = cx - total / 2;
+  for (const ch of text) {
+    drawSevenSegDigit(ctx, ch, dx, y, dw, dh, on, off);
+    dx += dw + gap;
+  }
+}
+
 const menuKeys = new Set(['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
 
 export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
   const { getAppPref, setAppPref } = useSettings();
 
+  const [initialCompleted] = useState(() => getAppPref<number>(APP_ID, 'missionsCompleted', 0));
+
   const [score, setScore] = useState(0);
   const [balls, setBalls] = useState(MAX_BALLS);
-  const [rank, setRank] = useState('Cadet');
+  const [rank, setRank] = useState(() => rankFromMissions(initialCompleted));
   const [message, setMessage] = useState('Press F2 to start');
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -102,23 +224,25 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
   const [highScores, setHighScores] = useState<number[]>(() => getAppPref<number[]>(APP_ID, 'highScores', []));
   const [showAbout, setShowAbout] = useState(false);
   const [showHighScores, setShowHighScores] = useState(false);
+  const [stars] = useState<Star[]>(makeStars);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // --- mutable game state, kept out of React so the render loop stays cheap ---
-  const ballRef = useRef<BallState | null>(null);
-  const phaseRef = useRef<BallPhase>('idle');
+  const ballsRef = useRef<PlayBall[]>([]);
   const chargeRef = useRef(0);
   const chargingRef = useRef(false);
   const ballsLeftRef = useRef(MAX_BALLS);
   const scoreRef = useRef(0);
-  const rankRef = useRef('Cadet');
+  const rankRef = useRef(rankFromMissions(initialCompleted));
   const runningRef = useRef(false);
   const pausedRef = useRef(false);
   const tiltRef = useRef({ tilted: false, until: 0, nudgeTimes: [] as number[] });
   const flashRef = useRef<Map<number, number>>(new Map());
   const messageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const missionRef = useRef<MissionState>({ ...createMissionState(), completed: initialCompleted });
+  const spinnerRef = useRef({ phase: 0, speed: 0, lastPassAt: 0 });
 
   const leftFlipperRef = useRef<FlipperState>({
     angleDeg: FLIPPER_REST_DEG,
@@ -141,6 +265,11 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
     }
   }, []);
 
+  const laneHint = useCallback(() => {
+    const m = missionRef.current;
+    return `Light 3 lanes to arm ${currentMission(m).name}`;
+  }, []);
+
   const persistHighScore = useCallback(
     (finalScore: number) => {
       setHighScores((prev) => {
@@ -153,52 +282,110 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
   );
 
   const loadBallOnPlunger = useCallback(() => {
-    ballRef.current = {
-      pos: { x: PLUNGER_X, y: PLUNGER_REST_Y },
-      vel: { x: 0, y: 0 },
-      radius: BALL_RADIUS,
-    };
-    phaseRef.current = 'onPlunger';
+    ballsRef.current = [
+      {
+        state: { pos: { x: PLUNGER_X, y: PLUNGER_REST_Y }, vel: { x: 0, y: 0 }, radius: BALL_RADIUS },
+        phase: 'onPlunger',
+        captureUntil: 0,
+        trail: [],
+      },
+    ];
     chargeRef.current = 0;
   }, []);
 
   const startGame = useCallback(() => {
     scoreRef.current = 0;
     ballsLeftRef.current = MAX_BALLS;
-    rankRef.current = 'Cadet';
     tiltRef.current = { tilted: false, until: 0, nudgeTimes: [] };
+    missionRef.current = resetMissionRun(missionRef.current);
+    spinnerRef.current = { phase: 0, speed: 0, lastPassAt: 0 };
+    flashRef.current.clear();
+    const startRank = rankFromMissions(missionRef.current.completed);
+    rankRef.current = startRank;
     setScore(0);
     setBalls(MAX_BALLS);
-    setRank('Cadet');
+    setRank(startRank);
     setTilted(false);
     setRunning(true);
     setPaused(false);
     runningRef.current = true;
     pausedRef.current = false;
     loadBallOnPlunger();
-    setStatusMessage('MISSION 1: Launch Training');
-  }, [loadBallOnPlunger, setStatusMessage]);
+    setStatusMessage('Launch the ball, then light the 3 top lanes', 3200, laneHint());
+  }, [loadBallOnPlunger, setStatusMessage, laneHint]);
 
-  const addScore = useCallback(
-    (points: number) => {
-      scoreRef.current += points;
-      const next = scoreRef.current;
-      setScore(next);
-      const newRank = rankFromScore(next);
+  // Live count of balls actually on the playfield (drives the x2 multiplier).
+  const ballsInPlay = useCallback(() => ballsRef.current.filter((b) => b.phase !== 'onPlunger').length, []);
+
+  const addScore = useCallback((points: number) => {
+    scoreRef.current += points * scoreMultiplier(ballsInPlay());
+    setScore(scoreRef.current);
+  }, [ballsInPlay]);
+
+  const onMissionCountChanged = useCallback(
+    (completed: number) => {
+      const newRank = rankFromMissions(completed);
       if (newRank !== rankRef.current) {
         rankRef.current = newRank;
         setRank(newRank);
         playSound('chord');
-        setStatusMessage(`RANK UP: ${newRank}!`, 2200, `MISSION: Reach ${newRank}+`);
       }
+      setAppPref(APP_ID, 'missionsCompleted', completed);
+      setAppPref(APP_ID, 'rank', newRank);
     },
-    [setStatusMessage],
+    [setAppPref],
   );
 
-  const handleDrain = useCallback(() => {
-    ballRef.current = null;
-    phaseRef.current = 'idle';
+  const spawnMultiball = useCallback(() => {
+    const balls = ballsRef.current;
+    for (let i = 0; i < 2; i++) {
+      balls.push({
+        state: { pos: { x: 116 + i * 28, y: 74 }, vel: { x: i === 0 ? -70 : 70, y: 140 }, radius: BALL_RADIUS },
+        phase: 'inPlay',
+        captureUntil: 0,
+        trail: [],
+      });
+    }
+    playSound('ding');
+    setStatusMessage('MULTIBALL! x2 scoring', 2400);
+  }, [setStatusMessage]);
+
+  // Feed a playfield hit into the active mission and cash out completions.
+  const fireMissionEvent = useCallback(
+    (type: MissionEventType, index?: number) => {
+      const before = missionRef.current;
+      if (before.phase !== 'active') return;
+      const after = recordHit(before, { type, index });
+      missionRef.current = after;
+      if (after.phase === 'complete') {
+        const def = currentMission(after);
+        playSound('chord');
+        addScore(def.reward);
+        if (def.multiball) spawnMultiball();
+        missionRef.current = acknowledgeMission(after);
+        onMissionCountChanged(missionRef.current.completed);
+        setStatusMessage(`MISSION COMPLETE: ${def.name}! +${def.reward.toLocaleString()}`, 2800, laneHint());
+      }
+    },
+    [addScore, spawnMultiball, onMissionCountChanged, setStatusMessage, laneHint],
+  );
+
+  const armIfReady = useCallback(() => {
+    if (missionRef.current.phase !== 'ready') return;
+    const started = beginMission(missionRef.current);
+    missionRef.current = started;
+    const def = currentMission(started);
+    playSound('exclamation');
+    setStatusMessage(`MISSION: ${def.name} — ${def.blurb}`, 3200, def.name);
+  }, [setStatusMessage]);
+
+  const handleLifeLost = useCallback(() => {
     playSound('error');
+    // draining mid-mission fails it (progress reset), but rank is preserved
+    const m = missionRef.current;
+    if (m.phase === 'active') {
+      missionRef.current = acknowledgeMission(failMission(m));
+    }
     ballsLeftRef.current -= 1;
     const left = ballsLeftRef.current;
     setBalls(left);
@@ -214,36 +401,40 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
   }, [loadBallOnPlunger, persistHighScore, setStatusMessage]);
 
   const launchBall = useCallback(() => {
-    const ball = ballRef.current;
-    if (!ball || phaseRef.current !== 'onPlunger') return;
+    const pb = ballsRef.current.find((b) => b.phase === 'onPlunger');
+    if (!pb) return;
     const charge = chargeRef.current;
-    ball.vel = { x: (Math.random() - 0.5) * 20, y: -(360 + 560 * charge) };
-    phaseRef.current = 'inPlay';
+    pb.state = { ...pb.state, vel: { x: (Math.random() - 0.5) * 20, y: -(360 + 560 * charge) } };
+    pb.phase = 'inPlay';
     chargeRef.current = 0;
     chargingRef.current = false;
     playSound('ding');
   }, []);
 
-  const triggerNudge = useCallback((dir: number) => {
-    if (!runningRef.current || pausedRef.current) return;
-    const ball = ballRef.current;
-    const tilt = tiltRef.current;
-    const now = performance.now();
-    if (tilt.tilted) return;
-    if (ball && phaseRef.current === 'inPlay') {
-      ball.vel = { x: ball.vel.x + dir * 90, y: ball.vel.y - 40 };
-    }
-    tilt.nudgeTimes = tilt.nudgeTimes.filter((t) => now - t < NUDGE_WINDOW_MS);
-    tilt.nudgeTimes.push(now);
-    if (tilt.nudgeTimes.length > NUDGE_LIMIT) {
-      tilt.tilted = true;
-      tilt.until = now + TILT_DURATION_MS;
-      tilt.nudgeTimes = [];
-      setTilted(true);
-      playSound('error');
-      setStatusMessage('TILT!', TILT_DURATION_MS, 'MISSION: Steady hands, Cadet');
-    }
-  }, [setStatusMessage]);
+  const triggerNudge = useCallback(
+    (dir: number) => {
+      if (!runningRef.current || pausedRef.current) return;
+      const tilt = tiltRef.current;
+      const now = performance.now();
+      if (tilt.tilted) return;
+      ballsRef.current.forEach((b) => {
+        if (b.phase === 'inPlay') {
+          b.state = { ...b.state, vel: { x: b.state.vel.x + dir * 90, y: b.state.vel.y - 40 } };
+        }
+      });
+      tilt.nudgeTimes = tilt.nudgeTimes.filter((t) => now - t < NUDGE_WINDOW_MS);
+      tilt.nudgeTimes.push(now);
+      if (tilt.nudgeTimes.length > NUDGE_LIMIT) {
+        tilt.tilted = true;
+        tilt.until = now + TILT_DURATION_MS;
+        tilt.nudgeTimes = [];
+        setTilted(true);
+        playSound('error');
+        setStatusMessage('TILT!', TILT_DURATION_MS, 'MISSION: Steady hands, Cadet');
+      }
+    },
+    [setStatusMessage],
+  );
 
   // --- input handling ---
   useEffect(() => {
@@ -258,8 +449,9 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
       }
       if (!runningRef.current) return;
       const tiltActive = tiltRef.current.tilted;
+      const onPlunger = ballsRef.current.some((b) => b.phase === 'onPlunger');
       if (e.code === 'Space') {
-        if (phaseRef.current === 'onPlunger') chargingRef.current = true;
+        if (onPlunger) chargingRef.current = true;
       } else if ((e.code === 'KeyZ' || e.code === 'ArrowLeft') && !tiltActive) {
         leftFlipperRef.current.held = true;
       } else if ((e.code === 'Slash' || e.code === 'ArrowRight') && !tiltActive) {
@@ -298,9 +490,12 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
-  useEffect(() => () => {
-    if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
+    },
+    [],
+  );
 
   // --- physics + render loop ---
   useEffect(() => {
@@ -320,29 +515,22 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
       }
     };
 
-    const update = (dt: number) => {
-      const tilt = tiltRef.current;
-      if (tilt.tilted && performance.now() > tilt.until) {
-        tilt.tilted = false;
-        setTilted(false);
+    // Advance a single in-play ball through every collision object. Returns the
+    // updated ball, or null if it drained. Scoring/mission side effects fire here.
+    const stepPlayBall = (pb: PlayBall, dt: number, now: number): PlayBall | null => {
+      // Captured in the hyperspace hole: hold, then kick it back into play.
+      if (pb.phase === 'captured') {
+        if (now >= pb.captureUntil) {
+          addScore(HYPERSPACE_POINTS);
+          fireMissionEvent('hyperspace');
+          playSound('chord');
+          flashRef.current.set(KEY_KICKER, now + 400);
+          return { ...pb, phase: 'inPlay', captureUntil: 0, state: { ...pb.state, vel: { ...HYPERSPACE_EJECT } } };
+        }
+        return pb;
       }
 
-      updateFlipper(leftFlipperRef.current, dt);
-      updateFlipper(rightFlipperRef.current, dt);
-
-      if (phaseRef.current === 'onPlunger') {
-        if (chargingRef.current) {
-          chargeRef.current = Math.min(1, chargeRef.current + dt * PLUNGER_CHARGE_RATE);
-        }
-        const ball = ballRef.current;
-        if (ball) {
-          ball.pos = { x: PLUNGER_X, y: PLUNGER_REST_Y + chargeRef.current * PLUNGER_MAX_PULL };
-        }
-        return;
-      }
-
-      if (phaseRef.current !== 'inPlay' || !ballRef.current) return;
-      let ball = stepBall(ballRef.current, dt, { width: TABLE_WIDTH, height: TABLE_HEIGHT });
+      let ball: BallState = stepBall(pb.state, dt, { width: TABLE_WIDTH, height: TABLE_HEIGHT });
 
       // divider + lane ramp keep the ball out of the plunger lane once in play
       let res = collideSegment(ball, DIVIDER);
@@ -354,8 +542,9 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
         const r = collideBumper(ball, bumper);
         if (r.hit) {
           ball = { ...ball, pos: r.pos, vel: r.vel };
-          flashRef.current.set(i, performance.now() + 180);
+          flashRef.current.set(i, now + 180);
           addScore(BUMPER_POINTS);
+          fireMissionEvent('bumper');
           playSound('ding');
         }
       });
@@ -364,8 +553,9 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
         const r = collideBumper(ball, target);
         if (r.hit) {
           ball = { ...ball, pos: r.pos, vel: r.vel };
-          flashRef.current.set(100 + i, performance.now() + 180);
+          flashRef.current.set(100 + i, now + 180);
           addScore(TARGET_POINTS[i]);
+          fireMissionEvent('target');
           playSound('mineClick');
         }
       });
@@ -374,13 +564,23 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
         const r = collideSegment(ball, sling, 1.1);
         if (r.hit) {
           ball = { ...ball, pos: r.pos, vel: r.vel };
-          flashRef.current.set(200 + i, performance.now() + 150);
+          flashRef.current.set(200 + i, now + 150);
           addScore(SLING_POINTS);
+          fireMissionEvent('sling', i);
           playSound('mineClick');
         }
       });
 
-      if (!tilt.tilted) {
+      // Feed ramp: reflect, then add an upward kick so it climbs to the top.
+      const ramp = collideSegment(ball, RAMP_LANE, 0.92);
+      if (ramp.hit) {
+        ball = { ...ball, pos: ramp.pos, vel: { x: ramp.vel.x, y: ramp.vel.y - RAMP_ASSIST } };
+        flashRef.current.set(KEY_RAMP, now + 150);
+        addScore(RAMP_POINTS);
+        playSound('mineClick');
+      }
+
+      if (!tiltRef.current.tilted) {
         [leftFlipperRef.current, rightFlipperRef.current].forEach((f) => {
           const seg = flipperSegment(f);
           const r = collideSegment(ball, seg, 0.85);
@@ -397,20 +597,124 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
         });
       }
 
-      ballRef.current = ball;
+      // Spinner: pass-through, no bounce — award per pass and whirl the blade.
+      if (overSpinner(ball.pos) && now > spinnerRef.current.lastPassAt + SPIN_COOLDOWN_MS) {
+        spinnerRef.current.lastPassAt = now;
+        spinnerRef.current.speed = Math.min(28, spinnerRef.current.speed + 7);
+        addScore(SPINNER_POINTS);
+        fireMissionEvent('spinner');
+        playSound('mineClick');
+      }
 
-      if (ball.pos.y - ball.radius > TABLE_HEIGHT + 4) {
-        handleDrain();
+      // Launch lanes: light one while idle to work toward arming a mission.
+      const lane = laneAt(ball.pos);
+      if (lane >= 0 && !missionRef.current.lanes[lane]) {
+        const before = missionRef.current;
+        const after = lightLane(before, lane);
+        if (after !== before) {
+          missionRef.current = after;
+          flashRef.current.set(KEY_LANE + lane, now + 220);
+          addScore(LANE_POINTS);
+          playSound('ding');
+          if (after.phase === 'ready') armIfReady();
+        }
+      }
+
+      // Hyperspace hole: capture the ball for a beat before ejecting it.
+      if (inHyperspace(ball.pos)) {
+        flashRef.current.set(KEY_KICKER, now + HYPERSPACE_HOLD_MS + 400);
+        return {
+          ...pb,
+          phase: 'captured',
+          captureUntil: now + HYPERSPACE_HOLD_MS,
+          state: { ...ball, pos: { ...HYPERSPACE.pos }, vel: { x: 0, y: 0 } },
+          trail: pushTrail(pb.trail, ball.pos),
+        };
+      }
+
+      if (ball.pos.y - ball.radius > TABLE_HEIGHT + 4) return null; // drained
+
+      return { ...pb, state: ball, trail: pushTrail(pb.trail, ball.pos) };
+    };
+
+    const update = (dt: number) => {
+      const now = performance.now();
+      const tilt = tiltRef.current;
+      if (tilt.tilted && now > tilt.until) {
+        tilt.tilted = false;
+        setTilted(false);
+      }
+
+      updateFlipper(leftFlipperRef.current, dt);
+      updateFlipper(rightFlipperRef.current, dt);
+
+      // spinner spin-down
+      spinnerRef.current.speed = Math.max(0, spinnerRef.current.speed - dt * 9);
+      spinnerRef.current.phase += spinnerRef.current.speed * dt;
+
+      // mission countdown
+      const m = missionRef.current;
+      if (m.phase === 'active') {
+        const ticked = tickMission(m, dt * 1000);
+        missionRef.current = ticked;
+        if (ticked.phase === 'failed') {
+          missionRef.current = acknowledgeMission(ticked);
+          playSound('error');
+          setStatusMessage('MISSION FAILED - timed out', 2000, laneHint());
+        }
+      }
+
+      const balls = ballsRef.current;
+      if (balls.length === 0) return;
+
+      const stepped: PlayBall[] = [];
+      let drainedAny = false;
+      for (const pb of balls) {
+        if (pb.phase === 'onPlunger') {
+          if (chargingRef.current) {
+            chargeRef.current = Math.min(1, chargeRef.current + dt * PLUNGER_CHARGE_RATE);
+          }
+          stepped.push({
+            ...pb,
+            state: { ...pb.state, pos: { x: PLUNGER_X, y: PLUNGER_REST_Y + chargeRef.current * PLUNGER_MAX_PULL } },
+          });
+          continue;
+        }
+        const next = stepPlayBall(pb, dt, now);
+        if (next) stepped.push(next);
+        else drainedAny = true;
+      }
+
+      // stepPlayBall already dropped drained balls; a life is lost only when
+      // that leaves the table empty (see reapDrained for the tested rule).
+      ballsRef.current = stepped;
+      if (drainedAny) {
+        if (stepped.length === 0) handleLifeLost();
+        else playSound('mineClick'); // a ball drained but multiball continues
       }
     };
 
     const drawTable = (ctx: CanvasRenderingContext2D) => {
+      const now = performance.now();
+      const t = now / 1000;
       ctx.clearRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
       const bg = ctx.createLinearGradient(0, 0, 0, TABLE_HEIGHT);
       bg.addColorStop(0, '#1a0044');
       bg.addColorStop(1, '#0a0018');
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+
+      // starfield backdrop
+      for (const s of stars) {
+        const tw = 0.5 + 0.5 * Math.sin(t * 2 + s.tw);
+        ctx.fillStyle = `rgba(210,220,255,${0.15 + tw * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ghosted 7-seg score readout, sitting behind the upper playfield
+      drawSevenSegNumber(ctx, scoreRef.current, TABLE_WIDTH / 2, 42, 7, 26, 'rgba(90,220,255,0.55)', 'rgba(70,110,150,0.10)');
 
       // playfield border
       ctx.strokeStyle = '#5522aa';
@@ -438,38 +742,70 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
       ctx.lineTo(TABLE_WIDTH - 1, 0);
       ctx.stroke();
 
-      // bumpers
+      // launch-lane guides + mission lights
+      const armed = missionRef.current.phase === 'ready';
+      const chaser = Math.floor(t * 8) % LAUNCH_LANES.length;
+      const lightSprite = compileSprite(PINBALL_SPRITES.MISSION_LIGHT);
+      LAUNCH_LANES.forEach((lane, i) => {
+        ctx.strokeStyle = 'rgba(120,90,200,0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(lane.x, lane.y + 8);
+        ctx.lineTo(lane.x, lane.y + 40);
+        ctx.stroke();
+        const lit = missionRef.current.lanes[i] || (armed && chaser === i);
+        drawSprite(ctx, lightSprite, lane.x, lane.y, { frame: lit ? 1 : 0, scale: 1.4, anchor: 'center' });
+      });
+
+      // feed ramp guide
+      const rampHot = now < (flashRef.current.get(KEY_RAMP) ?? 0);
+      ctx.strokeStyle = rampHot ? '#ffffff' : '#33bbee';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(RAMP_LANE.a.x, RAMP_LANE.a.y);
+      ctx.lineTo(RAMP_LANE.b.x, RAMP_LANE.b.y);
+      ctx.stroke();
+
+      // spinner
+      const spinnerSprite = compileSprite(PINBALL_SPRITES.SPINNER);
+      const spinFrame = ((Math.floor(spinnerRef.current.phase) % 4) + 4) % 4;
+      const spinMid = { x: (SPINNER.a.x + SPINNER.b.x) / 2, y: (SPINNER.a.y + SPINNER.b.y) / 2 };
+      ctx.strokeStyle = 'rgba(120,140,180,0.4)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(SPINNER.a.x, SPINNER.a.y);
+      ctx.lineTo(SPINNER.b.x, SPINNER.b.y);
+      ctx.stroke();
+      drawSprite(ctx, spinnerSprite, spinMid.x, spinMid.y, { frame: spinFrame, scale: 1.6, anchor: 'center' });
+
+      // hyperspace kicker
+      const kickerSprite = compileSprite(PINBALL_SPRITES.KICKER);
+      const kickerHot =
+        now < (flashRef.current.get(KEY_KICKER) ?? 0) || ballsRef.current.some((b) => b.phase === 'captured');
+      drawSprite(ctx, kickerSprite, HYPERSPACE.pos.x, HYPERSPACE.pos.y, {
+        frame: kickerHot ? 1 : 0,
+        scale: (2 * HYPERSPACE.radius) / kickerSprite.frameWidth + 0.2,
+        anchor: 'center',
+      });
+
+      // bumpers (sprite caps that pop on a hit)
+      const bumperSprite = compileSprite(PINBALL_SPRITES.BUMPER_CAP);
       BUMPERS.forEach((bumper, i) => {
         const flashUntil = flashRef.current.get(i) ?? 0;
-        const flashing = performance.now() < flashUntil;
-        const grad = ctx.createRadialGradient(
-          bumper.pos.x - bumper.radius * 0.3,
-          bumper.pos.y - bumper.radius * 0.3,
-          2,
-          bumper.pos.x,
-          bumper.pos.y,
-          bumper.radius,
-        );
-        if (flashing) {
-          grad.addColorStop(0, '#ffffff');
-          grad.addColorStop(1, '#ffdd33');
-        } else {
-          grad.addColorStop(0, '#ff8855');
-          grad.addColorStop(1, '#cc2200');
-        }
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(bumper.pos.x, bumper.pos.y, bumper.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = flashing ? '#fff' : '#ff9966';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        const lit = now < flashUntil;
+        const pop = lit ? 1 + 0.3 * Math.max(0, (flashUntil - now) / 180) : 1;
+        drawSprite(ctx, bumperSprite, bumper.pos.x, bumper.pos.y, {
+          frame: lit ? 1 : 0,
+          scale: ((2 * bumper.radius) / bumperSprite.frameWidth) * pop,
+          anchor: 'center',
+        });
       });
 
       // standup targets
       TARGETS.forEach((target, i) => {
         const flashUntil = flashRef.current.get(100 + i) ?? 0;
-        const flashing = performance.now() < flashUntil;
+        const flashing = now < flashUntil;
         ctx.fillStyle = flashing ? '#ffffff' : '#330066';
         ctx.strokeStyle = '#cc66ff';
         ctx.lineWidth = 1.5;
@@ -482,7 +818,7 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
       // slingshots
       [LEFT_SLING, RIGHT_SLING].forEach((sling, i) => {
         const flashUntil = flashRef.current.get(200 + i) ?? 0;
-        const flashing = performance.now() < flashUntil;
+        const flashing = now < flashUntil;
         ctx.strokeStyle = flashing ? '#ffffff' : '#ffcc00';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -494,9 +830,15 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
       // flippers
       [leftFlipperRef.current, rightFlipperRef.current].forEach((f) => {
         const seg = flipperSegment(f);
-        ctx.strokeStyle = '#dddddd';
-        ctx.lineWidth = 8;
+        ctx.strokeStyle = '#8899bb';
+        ctx.lineWidth = 9;
         ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(seg.a.x, seg.a.y);
+        ctx.lineTo(seg.b.x, seg.b.y);
+        ctx.stroke();
+        ctx.strokeStyle = '#eef2ff';
+        ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.moveTo(seg.a.x, seg.a.y);
         ctx.lineTo(seg.b.x, seg.b.y);
@@ -514,28 +856,67 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
       ctx.arc(PLUNGER_X, chargeY, 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // ball
-      const ball = ballRef.current;
-      if (ball) {
-        const grad = ctx.createRadialGradient(
-          ball.pos.x - 2,
-          ball.pos.y - 2,
-          0.5,
-          ball.pos.x,
-          ball.pos.y,
-          ball.radius,
-        );
+      // ball trails + balls
+      const multi = ballsRef.current.filter((b) => b.phase !== 'onPlunger').length > 1;
+      ballsRef.current.forEach((pb) => {
+        pb.trail.forEach((p, ti) => {
+          const a = ((ti + 1) / (pb.trail.length + 1)) * 0.4;
+          ctx.fillStyle = `rgba(180,200,255,${a})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, pb.state.radius * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        const ball = pb.state;
+        const grad = ctx.createRadialGradient(ball.pos.x - 2, ball.pos.y - 2, 0.5, ball.pos.x, ball.pos.y, ball.radius);
         grad.addColorStop(0, '#ffffff');
-        grad.addColorStop(1, '#9999aa');
+        grad.addColorStop(1, multi ? '#aab0ff' : '#9999aa');
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(ball.pos.x, ball.pos.y, ball.radius, 0, Math.PI * 2);
         ctx.fill();
-      }
+      });
+
+      // mission HUD strip along the bottom edge of the playfield
+      drawMissionHud(ctx);
 
       if (tiltRef.current.tilted) {
-        ctx.fillStyle = 'rgba(255,0,0,0.15)';
+        const pulse = 0.1 + 0.12 * (0.5 + 0.5 * Math.sin(t * 20));
+        ctx.fillStyle = `rgba(255,0,0,${pulse})`;
         ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
+        ctx.fillStyle = '#ff5555';
+        ctx.font = 'bold 22px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('TILT', TABLE_WIDTH / 2, TABLE_HEIGHT / 2);
+        ctx.textAlign = 'left';
+      }
+    };
+
+    const drawMissionHud = (ctx: CanvasRenderingContext2D) => {
+      const m = missionRef.current;
+      const def = currentMission(m);
+      ctx.fillStyle = 'rgba(5,0,15,0.72)';
+      ctx.fillRect(4, TABLE_HEIGHT - 30, FIELD_RIGHT - 8, 26);
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      if (m.phase === 'active') {
+        ctx.fillStyle = '#ffcc44';
+        ctx.fillText(`${def.name}: ${def.blurb}`, 9, TABLE_HEIGHT - 18);
+        ctx.fillStyle = '#66e0ff';
+        ctx.fillText(missionProgressText(m), 9, TABLE_HEIGHT - 8);
+        // time bar
+        const frac = Math.max(0, m.timeLeftMs / def.timeLimitMs);
+        const barX = 120;
+        const barW = FIELD_RIGHT - barX - 12;
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.fillRect(barX, TABLE_HEIGHT - 13, barW, 6);
+        ctx.fillStyle = frac < 0.3 ? '#ff4444' : '#44ff88';
+        ctx.fillRect(barX, TABLE_HEIGHT - 13, barW * frac, 6);
+      } else {
+        const lit = lanesLitCount(m);
+        ctx.fillStyle = '#8899cc';
+        ctx.fillText(`NEXT: ${def.name}`, 9, TABLE_HEIGHT - 18);
+        ctx.fillStyle = m.phase === 'ready' ? '#ffdd44' : '#66aa88';
+        ctx.fillText(m.phase === 'ready' ? 'LANES ARMED - launch to start' : `Light lanes  ${lit}/3`, 9, TABLE_HEIGHT - 8);
       }
     };
 
@@ -563,7 +944,7 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
 
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [addScore, handleDrain]);
+  }, [addScore, handleLifeLost, fireMissionEvent, armIfReady, setStatusMessage, laneHint, stars]);
 
   const togglePause = useCallback(() => {
     if (!runningRef.current) return;
@@ -591,7 +972,7 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
 
   // pointer-driven plunger charging, mirrors the Space key
   const beginPointerCharge = useCallback(() => {
-    if (!runningRef.current || phaseRef.current !== 'onPlunger') return;
+    if (!runningRef.current || !ballsRef.current.some((b) => b.phase === 'onPlunger')) return;
     chargingRef.current = true;
   }, []);
   const endPointerCharge = useCallback(() => {
@@ -671,7 +1052,10 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
             message={
               <div className="text-[11px] max-w-[240px] space-y-1">
                 <p>3D Pinball for Windows - Space Cadet</p>
-                <p>Launch the ball, work the flippers, and climb the ranks from Cadet to Fleet Admiral.</p>
+                <p>
+                  Light the three top lanes to arm a mission, then complete timed objectives to earn promotions all the
+                  way to Fleet Admiral. Clear the Hyperspace Chase for MULTIBALL.
+                </p>
                 <p className="text-[#666]">Z / Left flipper, / or Right Arrow flipper, Space to launch, X to nudge.</p>
               </div>
             }

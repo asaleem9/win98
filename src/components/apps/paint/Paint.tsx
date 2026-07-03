@@ -11,6 +11,7 @@ import { getParentPath } from '@/lib/filesystem';
 import { addRecentDoc } from '@/lib/recentDocs';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { playSound } from '@/lib/sounds';
+import { usePrint } from '@/components/dialogs/PrintDialog';
 import {
   invertImageData,
   flipImageDataHorizontal,
@@ -49,6 +50,7 @@ function baseName(path: string): string {
 export default function Paint({ windowId, launchParams, launchCount }: AppComponentProps) {
   const { updateTitle } = useWindows();
   const { readFile, writeFile } = useFileSystem();
+  const { openPrint, printDialog } = usePrint(windowId, 'Paint');
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -280,6 +282,14 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
     else handleSaveAs();
   }, [currentFilePath, doSave, handleSaveAs]);
 
+  const handlePrint = useCallback(() => {
+    const name = currentFilePath ? baseName(currentFilePath) : 'Untitled';
+    openPrint(() => {
+      const canvas = canvasRef.current;
+      return canvas ? { kind: 'image', dataUrl: canvas.toDataURL('image/png') } : null;
+    }, name);
+  }, [currentFilePath, openPrint]);
+
   // Honor launch params on mount and whenever the app is re-launched with a file.
   useEffect(() => {
     if (launchParams?.filePath) loadPath(launchParams.filePath);
@@ -500,6 +510,8 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
         { label: 'Open...', shortcut: 'Ctrl+O', onClick: handleOpen },
         { label: 'Save', shortcut: 'Ctrl+S', onClick: handleSave },
         { label: 'Save As...', onClick: handleSaveAs },
+        { label: '', separator: true },
+        { label: 'Print...', shortcut: 'Ctrl+P', onClick: handlePrint },
       ],
     },
     {
@@ -657,6 +669,8 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
           { content: `${canvasSize.width} x ${canvasSize.height}`, width: 100 },
         ]}
       />
+
+      {printDialog}
     </div>
   );
 }

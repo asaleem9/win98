@@ -1,46 +1,111 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { renderWithProviders } from '@/__tests__/helpers/renderWithProviders';
+import { useWindows } from '@/contexts/WindowContext';
 import Help from '../Help';
-import { helpTopics } from '../helpContent';
+import { openHelpTopic } from '../openHelp';
 
-describe('helpContent data model', () => {
-  it('keeps the original six topics with unique ids', () => {
-    expect(helpTopics).toHaveLength(6);
-    const ids = helpTopics.map((t) => t.id);
-    expect(new Set(ids).size).toBe(6);
-    expect(ids).toContain('welcome');
-    expect(ids).toContain('troubleshooting');
+// Reads the live window count out of the shared WindowProvider so we can prove an
+// app: shortcut actually opened a window.
+function WindowCount() {
+  const { windows } = useWindows();
+  return <span data-testid="window-count">{windows.length}</span>;
+}
+
+describe('Help viewer', () => {
+  it('opens on the Welcome topic and shows the Contents tree', () => {
+    renderWithProviders(<Help windowId="w1" />);
+    expect(screen.getByRole('heading', { name: 'Welcome to Windows 98' })).toBeInTheDocument();
+    // Categories from the Contents tree.
+    expect(screen.getByText('Programs')).toBeInTheDocument();
+    expect(screen.getByText('Games')).toBeInTheDocument();
+    expect(screen.getByText('Troubleshooting')).toBeInTheDocument();
   });
 
-  it('gives every topic a title, category, keywords, and body', () => {
-    for (const t of helpTopics) {
-      expect(t.title).toBeTruthy();
-      expect(t.category).toBeTruthy();
-      expect(t.keywords.length).toBeGreaterThan(0);
-      expect(t.body.trim().length).toBeGreaterThan(0);
-    }
-  });
-});
-
-describe('Help', () => {
-  it('lists every topic and shows the welcome topic by default', () => {
-    render(<Help windowId="w1" />);
-    for (const t of helpTopics) {
-      // titles appear in the sidebar (welcome also appears as the heading)
-      expect(screen.getAllByText(t.title).length).toBeGreaterThan(0);
-    }
-    expect(screen.getByText(/Windows 98 makes your computer easier to use/)).toBeInTheDocument();
+  it('shows a topic when its Contents entry is clicked', () => {
+    renderWithProviders(<Help windowId="w1" />);
+    fireEvent.click(screen.getByText('Minesweeper'));
+    expect(screen.getByRole('heading', { name: 'Minesweeper' })).toBeInTheDocument();
+    expect(screen.getByText(/clear a minefield/)).toBeInTheDocument();
   });
 
-  it('switches content when another topic is selected', () => {
-    render(<Help windowId="w1" />);
-    fireEvent.click(screen.getByText('Keyboard Shortcuts'));
-    expect(screen.getByText(/Switch between open windows/)).toBeInTheDocument();
-    expect(screen.getByText(/Close the active window/)).toBeInTheDocument();
+  it('navigates Back and Forward through history', () => {
+    renderWithProviders(<Help windowId="w1" />);
+    fireEvent.click(screen.getByText('Calculator'));
+    expect(screen.getByRole('heading', { name: 'Calculator' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Back'));
+    expect(screen.getByRole('heading', { name: 'Welcome to Windows 98' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Forward'));
+    expect(screen.getByRole('heading', { name: 'Calculator' })).toBeInTheDocument();
   });
 
-  it('renders bullet lists from markdown-lite bodies', () => {
-    render(<Help windowId="w1" />);
-    fireEvent.click(screen.getByText('Using the Desktop'));
-    expect(screen.getByText('Double-click an icon to open it.')).toBeInTheDocument();
+  it('hides and shows the tabs pane', () => {
+    renderWithProviders(<Help windowId="w1" />);
+    expect(screen.getByText('Programs')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Hide'));
+    expect(screen.queryByText('Programs')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Show'));
+    expect(screen.getByText('Programs')).toBeInTheDocument();
+  });
+
+  it('opens a program from an app: shortcut button', () => {
+    renderWithProviders(
+      <>
+        <Help windowId="w1" />
+        <WindowCount />
+      </>,
+    );
+    expect(screen.getByTestId('window-count')).toHaveTextContent('0');
+    fireEvent.click(screen.getByText('Notepad')); // Contents entry
+    fireEvent.click(screen.getByText('Open Notepad')); // in-body shortcut
+    expect(screen.getByTestId('window-count')).toHaveTextContent('1');
+  });
+
+  it('lists ranked topics from the Search tab', () => {
+    renderWithProviders(<Help windowId="w1" />);
+    fireEvent.click(screen.getByText('search'));
+    fireEvent.change(screen.getByLabelText('Search words'), { target: { value: 'minesweeper' } });
+    fireEvent.click(screen.getByText('List Topics'));
+    fireEvent.click(screen.getByText('Minesweeper')); // the result row
+    expect(screen.getByRole('heading', { name: 'Minesweeper' })).toBeInTheDocument();
+  });
+
+  it('filters the Index and jumps to the chosen entry', () => {
+    renderWithProviders(<Help windowId="w1" />);
+    fireEvent.click(screen.getByText('index'));
+    fireEvent.change(screen.getByLabelText('Index keyword'), { target: { value: 'copying' } });
+    fireEvent.click(screen.getByText('copying files'));
+    expect(screen.getByRole('heading', { name: 'Working with Files and Folders' })).toBeInTheDocument();
+  });
+
+  it('opens the topic named by launchParams and follows a re-launch', () => {
+    const { rerender } = renderWithProviders(
+      <Help windowId="w1" launchParams={{ topicId: 'minesweeper' }} launchCount={1} />,
+    );
+    expect(screen.getByRole('heading', { name: 'Minesweeper' })).toBeInTheDocument();
+
+    rerender(<Help windowId="w1" launchParams={{ topicId: 'solitaire' }} launchCount={2} />);
+    expect(screen.getByRole('heading', { name: 'Solitaire' })).toBeInTheDocument();
+  });
+
+  it('jumps to a topic when openHelpTopic is dispatched', () => {
+    renderWithProviders(<Help windowId="w1" />);
+    act(() => openHelpTopic('calculator'));
+    expect(screen.getByRole('heading', { name: 'Calculator' })).toBeInTheDocument();
+    // An unknown id is ignored rather than blanking the view.
+    act(() => openHelpTopic('no-such-topic'));
+    expect(screen.getByRole('heading', { name: 'Calculator' })).toBeInTheDocument();
+  });
+
+  it('remembers the last tab and topic across re-opens', () => {
+    const first = renderWithProviders(<Help windowId="w1" />);
+    fireEvent.click(screen.getByText('Calculator')); // remembers last topic
+    fireEvent.click(screen.getByText('index')); // remembers last tab
+    first.unmount();
+
+    renderWithProviders(<Help windowId="w2" />);
+    expect(screen.getByRole('heading', { name: 'Calculator' })).toBeInTheDocument();
+    expect(screen.getByText('Type a keyword to find:')).toBeInTheDocument();
   });
 });

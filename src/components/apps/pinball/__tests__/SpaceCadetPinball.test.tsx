@@ -15,10 +15,10 @@ describe('SpaceCadetPinball', () => {
     expect(screen.getByText('BALLS')).toBeInTheDocument();
   });
 
-  it('starts a new game on F2 and shows the mission message', () => {
+  it('starts a new game on F2 and prompts the player to light the lanes', () => {
     renderWithProviders(<SpaceCadetPinball windowId="w1" />);
     fireEvent.keyDown(window, { code: 'F2' });
-    expect(screen.getByText(/MISSION 1/)).toBeInTheDocument();
+    expect(screen.getByText(/light the 3 top lanes/i)).toBeInTheDocument();
   });
 
   it('unmounts cleanly, cancelling the animation frame loop', () => {

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, ReactNode } from 'react';
 import { FSNode } from '@/types/filesystem';
-import { virtualFileSystem, getParentPath } from '@/lib/filesystem';
+import { virtualFileSystem, getParentPath, resolveNetworkPath } from '@/lib/filesystem';
 import {
   resolvePathIn,
   updateNodeAt,
@@ -145,7 +145,10 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const api = useMemo<FileSystemContextType>(() => {
-    const getNode = (path: string) => resolvePathIn(stateRef.current.root, path);
+    // Network Neighborhood shares live in a separate static tree outside the
+    // C: root (see resolveNetworkPath); consult it first so network files open
+    // through the normal readFile/openFile pipeline. C: paths fall through.
+    const getNode = (path: string) => resolveNetworkPath(path) ?? resolvePathIn(stateRef.current.root, path);
 
     const setRoot = (root: FSNode | null): FSResult => {
       if (!root) return { ok: false, error: 'The system cannot find the path specified.' };

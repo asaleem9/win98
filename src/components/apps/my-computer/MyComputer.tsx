@@ -4,6 +4,7 @@ import { useState, useCallback, MouseEvent } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { useWindows } from '@/contexts/WindowContext';
 import { useFileSystem } from '@/contexts/FileSystemContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { ContextMenu, ContextMenuItem } from '@/components/desktop/ContextMenu';
 import { Dialog98 } from '@/components/ui/Dialog98';
@@ -32,6 +33,15 @@ const SYSTEM_ITEMS = [
   { name: 'Dial-Up Networking', icon: '/icons/network-16.svg', action: 'dialup' as const },
 ];
 
+// A drive mapped from Network Neighborhood, persisted under its appPref bucket.
+interface MappedDrive {
+  letter: string;
+  path: string;
+  share: string;
+  hostDisplay: string;
+  reconnect: boolean;
+}
+
 function walkSize(node: FSNode): number {
   if (node.type !== 'directory') return node.size ?? 0;
   return (node.children ?? []).reduce((sum, c) => sum + walkSize(c), 0);
@@ -42,6 +52,8 @@ type InfoDialog = 'printers' | 'dialup' | 'addPrinter';
 export default function MyComputer({}: AppComponentProps) {
   const { openWindow } = useWindows();
   const { root } = useFileSystem();
+  const { getAppPref } = useSettings();
+  const mappedDrive = getAppPref<MappedDrive | null>('network-neighborhood', 'mappedDrive', null);
   const [menu, setMenu] = useState<{ x: number; y: number; drive: DriveDef } | null>(null);
   const [propsDrive, setPropsDrive] = useState<DriveDef | null>(null);
   const [info, setInfo] = useState<InfoDialog | null>(null);
@@ -98,6 +110,15 @@ export default function MyComputer({}: AppComponentProps) {
               onContextMenu={(e) => onDriveContext(drive, e)}
             />
           ))}
+          {mappedDrive && (
+            <IconCell
+              name={`${mappedDrive.share} on ${mappedDrive.hostDisplay} (${mappedDrive.letter})`}
+              icon="/icons/network-32.svg"
+              selected={selected === mappedDrive.letter}
+              onClick={(e) => { e.stopPropagation(); setSelected(mappedDrive.letter); }}
+              onDoubleClick={() => openWindow('explorer', { launchParams: { filePath: mappedDrive.path } })}
+            />
+          )}
         </div>
 
         <div className="mx-0 my-3 border-t border-[var(--win98-button-shadow)]" />
@@ -118,7 +139,7 @@ export default function MyComputer({}: AppComponentProps) {
 
       {/* Status bar */}
       <div className={cn('flex items-center h-[20px] px-2 bg-[var(--win98-button-face)]', 'border-t border-[var(--win98-button-highlight)]', 'text-[11px]')}>
-        <span>{DRIVES.length + SYSTEM_ITEMS.length} object(s)</span>
+        <span>{DRIVES.length + SYSTEM_ITEMS.length + (mappedDrive ? 1 : 0)} object(s)</span>
       </div>
 
       {menu && <ContextMenu items={contextItems} position={{ x: menu.x, y: menu.y }} onClose={() => setMenu(null)} />}

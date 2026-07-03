@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { playSound } from '@/lib/sounds';
+import { emit } from '@/lib/eventBus';
 import { generateReply, renderEmoticons } from './replyEngine';
 
 type BuddyStatus = 'online' | 'away' | 'offline';
@@ -404,6 +405,12 @@ export default function AIM({ windowId }: AppComponentProps) {
   const responseIndexRef = useRef<Record<string, number>>({});
   const groupsRef = useRef(groups);
   useEffect(() => { groupsRef.current = groups; }, [groups]);
+
+  // Park the running-man presence icon in the system tray while signed on.
+  useEffect(() => {
+    emit('tray-register', { id: 'aim', icon: '/icons/aim-16.svg', tooltip: `AIM - ${MY_SCREEN_NAME}` });
+    return () => emit('tray-unregister', { id: 'aim' });
+  }, []);
 
   // Randomly sign buddies on and off, playing the classic AIM door sounds.
   useEffect(() => {

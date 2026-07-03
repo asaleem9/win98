@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { cn } from '@/lib/cn';
 import { SYSTEM_SPECS } from '@/lib/constants';
 
 interface BootSequenceProps {
   onComplete: () => void;
+  /** Fast path for return visits: skip the BIOS memory count, flash the flag. */
+  fast?: boolean;
 }
 
 /** The classic 4-pane waving Windows flag logo */
@@ -59,47 +60,55 @@ function BootProgressBar({ progress }: { progress: number }) {
   );
 }
 
-export function BootSequence({ onComplete }: BootSequenceProps) {
+export function BootSequence({ onComplete, fast = false }: BootSequenceProps) {
+  // Always render the POST frame first so server and client markup agree —
+  // `fast` comes from localStorage-backed prefs the server can't see.
+  // Returning users then jump straight to the flag on mount.
   const [phase, setPhase] = useState<'post' | 'logo' | 'done'>('post');
   const [memoryCount, setMemoryCount] = useState(0);
   const [progress, setProgress] = useState(0);
 
-  // POST screen - memory count
+  useEffect(() => {
+    if (fast) setPhase((prev) => (prev === 'post' ? 'logo' : prev));
+  }, [fast]);
+
+  // POST screen - memory count ticks up to the installed RAM
   useEffect(() => {
     if (phase !== 'post') return;
     const target = SYSTEM_SPECS.ramBytes;
     const interval = setInterval(() => {
-      setMemoryCount((prev) => {
-        const next = prev + 8192;
-        if (next >= target) {
-          clearInterval(interval);
-          setTimeout(() => setPhase('logo'), 500);
-          return target;
-        }
-        return next;
-      });
+      setMemoryCount((prev) => Math.min(prev + 8192, target));
     }, 10);
     return () => clearInterval(interval);
   }, [phase]);
 
-  // Logo screen - progress bar
+  // Once memory is counted, hold briefly then move to the flag
+  useEffect(() => {
+    if (phase !== 'post' || memoryCount < SYSTEM_SPECS.ramBytes) return;
+    const timer = setTimeout(() => setPhase('logo'), 500);
+    return () => clearTimeout(timer);
+  }, [phase, memoryCount]);
+
+  // Logo screen - progress bar (quicker sweep on the fast path)
   useEffect(() => {
     if (phase !== 'logo') return;
+    const step = fast ? 5 : 2;
+    const tick = fast ? 30 : 40;
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setPhase('done');
-            onComplete();
-          }, 300);
-          return 100;
-        }
-        return prev + 2;
-      });
-    }, 40);
+      setProgress((prev) => Math.min(prev + step, 100));
+    }, tick);
     return () => clearInterval(interval);
-  }, [phase, onComplete]);
+  }, [phase, fast]);
+
+  // When the bar fills, hold briefly then hand off to the desktop
+  useEffect(() => {
+    if (phase !== 'logo' || progress < 100) return;
+    const timer = setTimeout(() => {
+      setPhase('done');
+      onComplete();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [phase, progress, onComplete]);
 
   // Skip on click
   const handleClick = () => {
@@ -112,7 +121,7 @@ export function BootSequence({ onComplete }: BootSequenceProps) {
   if (phase === 'post') {
     return (
       <div
-        className="fixed inset-0 z-[99999] bg-black text-white font-[family-name:var(--win98-font-fixedsys)] text-[14px] p-4 cursor-pointer"
+        className="win98-booting fixed inset-0 z-[99999] bg-black text-white font-[family-name:var(--win98-font-fixedsys)] text-[14px] p-4"
         onClick={handleClick}
       >
         <div className="mb-4">
@@ -139,7 +148,7 @@ export function BootSequence({ onComplete }: BootSequenceProps) {
   // Logo phase - authentic Windows 98 boot screen
   return (
     <div
-      className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center cursor-pointer"
+      className="win98-booting fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center"
       onClick={handleClick}
     >
       {/* Windows flag logo */}

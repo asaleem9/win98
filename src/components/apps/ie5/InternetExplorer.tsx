@@ -8,10 +8,27 @@ import { Input98 } from '@/components/ui/Input98';
 import { Button98 } from '@/components/ui/Button98';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useWindows } from '@/contexts/WindowContext';
+import { useFileSystem } from '@/contexts/FileSystemContext';
 import { showSystemError } from '@/hooks/useFileOpener';
+import { standardHelpMenu } from '@/lib/menus';
 import { findSiteByUrl } from './websites/registry';
+import {
+  classifyPage,
+  loadDurationFor,
+  generateSourceHtml,
+  sourceFileName,
+  hostOf,
+  PageKind,
+} from './websites/browser';
 
 const DEFAULT_HOME = 'http://www.yahoo.com';
+
+// Progress ticks every TICK_MS; the seeded per-URL duration decides how many
+// ticks a "download" takes.
+const TICK_MS = 50;
+
+// Temp dir that actually exists in the virtual FS (AUTOEXEC sets TEMP=C:\TEMP).
+const TEMP_DIR = 'C:\\TEMP';
 
 // Title shown in the address history / favorites; unknown URLs show the raw URL.
 function titleForUrl(u: string): string {
@@ -56,16 +73,21 @@ function FavIcon() {
 export default function InternetExplorer({ windowId, launchParams, launchCount }: AppComponentProps) {
   const { getAppPref, setAppPref } = useSettings();
   const { openWindow, closeWindow } = useWindows();
+  const { writeFile } = useFileSystem();
 
   const homePage = getAppPref<string>('ie5', 'homepage', DEFAULT_HOME);
+  const workOffline = getAppPref<boolean>('system', 'workOffline', false);
   const initialUrl = launchParams?.url ? launchParams.url : homePage;
 
-  const [url, setUrl] = useState(initialUrl);
+  // committedUrl is the page actually on screen; the address bar can be ahead of
+  // it while a new page "downloads".
+  const [committedUrl, setCommittedUrl] = useState(initialUrl);
   const [addressBarValue, setAddressBarValue] = useState(initialUrl);
   const [history, setHistory] = useState<string[]>([initialUrl]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [visited, setVisited] = useState<string[]>([initialUrl]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('Done');
   const [showToolbar, setShowToolbar] = useState(true);
   const [showStatusBar, setShowStatusBar] = useState(true);
@@ -75,28 +97,60 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
   const [homeInput, setHomeInput] = useState(homePage);
   const [openInput, setOpenInput] = useState('');
 
-  const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // URLs already fetched this session load faster the next time ("cached").
+  const cacheRef = useRef<Set<string>>(new Set([normalizeUrl(initialUrl)]));
+  const loadRef = useRef<{ interval: ReturnType<typeof setInterval> } | null>(null);
   const mountLaunchCount = useRef(launchCount);
 
   const favorites = getAppPref<Favorite[]>('ie5', 'favorites', DEFAULT_FAVORITES);
 
-  const currentSite = useMemo(() => findSiteByUrl(url), [url]);
+  const currentSite = useMemo(() => findSiteByUrl(committedUrl), [committedUrl]);
 
-  const beginLoad = useCallback((target: string) => {
-    if (loadTimer.current) clearTimeout(loadTimer.current);
-    setLoading(true);
-    setStatusText(`Opening page ${target}...`);
-    loadTimer.current = setTimeout(() => {
-      loadTimer.current = null;
-      setLoading(false);
-      setStatusText('Done');
-    }, 700);
+  const clearLoad = useCallback(() => {
+    if (loadRef.current) {
+      clearInterval(loadRef.current.interval);
+      loadRef.current = null;
+    }
   }, []);
+
+  // Drive a dial-up-speed "download": progress fills over a seeded duration while
+  // the status text steps through Finding → Connecting → Opening, then the page
+  // is committed. Nothing new renders until it completes (Stop keeps the old page).
+  const beginLoad = useCallback((target: string) => {
+    clearLoad();
+    const key = normalizeUrl(target);
+    const cached = cacheRef.current.has(key);
+    cacheRef.current.add(key);
+    const duration = loadDurationFor(target, cached);
+    const host = hostOf(target);
+
+    setLoading(true);
+    setProgress(0);
+    setStatusText(`Finding site ${host}...`);
+
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += TICK_MS;
+      const pct = Math.min(100, Math.round((elapsed / duration) * 100));
+      setProgress(pct);
+      if (pct < 30) setStatusText(`Finding site ${host}...`);
+      else if (pct < 65) setStatusText('Connecting...');
+      else if (pct < 100) setStatusText(`Opening page ${host}...`);
+
+      if (pct >= 100) {
+        clearInterval(interval);
+        loadRef.current = null;
+        setLoading(false);
+        setStatusText('Done');
+        setCommittedUrl(target);
+      }
+    }, TICK_MS);
+    loadRef.current = { interval };
+  }, [clearLoad]);
 
   const navigate = useCallback((newUrl: string) => {
     const trimmed = newUrl.trim();
     if (!trimmed) return;
-    setUrl(trimmed);
     setAddressBarValue(trimmed);
     setHistory((prev) => [...prev.slice(0, historyIndex + 1), trimmed]);
     setHistoryIndex((prev) => prev + 1);
@@ -104,21 +158,21 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
     beginLoad(trimmed);
   }, [historyIndex, beginLoad]);
 
-  // Stop button — cancels the in-flight "load".
+  // Stop button — cancels the in-flight "load" and stays on the current page.
   const stop = useCallback(() => {
-    if (loadTimer.current) {
-      clearTimeout(loadTimer.current);
-      loadTimer.current = null;
-    }
+    clearLoad();
     setLoading(false);
+    setProgress(0);
     setStatusText('Stopped');
-  }, []);
+    setAddressBarValue(committedUrl);
+  }, [clearLoad, committedUrl]);
+
+  const reload = useCallback(() => beginLoad(committedUrl), [beginLoad, committedUrl]);
 
   const goBack = useCallback(() => {
     if (historyIndex > 0) {
       const i = historyIndex - 1;
       setHistoryIndex(i);
-      setUrl(history[i]);
       setAddressBarValue(history[i]);
       beginLoad(history[i]);
     }
@@ -128,13 +182,32 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
     if (historyIndex < history.length - 1) {
       const i = historyIndex + 1;
       setHistoryIndex(i);
-      setUrl(history[i]);
       setAddressBarValue(history[i]);
       beginLoad(history[i]);
     }
   }, [historyIndex, history, beginLoad]);
 
   const goHome = useCallback(() => navigate(homePage), [navigate, homePage]);
+
+  const toggleOffline = useCallback(() => {
+    setAppPref('system', 'workOffline', !workOffline);
+  }, [setAppPref, workOffline]);
+
+  const goOnline = useCallback(() => {
+    setAppPref('system', 'workOffline', false);
+    beginLoad(committedUrl);
+  }, [setAppPref, beginLoad, committedUrl]);
+
+  const viewSource = useCallback(() => {
+    const html = generateSourceHtml(committedUrl);
+    const path = `${TEMP_DIR}\\${sourceFileName(committedUrl)}`;
+    const res = writeFile(path, html);
+    if (!res.ok) {
+      showSystemError('View Source', res.error);
+      return;
+    }
+    openWindow('notepad', { launchParams: { filePath: path } });
+  }, [committedUrl, writeFile, openWindow]);
 
   // Honor launchParams.url when the Start menu re-launches this window.
   useEffect(() => {
@@ -146,7 +219,7 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launchCount, launchParams?.url]);
 
-  useEffect(() => () => { if (loadTimer.current) clearTimeout(loadTimer.current); }, []);
+  useEffect(() => () => clearLoad(), [clearLoad]);
 
   const handleAddressSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -154,16 +227,16 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
   }, [addressBarValue, navigate]);
 
   const openAddFavorite = useCallback(() => {
-    setFavNameInput(currentSite ? currentSite.title : url);
+    setFavNameInput(currentSite ? currentSite.title : committedUrl);
     setDialog('addFav');
-  }, [currentSite, url]);
+  }, [currentSite, committedUrl]);
 
   const confirmAddFavorite = useCallback(() => {
-    const title = favNameInput.trim() || url;
-    const next = [...favorites.filter((f) => normalizeUrl(f.url) !== normalizeUrl(url)), { title, url }];
+    const title = favNameInput.trim() || committedUrl;
+    const next = [...favorites.filter((f) => normalizeUrl(f.url) !== normalizeUrl(committedUrl)), { title, url: committedUrl }];
     setAppPref('ie5', 'favorites', next);
     setDialog(null);
-  }, [favNameInput, url, favorites, setAppPref]);
+  }, [favNameInput, committedUrl, favorites, setAppPref]);
 
   const removeFavorite = useCallback((target: string) => {
     setAppPref('ie5', 'favorites', favorites.filter((f) => f.url !== target));
@@ -188,6 +261,8 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
         { label: 'Save As...', onClick: () => eraDialog('Save Web Page', 'This feature is not available in this version of Internet Explorer.') },
         { label: 'Print...', shortcut: 'Ctrl+P', onClick: () => eraDialog('Print', 'There is no printer installed.\n\nTo install a printer, point to Settings on the Start menu, and then click Printers.') },
         { separator: true, label: '' },
+        { label: 'Work Offline', checked: workOffline, onClick: toggleOffline },
+        { separator: true, label: '' },
         { label: 'Close', onClick: () => closeWindow(windowId) },
       ],
     },
@@ -207,8 +282,10 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
         { label: 'Toolbar', checked: showToolbar, onClick: () => setShowToolbar((v) => !v) },
         { label: 'Status Bar', checked: showStatusBar, onClick: () => setShowStatusBar((v) => !v) },
         { separator: true, label: '' },
-        { label: 'Refresh', shortcut: 'F5', onClick: () => navigate(url) },
-        { label: 'Source', onClick: () => eraDialog('View Source', 'The source for this page cannot be displayed.') },
+        { label: 'Stop', shortcut: 'Esc', onClick: stop, disabled: !loading },
+        { label: 'Refresh', shortcut: 'F5', onClick: reload },
+        { separator: true, label: '' },
+        { label: 'Source', onClick: viewSource },
       ],
     },
     {
@@ -237,24 +314,19 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
         { label: 'Internet Options...', onClick: () => { setHomeInput(homePage); setDialog('options'); } },
       ],
     },
-    {
-      label: 'Help',
-      items: [
-        { label: 'About Internet Explorer', onClick: () => eraDialog('About Internet Explorer', 'Microsoft Internet Explorer 5\n\nVersion 5.00.2314.1003\n\nCopyright © 1995-1999 Microsoft Corp.\n\nThis product is licensed to:\nA Valued Customer') },
-      ],
-    },
-  ], [showToolbar, showStatusBar, favorites, visited, url, homePage, navigate, openAddFavorite, openWindow, closeWindow, windowId, eraDialog]);
+    standardHelpMenu('Internet Explorer'),
+  ], [showToolbar, showStatusBar, favorites, visited, homePage, workOffline, loading, toggleOffline, stop, reload, viewSource, navigate, openAddFavorite, openWindow, closeWindow, windowId, eraDialog]);
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] relative">
-      <MenuBar menus={menus} />
+      <MenuBar menus={menus} windowId={windowId} />
 
       {showToolbar && (
         <div className="flex items-center gap-1 px-1 py-[2px] border-b border-[var(--win98-button-shadow)]">
           <ToolbarButton onClick={goBack} disabled={historyIndex <= 0} label="Back" icon={<ArrowLeft />} />
           <ToolbarButton onClick={goForward} disabled={historyIndex >= history.length - 1} label="Forward" icon={<ArrowRight />} />
           <ToolbarButton onClick={stop} disabled={!loading} label="Stop" icon={<StopIcon />} />
-          <ToolbarButton onClick={() => navigate(url)} label="Refresh" icon={<RefreshIcon />} />
+          <ToolbarButton onClick={reload} label="Refresh" icon={<RefreshIcon />} />
           <ToolbarButton onClick={goHome} label="Home" icon={<HomeIcon />} />
           <div className="w-px self-stretch bg-[var(--win98-button-shadow)] mx-[2px]" />
           <ToolbarButton onClick={openAddFavorite} label="Favorites" icon={<FavIcon />} />
@@ -268,17 +340,25 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
       </form>
 
       <div className="flex-1 overflow-auto bg-white relative">
-        {loading && (
-          <div className="absolute top-0 left-0 right-0 h-[3px] bg-[var(--win98-highlight)] animate-pulse z-10" />
-        )}
-        {currentSite ? currentSite.render({ onNavigate: navigate }) : <ErrorPage url={url} />}
+        <PageView url={committedUrl} workOffline={workOffline} onNavigate={navigate} onConnect={goOnline} />
+        {/* White flash while a page downloads — the committed page stays underneath so Stop can fall back to it. */}
+        {loading && <div className="absolute inset-0 bg-white z-10" />}
       </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 px-2 py-[2px] bg-[var(--win98-button-face)] border-t border-[var(--win98-button-highlight)]">
+          <span className="text-[10px] text-[#333] whitespace-nowrap">{progress}%</span>
+          <div className="flex-1 h-[12px] bg-white border border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] overflow-hidden">
+            <div className="h-full bg-[var(--win98-highlight)] transition-[width] duration-75" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
 
       {showStatusBar && (
         <StatusBar98
           panels={[
             { content: statusText },
-            { content: 'Internet', width: 80, align: 'center' },
+            { content: workOffline ? 'Offline' : 'Internet', width: 80, align: 'center' },
           ]}
         />
       )}
@@ -333,7 +413,7 @@ export default function InternetExplorer({ windowId, launchParams, launchCount }
                   <div className="mb-1 text-[10px] text-[#666]">You can change which page to use for your home page.</div>
                   <Input98 value={homeInput} onChange={(e) => setHomeInput(e.target.value)} className="w-full mb-2" autoFocus />
                   <div className="flex gap-2 mb-3">
-                    <Button98 className="min-w-0 text-[10px]" onClick={() => setHomeInput(url)}>Use Current</Button98>
+                    <Button98 className="min-w-0 text-[10px]" onClick={() => setHomeInput(committedUrl)}>Use Current</Button98>
                     <Button98 className="min-w-0 text-[10px]" onClick={() => setHomeInput(DEFAULT_HOME)}>Use Default</Button98>
                   </div>
                   <div className="flex justify-end gap-2">
@@ -392,25 +472,77 @@ function ToolbarButton({ onClick, disabled, label, icon }: {
   );
 }
 
-function ErrorPage({ url }: { url: string }) {
+// Renders the committed page: a real site, or the era-authentic error variant
+// its URL/offline state calls for.
+function PageView({ url, workOffline, onNavigate, onConnect }: {
+  url: string;
+  workOffline: boolean;
+  onNavigate: (url: string) => void;
+  onConnect: () => void;
+}) {
+  const kind = classifyPage(url, { workOffline });
+  if (kind === 'site') {
+    const site = findSiteByUrl(url)!;
+    return <>{site.render({ onNavigate })}</>;
+  }
+  return <ErrorPage kind={kind} url={url} onConnect={onConnect} />;
+}
+
+const ERROR_COPY: Record<Exclude<PageKind, 'site'>, { heading: string; lead: string; code: string }> = {
+  dns: {
+    heading: 'The page cannot be displayed',
+    lead: 'The page you are looking for is currently unavailable. The Web site might be experiencing technical difficulties, or you may need to adjust your browser settings.',
+    code: 'Cannot find server or DNS Error',
+  },
+  http404: {
+    heading: 'The page cannot be found',
+    lead: 'The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.',
+    code: 'HTTP 404 - File not found',
+  },
+  offline: {
+    heading: 'The page cannot be displayed',
+    lead: 'You are currently working offline. To view this page, you must connect to the Internet.',
+    code: 'Internet Explorer is currently working offline',
+  },
+};
+
+function ErrorPage({ kind, url, onConnect }: { kind: PageKind; url: string; onConnect: () => void }) {
+  const copy = ERROR_COPY[kind as Exclude<PageKind, 'site'>] ?? ERROR_COPY.dns;
   return (
     <div className="p-6 font-[family-name:var(--win98-font)]">
       <div className="flex items-start gap-4">
-        <div className="text-[32px]">❌</div>
+        <div className="text-[32px]">{kind === 'offline' ? '🔌' : '❌'}</div>
         <div>
-          <h2 className="text-[16px] font-bold mb-2 text-black">The page cannot be displayed</h2>
-          <p className="text-[12px] text-[#333] mb-3">
-            The page you are looking for is currently unavailable. The Web site might be
-            experiencing technical difficulties, or you may need to adjust your browser settings.
-          </p>
+          <h2 className="text-[16px] font-bold mb-2 text-black">{copy.heading}</h2>
+          <p className="text-[12px] text-[#333] mb-3">{copy.lead}</p>
           <hr className="border-[#cccccc] mb-3" />
           <p className="text-[12px] text-[#333] mb-2">Please try the following:</p>
           <ul className="text-[12px] text-[#333] list-disc pl-5 space-y-1">
-            <li>Click the <strong>Refresh</strong> button, or try again later.</li>
-            <li>If you typed the page address in the Address bar, make sure that it is spelled correctly.</li>
-            <li>To check your connection settings, click the <strong>Tools</strong> menu, and then click <strong>Internet Options</strong>.</li>
+            {kind === 'offline' ? (
+              <>
+                <li>Click the <strong>Connect</strong> button to go online.</li>
+                <li>To browse offline, click the <strong>File</strong> menu, and then click <strong>Work Offline</strong> to clear it.</li>
+              </>
+            ) : kind === 'http404' ? (
+              <>
+                <li>Make sure that the Web site address displayed in the address bar is spelled and formatted correctly.</li>
+                <li>Click the <strong>Back</strong> button to try another link.</li>
+                <li>Click the <strong>Refresh</strong> button, or try again later.</li>
+              </>
+            ) : (
+              <>
+                <li>Click the <strong>Refresh</strong> button, or try again later.</li>
+                <li>If you typed the page address in the Address bar, make sure that it is spelled correctly.</li>
+                <li>To check your connection settings, click the <strong>Tools</strong> menu, and then click <strong>Internet Options</strong>.</li>
+              </>
+            )}
           </ul>
-          <p className="text-[11px] text-[#666] mt-4">Cannot find server or DNS Error<br />Internet Explorer</p>
+          {kind === 'offline' && (
+            <div className="mt-4">
+              <Button98 onClick={onConnect}>Connect</Button98>
+            </div>
+          )}
+          <p className="text-[11px] text-[#666] mt-4">{copy.code}<br />Internet Explorer</p>
           <p className="text-[11px] text-[#999] mt-2">URL: {url}</p>
         </div>
       </div>

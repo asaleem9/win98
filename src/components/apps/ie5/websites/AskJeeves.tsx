@@ -1,8 +1,8 @@
 'use client';
 
-import type { SiteDef } from './registry';
-
 import { useState } from 'react';
+import type { SiteDef } from './registry';
+import { searchSites } from './search';
 
 interface AskJeevesProps {
   onNavigate: (url: string) => void;
@@ -14,7 +14,8 @@ interface Answer {
   label: string;
 }
 
-// Curated "answers" — each points at one of our other fake pages.
+// Curated fallbacks — shown when the search turns up nothing, so Jeeves is never
+// left empty-handed. Each points at one of our other fake pages.
 const ANSWERS: Answer[] = [
   { q: 'Where can I find dancing hamsters?', url: 'http://www.hampsterdance.com', label: 'The Hampster Dance' },
   { q: 'Where can I search the Web?', url: 'http://www.yahoo.com', label: 'Yahoo!' },
@@ -40,17 +41,41 @@ export const site: SiteDef = {
   render: ({ onNavigate }) => <AskJeeves onNavigate={onNavigate} />,
 };
 
+/** Jeeves' in-character reply, chosen from the shape of the question. */
+export function jeevesReply(query: string): string {
+  const q = query.trim().toLowerCase().replace(/[?.!]+$/, '');
+
+  if (/meaning of life/.test(q)) return 'The answer is 42, sir. Though I have always found a nice cup of tea to help as well.';
+  if (/who are you|who is jeeves|your name/.test(q)) return 'I am Jeeves, your devoted search butler. It is my pleasure to be of service.';
+  if (/why is the sky blue/.test(q)) return 'Sunlight scatters off the air, sir — the shorter blue wavelengths most of all. A most agreeable arrangement.';
+  if (/(make|is).*(computer|pc).*(faster|slow)/.test(q) || /faster/.test(q)) return 'A common complaint, sir. Fewer programs at startup works wonders — and some suggest simply downloading more memory.';
+  if (/y2k|year 2000|millennium bug/.test(q)) return 'Not to worry, sir. I have set the clocks forward and stocked the pantry, just in case.';
+
+  if (/^who\b/.test(q)) return 'A question of persons, sir. Allow me to fetch what the Web knows of them.';
+  if (/^what\b/.test(q)) return 'Ah, a matter of definition. Permit me to look that up on your behalf.';
+  if (/^why\b/.test(q)) return 'Ever the philosopher! Let us see what the Web has to say on the matter.';
+  if (/^when\b/.test(q)) return 'A question of timing, sir. I shall consult the appropriate references at once.';
+  if (/^where\b/.test(q)) return 'I believe I know just the place. Kindly follow me.';
+  if (/^(how do i|how can i|how to|how)\b/.test(q)) return 'Right away, sir. Here is how the matter is best handled.';
+
+  return 'Very good, sir. I have taken the liberty of consulting the Web on your behalf.';
+}
+
 export default function AskJeeves({ onNavigate }: AskJeevesProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Answer[] | null>(null);
+  const [asked, setAsked] = useState<string | null>(null);
+  const [results, setResults] = useState<Answer[]>([]);
 
   const doSearch = (q: string) => {
-    const lower = q.toLowerCase();
-    const words = lower.split(/\s+/).filter(Boolean);
-    const matches = ANSWERS.filter((a) =>
-      words.some((w) => a.q.toLowerCase().includes(w) || a.label.toLowerCase().includes(w)),
-    );
-    setResults(matches.length ? matches : ANSWERS);
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setAsked(trimmed);
+    const ranked = searchSites(trimmed);
+    if (ranked.length > 0) {
+      setResults(ranked.map((r) => ({ q: r.site.description, url: r.url, label: r.site.title })));
+    } else {
+      setResults(ANSWERS);
+    }
   };
 
   return (
@@ -82,26 +107,33 @@ export default function AskJeeves({ onNavigate }: AskJeevesProps) {
           </button>
         </form>
 
-        <div className="text-[11px] text-[#666] mt-3">
-          Popular questions:
-          <div className="mt-1 space-y-1">
-            {SUGGESTIONS.map((s) => (
-              <div key={s}>
-                <span
-                  className="text-[#0000cc] underline cursor-pointer"
-                  onClick={() => { setQuery(s); doSearch(s); }}
-                >
-                  {s}
-                </span>
-              </div>
-            ))}
+        {!asked && (
+          <div className="text-[11px] text-[#666] mt-3">
+            Popular questions:
+            <div className="mt-1 space-y-1">
+              {SUGGESTIONS.map((s) => (
+                <div key={s}>
+                  <span
+                    className="text-[#0000cc] underline cursor-pointer"
+                    onClick={() => { setQuery(s); doSearch(s); }}
+                  >
+                    {s}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {results && (
+        {asked && (
           <div className="border-t border-[#ccc] mt-4 pt-3 text-left">
+            <div className="text-[12px] text-[#666] italic mb-1">You asked: {asked}</div>
+            <div className="flex items-start gap-2 mb-3">
+              <span className="text-[22px] leading-none">🎩</span>
+              <div className="text-[13px] text-[#003366]">{jeevesReply(asked)}</div>
+            </div>
             <div className="text-[13px] font-bold text-[#003366] mb-2">
-              Jeeves knows these answers to your question:
+              Jeeves found these answers to your question:
             </div>
             <ul className="space-y-2">
               {results.map((r) => (

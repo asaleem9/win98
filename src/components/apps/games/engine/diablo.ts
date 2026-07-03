@@ -3,7 +3,7 @@
 // Diablo2.tsx can stay a thin presenter. All randomness flows through a `Rand`
 // (see ./rng) so tests can seed it and get repeatable rolls.
 
-import { Rand, randInt, pick, weightedPick, clamp } from './rng';
+import { Rand, randInt, pick, weightedPick, clamp, chance } from './rng';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,10 +61,16 @@ export interface Character {
   hp: number;
   mana: number;
   potions: number;
+  /** Four quick-slots of typed potions; superseded the raw `potions` count in the UI. */
+  belt: BeltSlot[];
   inventory: Item[];
   equipment: Partial<Record<ItemSlot, Item>>;
   bestDungeonLevel: number;
 }
+
+export type PotionType = 'health' | 'mana';
+/** A belt slot holds one potion or nothing. */
+export type BeltSlot = PotionType | null;
 
 export interface Combatant {
   minDamage: number;
@@ -82,6 +88,8 @@ export interface Enemy extends Combatant {
   goldMin: number;
   goldMax: number;
   isBoss: boolean;
+  /** Turns of Frost Nova slow remaining; a slowed foe skips its counter-attack. */
+  slowTurns?: number;
 }
 
 export interface AttackResult {
@@ -135,6 +143,7 @@ export function createCharacter(cls: CharClass): Character {
     hp: 0,
     mana: 0,
     potions: 3,
+    belt: ['health', 'health', 'mana', null],
     inventory: [],
     equipment: {},
     bestDungeonLevel: 1,
@@ -608,124 +617,616 @@ export interface CombatEvent {
 export interface CombatTurnResult {
   /** Enemy roster after the turn (target removed on a kill, emptied on death). */
   enemies: Enemy[];
-  /** Character after xp/gold/hp/death changes are folded in. */
+  /** Character after xp/gold/hp/mana/death changes are folded in. */
   character: Character;
+  /** Summoned ally after the turn (attacks, damage taken, or destruction). */
+  ally: Ally | null;
   /** Ordered log/sound cues to fire once each. */
   events: CombatEvent[];
-  /** Item dropped by a slain enemy, if any. */
+  /** First item dropped this action, if any (kept for back-compat). */
   drop: Item | null;
+  /** Every item dropped this action (AoE can slay several foes at once). */
+  drops: Item[];
+  /** Belt potions dropped this action, already folded into `character.belt`. */
+  potionDrops: PotionType[];
   goldGained: number;
   xpGained: number;
   leveledUp: boolean;
-  /** The target enemy was slain this turn. */
+  /** At least one enemy was slain this action. */
   enemyDefeated: boolean;
-  /** The boss was the slain enemy. */
+  /** Ids of every enemy slain this action (for crumble animations). */
+  defeatedIds: string[];
+  /** The boss was among the slain. */
   bossDown: boolean;
   /** The player was killed by the retaliation. */
   died: boolean;
   /** Gold lost to the death penalty (0 unless `died`). */
   goldLost: number;
+  /** Mana spent (0 for a basic attack). */
+  manaSpent: number;
+  /** Life restored to the player this action (Holy Bolt self-heal). */
+  healed: number;
+  /** Ids of enemies struck this action (for hit-flash animations). */
+  hitIds: string[];
+  /** The skill cast, or null for a basic attack. */
+  skillId: string | null;
+  /** Ids of enemies newly slowed this action. */
+  slowedIds: string[];
+  /** Ids of enemies stunned this action. */
+  stunnedIds: string[];
+}
+
+/** Chance a slain (non-boss) enemy also coughs up a belt potion. */
+export const POTION_DROP_CHANCE = 0.12;
+
+/** A summoned combatant that fights alongside the player until slain. */
+export interface Ally {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  minDamage: number;
+  maxDamage: number;
+  attackRating: number;
+}
+
+/** Raise a skeletal warrior scaled to the caster's level. */
+export function makeSkeleton(character: Character): Ally {
+  const lvl = character.level;
+  const hp = 18 + lvl * 7;
+  return {
+    id: 'skeleton',
+    name: 'Skeleton',
+    hp,
+    maxHp: hp,
+    minDamage: 2 + lvl,
+    maxDamage: 5 + lvl * 2,
+    attackRating: 30 + lvl * 12,
+  };
+}
+
+// Internal mutable scratch used by the shared resolvers. The public entry points
+// clone character/enemies/ally into it, so the caller's inputs are never touched.
+interface CombatState {
+  char: Character;
+  enemies: Enemy[];
+  ally: Ally | null;
+  events: CombatEvent[];
+  hitIds: string[];
+  defeatedIds: string[];
+  drops: Item[];
+  potionDrops: PotionType[];
+  slowedIds: string[];
+  stunnedIds: string[];
+  goldGained: number;
+  xpGained: number;
+  leveledUp: boolean;
+  bossDown: boolean;
+  healed: number;
+}
+
+function newState(char: Character, enemies: Enemy[], ally: Ally | null): CombatState {
+  return {
+    char,
+    enemies: enemies.map((e) => ({ ...e })),
+    ally: ally ? { ...ally } : null,
+    events: [],
+    hitIds: [],
+    defeatedIds: [],
+    drops: [],
+    potionDrops: [],
+    slowedIds: [],
+    stunnedIds: [],
+    goldGained: 0,
+    xpGained: 0,
+    leveledUp: false,
+    bossDown: false,
+    healed: 0,
+  };
+}
+
+function toCombatant(c: PlayerCombat): Combatant {
+  return { minDamage: c.minDamage, maxDamage: c.maxDamage, attackRating: c.attackRating, defense: c.defense };
+}
+
+/** Roll a skill's magic damage: scales off top-end damage and energy, auto-hits. */
+function spellDamage(combat: PlayerCombat, mult: number, energyScale: number, rand: Rand): number {
+  const top = Math.max(1, Math.round(combat.maxDamage * mult + combat.totalStats.energy * energyScale));
+  const lo = Math.max(1, Math.round(top * 0.7));
+  return Math.max(1, randInt(rand, lo, top));
+}
+
+/** A physical skill blow: an ordinary attack roll with the weapon damage scaled. */
+function skillStrike(combat: PlayerCombat, mult: number, enemy: Enemy, rand: Rand): AttackResult {
+  return resolveAttack(
+    {
+      minDamage: Math.max(1, Math.round(combat.minDamage * mult)),
+      maxDamage: Math.max(1, Math.round(combat.maxDamage * mult)),
+      attackRating: combat.attackRating,
+      defense: combat.defense,
+    },
+    enemy,
+    rand,
+  );
+}
+
+// Reward resolution for a slain enemy. Mirrors the original kill order — loot,
+// gold, xp — then appends a potion roll, so seeded tests of the earlier rolls are
+// undisturbed.
+interface KillYield {
+  character: Character;
+  events: CombatEvent[];
+  drop: Item | null;
+  potionDrop: PotionType | null;
+  goldGained: number;
+  xpGained: number;
+  leveled: boolean;
+}
+function resolveKill(rewardChar: Character, enemy: Enemy, rand: Rand): KillYield {
+  const events: CombatEvent[] = [];
+  events.push({ log: `${enemy.name} dies!` });
+  const drop = rollLootDrop(enemy, rand);
+  const goldGained = grantGold(enemy, rand);
+  const xpRes = applyXpGain({ ...rewardChar, gold: rewardChar.gold + goldGained }, enemy.xp);
+  let updated = xpRes.char;
+  if (xpRes.leveled) {
+    events.push({
+      sound: 'chord',
+      log: `Welcome to level ${updated.level}! ${xpRes.levelsGained * STAT_POINTS_PER_LEVEL} stat points to spend.`,
+    });
+  }
+  if (drop) {
+    const rareDrop = drop.rarity === 'rare' || drop.rarity === 'unique';
+    events.push({ sound: rareDrop ? 'cardWin' : undefined, log: `${enemy.name} drops ${drop.name}.` });
+  }
+  if (enemy.isBoss) {
+    events.push({ sound: 'cardWin', log: 'Andariel is slain! The Maiden of Anguish falls.' });
+  }
+  let potionDrop: PotionType | null = null;
+  if (!enemy.isBoss && chance(rand, POTION_DROP_CHANCE)) {
+    potionDrop = rand() < 0.5 ? 'health' : 'mana';
+    updated = addPotionToBelt(updated, potionDrop);
+    events.push({ log: `${enemy.name} drops a ${BELT_POTIONS[potionDrop].label}.` });
+  }
+  return { character: updated, events, drop, potionDrop, goldGained, xpGained: enemy.xp, leveled: xpRes.leveled };
+}
+
+// Fold a slain enemy's rewards into the running state.
+function slay(S: CombatState, enemy: Enemy, rand: Rand): void {
+  S.defeatedIds.push(enemy.id);
+  if (enemy.isBoss) S.bossDown = true;
+  const k = resolveKill(S.char, enemy, rand);
+  S.char = k.character;
+  for (const ev of k.events) S.events.push(ev);
+  if (k.drop) S.drops.push(k.drop);
+  if (k.potionDrop) S.potionDrops.push(k.potionDrop);
+  S.goldGained += k.goldGained;
+  S.xpGained += k.xpGained;
+  S.leveledUp = S.leveledUp || k.leveled;
+}
+
+// Apply an already-rolled amount of damage to one enemy, resolving death.
+function applyDamage(S: CombatState, id: string, damage: number, rand: Rand, logHit: (name: string, dmg: number) => string): void {
+  const idx = S.enemies.findIndex((e) => e.id === id);
+  if (idx === -1) return;
+  const e = S.enemies[idx];
+  S.hitIds.push(id);
+  const hp = e.hp - damage;
+  S.events.push({ sound: 'ding', log: logHit(e.name, damage) });
+  if (hp <= 0) {
+    slay(S, e, rand);
+    S.enemies = S.enemies.filter((x) => x.id !== id);
+  } else {
+    S.enemies = S.enemies.map((x) => (x.id === id ? { ...x, hp } : x));
+  }
+}
+
+// The summoned ally, when present, strikes a random living foe. Draws no RNG when
+// there is no ally, so a basic attack's roll sequence is unchanged.
+function skeletonPhase(S: CombatState, rand: Rand): void {
+  if (!S.ally) return;
+  const living = S.enemies.filter((e) => e.hp > 0);
+  if (living.length === 0) return;
+  const t = living[randInt(rand, 0, living.length - 1)];
+  const atk = resolveAttack({ minDamage: S.ally.minDamage, maxDamage: S.ally.maxDamage, attackRating: S.ally.attackRating, defense: 0 }, t, rand);
+  if (atk.hit) applyDamage(S, t.id, atk.damage, rand, (n, d) => `Your skeleton hits ${n} for ${d}.`);
+  else S.events.push({ log: `Your skeleton misses ${t.name}.` });
+}
+
+// A single foe counter-attacks. A slowed or stunned foe skips it. With an ally on
+// the field the blow may land on the skeleton instead of the player. Returns
+// whether the player was killed. The ally-target roll only fires when an ally
+// exists, so the no-ally path draws exactly one attack roll as before.
+function retaliatePhase(S: CombatState, retaliator: Enemy | null, combat: PlayerCombat, rand: Rand): boolean {
+  if (!retaliator) return false;
+  const current = S.enemies.find((e) => e.id === retaliator.id);
+  if (!current || current.hp <= 0) return false;
+  if ((current.slowTurns ?? 0) > 0) return false;
+  if (S.stunnedIds.includes(current.id)) return false;
+
+  let hitAlly = false;
+  if (S.ally) hitAlly = rand() < 0.5;
+  const atk = resolveAttack(current, combat, rand);
+  if (!atk.hit) return false;
+
+  if (hitAlly && S.ally) {
+    const hp = S.ally.hp - atk.damage;
+    if (hp <= 0) {
+      S.events.push({ log: `${current.name} destroys your skeleton!` });
+      S.ally = null;
+    } else {
+      S.events.push({ log: `${current.name} hits your skeleton for ${atk.damage}.` });
+      S.ally = { ...S.ally, hp };
+    }
+    return false;
+  }
+
+  const playerHp = S.char.hp - atk.damage;
+  S.events.push({ log: `${current.name} hits you for ${atk.damage}.` });
+  if (playerHp <= 0) {
+    S.events.push({ sound: 'error' });
+    return true;
+  }
+  S.char = { ...S.char, hp: playerHp };
+  return false;
+}
+
+// Tick down slow timers on the surviving roster (no-op when nobody is slowed).
+function decrementSlow(enemies: Enemy[]): Enemy[] {
+  if (!enemies.some((e) => (e.slowTurns ?? 0) > 0)) return enemies;
+  return enemies.map((e) => ((e.slowTurns ?? 0) > 0 ? { ...e, slowTurns: (e.slowTurns as number) - 1 } : e));
+}
+
+// Assemble the immutable result from the scratch state.
+function finalize(S: CombatState, opts: { died: boolean; skillId: string | null; manaSpent: number }): CombatTurnResult {
+  if (opts.died) {
+    const dead = applyDeath(S.char);
+    return {
+      enemies: [],
+      character: dead.char,
+      ally: null,
+      events: S.events,
+      drop: S.drops[0] ?? null,
+      drops: S.drops,
+      potionDrops: S.potionDrops,
+      goldGained: S.goldGained,
+      xpGained: S.xpGained,
+      leveledUp: S.leveledUp,
+      enemyDefeated: S.defeatedIds.length > 0,
+      defeatedIds: S.defeatedIds,
+      bossDown: S.bossDown,
+      died: true,
+      goldLost: dead.goldLost,
+      manaSpent: opts.manaSpent,
+      healed: S.healed,
+      hitIds: S.hitIds,
+      skillId: opts.skillId,
+      slowedIds: S.slowedIds,
+      stunnedIds: S.stunnedIds,
+    };
+  }
+  return {
+    enemies: decrementSlow(S.enemies),
+    character: S.char,
+    ally: S.ally,
+    events: S.events,
+    drop: S.drops[0] ?? null,
+    drops: S.drops,
+    potionDrops: S.potionDrops,
+    goldGained: S.goldGained,
+    xpGained: S.xpGained,
+    leveledUp: S.leveledUp,
+    enemyDefeated: S.defeatedIds.length > 0,
+    defeatedIds: S.defeatedIds,
+    bossDown: S.bossDown,
+    died: false,
+    goldLost: 0,
+    manaSpent: opts.manaSpent,
+    healed: S.healed,
+    hitIds: S.hitIds,
+    skillId: opts.skillId,
+    slowedIds: S.slowedIds,
+    stunnedIds: S.stunnedIds,
+  };
 }
 
 /**
  * Resolve one player attack against `enemyId` as a single pure step. All
  * randomness flows through `rand`, and every consequence — new roster, updated
- * character, loot, log/sound cues — is returned rather than applied, so the UI
- * can commit each effect exactly once. Returns null if the target is gone.
+ * character/ally, loot, log/sound cues — is returned rather than applied, so the
+ * UI can commit each effect exactly once. Pass a summoned `ally` to let a
+ * skeleton fight alongside. Returns null if the target is gone.
  */
 export function resolveCombatTurn(
   character: Character,
   enemies: Enemy[],
   enemyId: string,
   rand: Rand,
+  ally: Ally | null = null,
 ): CombatTurnResult | null {
   const idx = enemies.findIndex((e) => e.id === enemyId);
   if (idx === -1) return null;
-  const enemy = enemies[idx];
   const combat = playerCombat(character);
-  const events: CombatEvent[] = [];
+  const S = newState(character, enemies, ally);
+  const target = S.enemies[idx];
 
-  // Player strikes.
-  const hit = resolveAttack(
-    { minDamage: combat.minDamage, maxDamage: combat.maxDamage, attackRating: combat.attackRating, defense: combat.defense },
-    enemy,
-    rand,
-  );
-  const newHp = enemy.hp - hit.damage;
-  if (hit.hit) events.push({ sound: 'ding', log: `You hit ${enemy.name} for ${hit.damage}.` });
-  else events.push({ sound: 'menuClick', log: `You miss ${enemy.name}.` });
+  const hit = resolveAttack(toCombatant(combat), target, rand);
+  if (hit.hit) applyDamage(S, enemyId, hit.damage, rand, (n, d) => `You hit ${n} for ${d}.`);
+  else S.events.push({ sound: 'menuClick', log: `You miss ${target.name}.` });
 
-  if (newHp <= 0) {
-    // Enemy dies: xp, gold, loot.
-    events.push({ log: `${enemy.name} dies!` });
-    const drop = rollLootDrop(enemy, rand);
-    const goldGained = grantGold(enemy, rand);
-    const xpRes = applyXpGain({ ...character, gold: character.gold + goldGained }, enemy.xp);
-    const updated = xpRes.char;
-    if (xpRes.leveled) {
-      events.push({
-        sound: 'chord',
-        log: `Welcome to level ${updated.level}! ${xpRes.levelsGained * STAT_POINTS_PER_LEVEL} stat points to spend.`,
+  skeletonPhase(S, rand);
+
+  // Only the struck target counters, and only if it survived — preserving the
+  // original one-retaliator model even in a crowded room.
+  const survivor = S.enemies.find((e) => e.id === enemyId) ?? null;
+  const died = retaliatePhase(S, survivor, combat, rand);
+  return finalize(S, { died, skillId: null, manaSpent: 0 });
+}
+
+// ---------------------------------------------------------------------------
+// Class skills
+// ---------------------------------------------------------------------------
+
+/** How a skill picks its targets. */
+export type SkillTargeting = 'single' | 'all' | 'pierce' | 'any' | 'summon';
+/** Coarse visual family, used by the UI animation layer. */
+export type SkillEffect = 'bolt' | 'nova' | 'whirl' | 'pierce' | 'melee' | 'summon' | 'volley';
+
+export interface SkillDef {
+  id: string;
+  cls: CharClass;
+  name: string;
+  manaCost: number;
+  /** Character level the skill becomes available at. */
+  unlockLevel: number;
+  /** Turns before it can be cast again (0 = only mana-gated). Enforced by the UI. */
+  cooldown: number;
+  targeting: SkillTargeting;
+  effect: SkillEffect;
+  /** Auto-hitting spell (true) vs. an attack-roll physical blow (false). */
+  magic: boolean;
+  /** Damage scale vs. top-end weapon damage per strike. */
+  dmgMult: number;
+  /** Flat magic bonus from energy (spells only). */
+  energyScale: number;
+  /** Number of strikes at a single target (Jab / Zeal). */
+  hits: number;
+  /** 1-based order within the class, mapped to hotkeys 1..N. */
+  hotkey: number;
+  desc: string;
+}
+
+export const SKILLS: SkillDef[] = [
+  // Sorceress
+  { id: 'firebolt', cls: 'Sorceress', name: 'Fire Bolt', manaCost: 4, unlockLevel: 1, cooldown: 0, targeting: 'single', effect: 'bolt', magic: true, dmgMult: 2.2, energyScale: 0.6, hits: 1, hotkey: 1, desc: 'A searing bolt of fire — heavy single-target damage.' },
+  { id: 'frostnova', cls: 'Sorceress', name: 'Frost Nova', manaCost: 9, unlockLevel: 6, cooldown: 3, targeting: 'all', effect: 'nova', magic: true, dmgMult: 0.8, energyScale: 0.35, hits: 1, hotkey: 2, desc: 'A ring of frost — damages every foe and slows them for 2 turns.' },
+  // Barbarian
+  { id: 'bash', cls: 'Barbarian', name: 'Bash', manaCost: 3, unlockLevel: 1, cooldown: 0, targeting: 'single', effect: 'melee', magic: false, dmgMult: 1.7, energyScale: 0, hits: 1, hotkey: 1, desc: "A crushing blow that stuns, skipping the foe's counter." },
+  { id: 'whirlwind', cls: 'Barbarian', name: 'Whirlwind', manaCost: 10, unlockLevel: 6, cooldown: 3, targeting: 'all', effect: 'whirl', magic: false, dmgMult: 0.7, energyScale: 0, hits: 1, hotkey: 2, desc: 'Spin through the whole pack for reduced damage.' },
+  // Necromancer
+  { id: 'bonespear', cls: 'Necromancer', name: 'Bone Spear', manaCost: 5, unlockLevel: 1, cooldown: 0, targeting: 'pierce', effect: 'pierce', magic: true, dmgMult: 1.6, energyScale: 0.5, hits: 1, hotkey: 1, desc: 'A spear of bone that pierces the target and the foe behind it.' },
+  { id: 'raiseskeleton', cls: 'Necromancer', name: 'Raise Skeleton', manaCost: 8, unlockLevel: 6, cooldown: 5, targeting: 'summon', effect: 'summon', magic: false, dmgMult: 0, energyScale: 0, hits: 1, hotkey: 2, desc: 'Raise a skeletal warrior that fights at your side until slain.' },
+  // Paladin
+  { id: 'holybolt', cls: 'Paladin', name: 'Holy Bolt', manaCost: 4, unlockLevel: 1, cooldown: 0, targeting: 'any', effect: 'bolt', magic: true, dmgMult: 1.5, energyScale: 0.5, hits: 1, hotkey: 1, desc: 'Holy light: smite a foe, or cast with no target to heal yourself.' },
+  { id: 'zeal', cls: 'Paladin', name: 'Zeal', manaCost: 4, unlockLevel: 6, cooldown: 0, targeting: 'single', effect: 'melee', magic: false, dmgMult: 0.9, energyScale: 0, hits: 2, hotkey: 2, desc: 'Strike the target twice in righteous fury.' },
+  // Amazon
+  { id: 'jab', cls: 'Amazon', name: 'Jab', manaCost: 3, unlockLevel: 1, cooldown: 0, targeting: 'single', effect: 'melee', magic: false, dmgMult: 0.85, energyScale: 0, hits: 2, hotkey: 1, desc: 'Two quick spear jabs at a single foe.' },
+  { id: 'multishot', cls: 'Amazon', name: 'Multiple Shot', manaCost: 7, unlockLevel: 6, cooldown: 3, targeting: 'all', effect: 'volley', magic: false, dmgMult: 0.6, energyScale: 0, hits: 1, hotkey: 2, desc: 'Loose a spray of arrows at every enemy for reduced damage.' },
+];
+
+export function getSkill(id: string): SkillDef | undefined {
+  return SKILLS.find((s) => s.id === id);
+}
+
+/** Every skill a class can ever learn, in hotkey order. */
+export function skillsForClass(cls: CharClass): SkillDef[] {
+  return SKILLS.filter((s) => s.cls === cls).sort((a, b) => a.hotkey - b.hotkey);
+}
+
+/** Skills a character has unlocked at their current level. */
+export function availableSkills(char: Character): SkillDef[] {
+  return skillsForClass(char.cls).filter((s) => char.level >= s.unlockLevel);
+}
+
+/**
+ * Resolve one skill cast as a single pure step, sharing resolveCombatTurn's
+ * internals and result shape. `targetId` is required for single/pierce skills,
+ * optional for Holy Bolt (null = self-heal), and ignored by AoE/summon skills.
+ * Returns null if the skill can't be cast (wrong class, not yet unlocked, or not
+ * enough mana), so the UI can also disable the button as a courtesy.
+ */
+export function castSkill(
+  character: Character,
+  enemies: Enemy[],
+  targetId: string | null,
+  skillId: string,
+  rand: Rand,
+  ally: Ally | null = null,
+): CombatTurnResult | null {
+  const skill = getSkill(skillId);
+  if (!skill || skill.cls !== character.cls) return null;
+  if (character.level < skill.unlockLevel) return null;
+  if (character.mana < skill.manaCost) return null;
+
+  const combat = playerCombat(character);
+  const S = newState({ ...character, mana: character.mana - skill.manaCost }, enemies, ally);
+  S.events.push({ sound: 'chord', log: `You cast ${skill.name}.` });
+
+  let damagedTarget = false;
+
+  if (skill.targeting === 'summon') {
+    S.ally = makeSkeleton(character);
+    S.events.push({ log: 'A skeletal warrior rises to serve you.' });
+  } else if (skill.targeting === 'any') {
+    const t = targetId ? S.enemies.find((e) => e.id === targetId && e.hp > 0) : null;
+    if (t) {
+      const dmg = spellDamage(combat, skill.dmgMult, skill.energyScale, rand);
+      applyDamage(S, t.id, dmg, rand, (n, d) => `${skill.name} smites ${n} for ${d}.`);
+      damagedTarget = true;
+    } else {
+      const heal = Math.max(1, Math.round(combat.maxLife * 0.3 + combat.totalStats.energy * skill.energyScale));
+      const before = S.char.hp;
+      S.char = { ...S.char, hp: Math.min(combat.maxLife, S.char.hp + heal) };
+      S.healed = S.char.hp - before;
+      S.events.push({ sound: 'ding', log: `Holy light restores ${S.healed} life.` });
+    }
+  } else if (skill.targeting === 'all') {
+    const ids = S.enemies.filter((e) => e.hp > 0).map((e) => e.id);
+    for (const id of ids) {
+      if (skill.magic) {
+        const dmg = spellDamage(combat, skill.dmgMult, skill.energyScale, rand);
+        applyDamage(S, id, dmg, rand, (n, d) => `${skill.name} hits ${n} for ${d}.`);
+      } else {
+        const e = S.enemies.find((x) => x.id === id);
+        if (!e) continue;
+        const atk = skillStrike(combat, skill.dmgMult, e, rand);
+        if (atk.hit) applyDamage(S, id, atk.damage, rand, (n, d) => `${skill.name} hits ${n} for ${d}.`);
+        else S.events.push({ log: `${skill.name} misses ${e.name}.` });
+      }
+    }
+    if (skill.id === 'frostnova' && S.enemies.length > 0) {
+      S.enemies = S.enemies.map((e) => {
+        S.slowedIds.push(e.id);
+        return { ...e, slowTurns: 2 };
       });
+      S.events.push({ sound: 'chord', log: 'Frost grips your enemies, slowing them.' });
     }
-    if (drop) {
-      const rareDrop = drop.rarity === 'rare' || drop.rarity === 'unique';
-      events.push({ sound: rareDrop ? 'cardWin' : undefined, log: `${enemy.name} drops ${drop.name}.` });
+  } else if (skill.targeting === 'pierce') {
+    const i = S.enemies.findIndex((e) => e.id === targetId);
+    if (i !== -1) {
+      const primary = S.enemies[i];
+      const adjacent = S.enemies[i + 1] ?? S.enemies[i - 1] ?? null;
+      const dmg1 = spellDamage(combat, skill.dmgMult, skill.energyScale, rand);
+      applyDamage(S, primary.id, dmg1, rand, (n, d) => `${skill.name} pierces ${n} for ${d}.`);
+      damagedTarget = true;
+      if (adjacent) {
+        const dmg2 = spellDamage(combat, skill.dmgMult * 0.6, skill.energyScale * 0.6, rand);
+        applyDamage(S, adjacent.id, dmg2, rand, (n, d) => `${skill.name} tears through ${n} for ${d}.`);
+      }
     }
-    if (enemy.isBoss) {
-      events.push({ sound: 'cardWin', log: 'Andariel is slain! The Maiden of Anguish falls.' });
+  } else {
+    // single-target: one auto-hit spell, or `hits` physical blows
+    const strikes = Math.max(1, skill.hits);
+    for (let h = 0; h < strikes; h++) {
+      const t = S.enemies.find((e) => e.id === targetId && e.hp > 0);
+      if (!t) break;
+      if (skill.magic) {
+        const dmg = spellDamage(combat, skill.dmgMult, skill.energyScale, rand);
+        applyDamage(S, t.id, dmg, rand, (n, d) => `${skill.name} hits ${n} for ${d}.`);
+        damagedTarget = true;
+      } else {
+        const atk = skillStrike(combat, skill.dmgMult, t, rand);
+        if (atk.hit) {
+          applyDamage(S, t.id, atk.damage, rand, (n, d) => `${skill.name} hits ${n} for ${d}.`);
+          damagedTarget = true;
+        } else {
+          S.events.push({ log: `${skill.name} misses ${t.name}.` });
+        }
+      }
     }
-    return {
-      enemies: enemies.filter((e) => e.id !== enemyId),
-      character: updated,
-      events,
-      drop,
-      goldGained,
-      xpGained: enemy.xp,
-      leveledUp: xpRes.leveled,
-      enemyDefeated: true,
-      bossDown: enemy.isBoss,
-      died: false,
-      goldLost: 0,
-    };
-  }
-
-  // Enemy survives and retaliates.
-  const retaliate = resolveAttack(enemy, combat, rand);
-  let playerHp = character.hp;
-  if (retaliate.hit) {
-    playerHp = character.hp - retaliate.damage;
-    events.push({ log: `${enemy.name} hits you for ${retaliate.damage}.` });
-    if (playerHp <= 0) {
-      const { char: revived, goldLost } = applyDeath(character);
-      events.push({ sound: 'error' });
-      return {
-        enemies: [],
-        character: revived,
-        events,
-        drop: null,
-        goldGained: 0,
-        xpGained: 0,
-        leveledUp: false,
-        enemyDefeated: false,
-        bossDown: false,
-        died: true,
-        goldLost,
-      };
+    if (skill.id === 'bash' && damagedTarget && targetId && S.enemies.some((e) => e.id === targetId)) {
+      S.stunnedIds.push(targetId);
+      S.events.push({ log: 'The blow stuns your foe!' });
     }
   }
 
+  skeletonPhase(S, rand);
+
+  // Single-target skills provoke only their target; wider casts draw one nearby foe.
+  let retaliator: Enemy | null;
+  if (skill.targeting === 'single' || skill.targeting === 'pierce' || (skill.targeting === 'any' && damagedTarget)) {
+    retaliator = S.enemies.find((e) => e.id === targetId) ?? null;
+  } else {
+    retaliator = S.enemies.find((e) => e.hp > 0) ?? null;
+  }
+  const died = retaliatePhase(S, retaliator, combat, rand);
+  return finalize(S, { died, skillId: skill.id, manaSpent: skill.manaCost });
+}
+
+// ---------------------------------------------------------------------------
+// Potion belt
+// ---------------------------------------------------------------------------
+
+export const BELT_SIZE = 4;
+
+export interface PotionInfo {
+  label: string;
+  cost: number;
+  restore: number;
+  kind: 'hp' | 'mana';
+  color: string;
+}
+
+export const BELT_POTIONS: Record<PotionType, PotionInfo> = {
+  health: { label: 'Health Potion', cost: 30, restore: 45, kind: 'hp', color: '#d23a2a' },
+  mana: { label: 'Mana Potion', cost: 25, restore: 40, kind: 'mana', color: '#3a5ab8' },
+};
+
+export function emptyBelt(): BeltSlot[] {
+  return Array.from({ length: BELT_SIZE }, () => null);
+}
+
+/** Coerce any saved belt into a well-formed 4-slot array of valid potion types. */
+export function normalizeBelt(belt: BeltSlot[] | undefined): BeltSlot[] {
+  const out = Array.isArray(belt) ? belt.slice(0, BELT_SIZE) : [];
+  while (out.length < BELT_SIZE) out.push(null);
+  return out.map((s) => (s === 'health' || s === 'mana' ? s : null));
+}
+
+/** Drop a potion into the first empty belt slot; a no-op when the belt is full. */
+export function addPotionToBelt(char: Character, type: PotionType): Character {
+  const belt = normalizeBelt(char.belt);
+  const idx = belt.findIndex((s) => s === null);
+  if (idx === -1) return char;
+  const next = [...belt];
+  next[idx] = type;
+  return { ...char, belt: next };
+}
+
+/** Buy a belt potion in town: needs gold and a free slot. */
+export function buyBeltPotion(char: Character, type: PotionType): Character {
+  const info = BELT_POTIONS[type];
+  const belt = normalizeBelt(char.belt);
+  if (char.gold < info.cost) return char;
+  if (!belt.some((s) => s === null)) return char;
+  const stocked = addPotionToBelt({ ...char, belt }, type);
+  return { ...stocked, gold: char.gold - info.cost };
+}
+
+/** Drink the potion in a belt slot: instant restore, slot emptied. */
+export function drinkBeltSlot(char: Character, index: number): Character {
+  const belt = normalizeBelt(char.belt);
+  const type = belt[index];
+  if (!type) return char;
+  const info = BELT_POTIONS[type];
+  const combat = playerCombat(char);
+  const next = [...belt];
+  next[index] = null;
+  if (info.kind === 'hp') {
+    return { ...char, belt: next, hp: Math.min(combat.maxLife, char.hp + info.restore) };
+  }
+  return { ...char, belt: next, mana: Math.min(combat.maxMana, char.mana + info.restore) };
+}
+
+// ---------------------------------------------------------------------------
+// Save migration
+// ---------------------------------------------------------------------------
+
+/**
+ * Coerce a possibly-old saved character into the current shape, defaulting any
+ * fields added since the save was written (belt, potions, etc). Skills are level
+ * derived, so no separate list needs migrating.
+ */
+export function normalizeCharacter(raw: (Partial<Character> & { cls: CharClass }) | null | undefined): Character | null {
+  if (!raw || !raw.cls) return null;
+  const base = createCharacter(raw.cls);
   return {
-    enemies: enemies.map((e, i) => (i === idx ? { ...e, hp: newHp } : e)),
-    character: { ...character, hp: playerHp },
-    events,
-    drop: null,
-    goldGained: 0,
-    xpGained: 0,
-    leveledUp: false,
-    enemyDefeated: false,
-    bossDown: false,
-    died: false,
-    goldLost: 0,
+    ...base,
+    ...raw,
+    stats: { ...base.stats, ...(raw.stats ?? {}) },
+    equipment: raw.equipment ?? {},
+    inventory: raw.inventory ?? [],
+    belt: normalizeBelt(raw.belt),
+    potions: typeof raw.potions === 'number' ? raw.potions : base.potions,
   };
 }

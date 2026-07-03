@@ -1,24 +1,50 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button98 } from '@/components/ui/Button98';
 import { playSound } from '@/lib/sounds';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useGameLoop } from './loop';
 import {
+  compileSprite,
+  drawSprite,
+  animFrame,
+  FACTIONS,
+  type FactionName,
+} from './sprites';
+import {
+  MUZZLE_FLASH,
+  PROJECTILE,
+  CORPSE,
+  RUBBLE,
+  CARGO_CHIP,
+  SCAFFOLD,
+  EXPLOSION,
+  SHADOW_BLOB,
+  SELECTION_RING,
+} from './sprites/rts-common';
+import {
   RtsConfig,
   RtsState,
+  Unit,
+  Building,
+  Effect,
+  CommandOption,
   createRtsState,
   stepRts,
-  trainWorker,
-  trainSoldier,
+  trainUnit,
   placeBuilding,
+  startResearch,
+  fireSuperweapon,
+  canPlaceAt,
   commandUnits,
   unitsInRect,
   supplyUsed,
-  advanceAge,
-  Unit,
-  Building,
+  getCommandOptions,
+  buildProgress,
+  isVisible,
+  formatCost,
+  superReady,
 } from './rts';
 
 interface Props {
@@ -26,45 +52,47 @@ interface Props {
   onExit: () => void;
 }
 
-type BuildMode = 'none' | 'depot' | 'prod';
-
 interface Hud {
-  resource: number;
+  resources: Record<string, number>;
   supplyUsed: number;
   supplyCap: number;
-  wave: number;
-  waveIn: number;
   status: RtsState['status'];
   selected: number;
   kills: number;
-  advanced: boolean;
+  options: CommandOption[];
   log: string[];
+}
+
+const FOG_TILE = 20;
+
+function factionFor(config: RtsConfig, owner: 'player' | 'enemy'): FactionName {
+  return config.factions?.[owner] ?? (owner === 'player' ? 'blue' : 'red');
 }
 
 export default function RtsGame({ config, onExit }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<RtsState>(createRtsState(config));
   const selectedRef = useRef<Set<number>>(new Set());
-  const buildRef = useRef<BuildMode>('none');
+  const buildRef = useRef<string | null>(null);
+  const superRef = useRef(false);
   const dragRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const pointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hudAccum = useRef(0);
   const bestRef = useRef(0);
   const savedRef = useRef(false);
   const { getAppPref, setAppPref } = useSettings();
 
-  const [buildMode, setBuildMode] = useState<BuildMode>('none');
-  const [hud, setHud] = useState<Hud>({
-    resource: config.startResource,
-    supplyUsed: config.startWorkers,
+  const [mode, setMode] = useState<{ build: string | null; sup: boolean }>({ build: null, sup: false });
+  const [hud, setHud] = useState<Hud>(() => ({
+    resources: { ...config.startResources },
+    supplyUsed: config.startUnits.reduce((n, e) => n + e.count, 0),
     supplyCap: config.startSupply,
-    wave: 0,
-    waveIn: config.waveIntervalSec,
     status: 'playing',
     selected: 0,
     kills: 0,
-    advanced: false,
-    log: [`${config.baseName} online. Harvest ${config.resourceName.toLowerCase()} and build an army.`],
-  });
+    options: [],
+    log: [],
+  }));
 
   useEffect(() => {
     bestRef.current = getAppPref<number>(config.gameId, 'bestKills', 0);
@@ -72,29 +100,38 @@ export default function RtsGame({ config, onExit }: Props) {
 
   const syncHud = useCallback(() => {
     const s = stateRef.current;
+    const resources: Record<string, number> = {};
+    for (const r of config.resources) resources[r.id] = Math.floor(s.resources[r.id] ?? 0);
     setHud({
-      resource: Math.floor(s.resource),
+      resources,
       supplyUsed: supplyUsed(s),
       supplyCap: s.supplyCap,
-      wave: s.waveNumber,
-      waveIn: Math.ceil(s.waveTimer),
       status: s.status,
       selected: selectedRef.current.size,
       kills: s.kills,
-      advanced: s.advanced,
+      options: getCommandOptions(s),
       log: s.log.slice(),
     });
-  }, []);
+  }, [config.resources]);
 
-  const toCanvas = useCallback((clientX: number, clientY: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: ((clientX - rect.left) / rect.width) * config.map.width,
-      y: ((clientY - rect.top) / rect.height) * config.map.height,
-    };
-  }, [config.map.width, config.map.height]);
+  // Populate the panel/log from the freshly created state once mounted (reading
+  // the state ref during render is disallowed, so seed it from an effect).
+  useEffect(() => {
+    syncHud();
+  }, [syncHud]);
+
+  const toCanvas = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { x: 0, y: 0 };
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: ((clientX - rect.left) / rect.width) * config.map.width,
+        y: ((clientY - rect.top) / rect.height) * config.map.height,
+      };
+    },
+    [config.map.width, config.map.height],
+  );
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -103,10 +140,10 @@ export default function RtsGame({ config, onExit }: Props) {
     if (!ctx) return; // jsdom / no 2d context
     const s = stateRef.current;
     const { width: W, height: H } = config.map;
+    ctx.imageSmoothingEnabled = false;
 
     ctx.fillStyle = config.colors.terrain;
     ctx.fillRect(0, 0, W, H);
-    // grid
     ctx.strokeStyle = config.colors.grid;
     ctx.lineWidth = 1;
     for (let x = 0; x < W; x += 40) {
@@ -125,8 +162,9 @@ export default function RtsGame({ config, onExit }: Props) {
     // resource patches
     for (const p of s.patches) {
       if (p.amount <= 0) continue;
+      const def = config.resources.find((r) => r.id === p.resourceId);
       const r = 8 + Math.min(10, p.amount / 120);
-      ctx.fillStyle = config.colors.resource;
+      ctx.fillStyle = def?.color ?? '#4fd6e0';
       ctx.beginPath();
       ctx.moveTo(p.x, p.y - r);
       ctx.lineTo(p.x + r, p.y);
@@ -138,19 +176,67 @@ export default function RtsGame({ config, onExit }: Props) {
       ctx.stroke();
     }
 
+    // ground-level effects first (corpses / rubble sit under the living)
+    for (const e of s.effects) {
+      if (e.kind === 'corpse' || e.kind === 'rubble') drawEffect(ctx, e);
+    }
+
     // buildings
     for (const b of s.buildings) {
-      drawBuilding(ctx, b, config);
+      if (b.owner === 'enemy' && !isVisible(s, b.x, b.y)) continue;
+      drawBuilding(ctx, s, b, config);
     }
 
     // units
     for (const u of s.units) {
-      drawUnit(ctx, u, config, selectedRef.current.has(u.id));
+      if (u.owner === 'enemy' && !isVisible(s, u.x, u.y)) continue;
+      drawUnit(ctx, u, config, selectedRef.current.has(u.id), s.time);
     }
 
-    // build ghost
-    if (buildRef.current !== 'none' && dragRef.current === null) {
-      // ghost follows via lastPointer stored on dragRef when moving — simplified: none
+    // airborne effects (muzzle / projectile / explosion / strike)
+    for (const e of s.effects) {
+      if (e.kind !== 'corpse' && e.kind !== 'rubble') drawEffect(ctx, e);
+    }
+
+    // fog of war overlay
+    if (s.fogEnabled) {
+      for (let r = 0; r < s.fogRows; r++) {
+        for (let c = 0; c < s.fogCols; c++) {
+          const v = s.fog[r * s.fogCols + c];
+          if (v === 2) continue;
+          ctx.fillStyle = v === 0 ? '#000' : 'rgba(0,0,0,0.5)';
+          ctx.fillRect(c * FOG_TILE, r * FOG_TILE, FOG_TILE, FOG_TILE);
+        }
+      }
+    }
+
+    // placement ghost
+    if (buildRef.current) {
+      const def = config.buildingTypes[buildRef.current];
+      const size = def?.size ?? { w: 34, h: 34 };
+      const { x, y } = pointerRef.current;
+      const ok = canPlaceAt(s, buildRef.current, x, y);
+      ctx.fillStyle = ok ? 'rgba(80,220,90,0.35)' : 'rgba(230,60,50,0.35)';
+      ctx.strokeStyle = ok ? '#3ec850' : '#e63c32';
+      ctx.lineWidth = 2;
+      ctx.fillRect(x - size.w / 2, y - size.h / 2, size.w, size.h);
+      ctx.strokeRect(x - size.w / 2, y - size.h / 2, size.w, size.h);
+    }
+
+    // superweapon target ring
+    if (superRef.current && config.superweapon) {
+      const { x, y } = pointerRef.current;
+      ctx.strokeStyle = config.superweapon.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, config.superweapon.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y);
+      ctx.lineTo(x + 8, y);
+      ctx.moveTo(x, y - 8);
+      ctx.lineTo(x, y + 8);
+      ctx.stroke();
     }
 
     // selection rectangle
@@ -190,16 +276,24 @@ export default function RtsGame({ config, onExit }: Props) {
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       e.preventDefault();
       const { x, y } = toCanvas(e.clientX, e.clientY);
+      pointerRef.current = { x, y };
       if (e.button === 2) {
-        // right-click command
         commandUnits(stateRef.current, selectedRef.current, x, y);
         return;
       }
-      if (buildRef.current !== 'none') {
+      if (superRef.current) {
+        const ok = fireSuperweapon(stateRef.current, x, y);
+        playSound(ok ? 'mineExplosion' : 'error');
+        superRef.current = false;
+        setMode({ build: null, sup: false });
+        syncHud();
+        return;
+      }
+      if (buildRef.current) {
         const ok = placeBuilding(stateRef.current, buildRef.current, x, y);
         playSound(ok ? 'ding' : 'error');
-        buildRef.current = 'none';
-        setBuildMode('none');
+        buildRef.current = null;
+        setMode({ build: null, sup: false });
         syncHud();
         return;
       }
@@ -210,10 +304,12 @@ export default function RtsGame({ config, onExit }: Props) {
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!dragRef.current) return;
       const { x, y } = toCanvas(e.clientX, e.clientY);
-      dragRef.current.x1 = x;
-      dragRef.current.y1 = y;
+      pointerRef.current = { x, y };
+      if (dragRef.current) {
+        dragRef.current.x1 = x;
+        dragRef.current.y1 = y;
+      }
     },
     [toCanvas],
   );
@@ -229,7 +325,6 @@ export default function RtsGame({ config, onExit }: Props) {
       if (moved) {
         ids = unitsInRect(s, d.x0, d.y0, d.x1, d.y1);
       } else {
-        // click select single nearest player unit
         const { x, y } = toCanvas(e.clientX, e.clientY);
         let best: Unit | null = null;
         let bestD = 16;
@@ -252,38 +347,69 @@ export default function RtsGame({ config, onExit }: Props) {
   const restart = useCallback(() => {
     stateRef.current = createRtsState(config);
     selectedRef.current = new Set();
-    buildRef.current = 'none';
+    buildRef.current = null;
+    superRef.current = false;
     savedRef.current = false;
-    setBuildMode('none');
+    setMode({ build: null, sup: false });
     syncHud();
   }, [config, syncHud]);
 
-  const doTrain = (fn: (s: RtsState) => boolean) => {
-    const ok = fn(stateRef.current);
-    playSound(ok ? 'ding' : 'error');
-    syncHud();
-  };
-
-  const enterBuild = (mode: BuildMode) => {
-    buildRef.current = mode;
-    setBuildMode(mode);
-  };
+  const onCommand = useCallback(
+    (opt: CommandOption) => {
+      const s = stateRef.current;
+      if (opt.kind === 'train') {
+        const ok = trainUnit(s, opt.id);
+        playSound(ok ? 'ding' : 'error');
+        syncHud();
+      } else if (opt.kind === 'research') {
+        const ok = startResearch(s, opt.id);
+        playSound(ok ? 'ding' : 'error');
+        syncHud();
+      } else if (opt.kind === 'build') {
+        buildRef.current = opt.id;
+        superRef.current = false;
+        setMode({ build: opt.id, sup: false });
+      } else if (opt.kind === 'super') {
+        if (superReady(s)) {
+          superRef.current = true;
+          buildRef.current = null;
+          setMode({ build: null, sup: true });
+        } else {
+          playSound('error');
+        }
+      }
+    },
+    [syncHud],
+  );
 
   const cfg = config;
-  const btnStyle = 'text-[11px] min-w-0 px-2 py-[3px] h-auto';
+  const btnStyle = 'text-[11px] min-w-0 px-2 py-[3px] h-auto justify-start text-left';
+  const kindLabel: Record<CommandOption['kind'], string> = {
+    train: 'Train',
+    build: 'Build',
+    research: 'Research',
+    super: '',
+  };
+  const hint = useMemo(() => {
+    if (mode.sup) return 'Click a target on the map';
+    if (mode.build) return 'Click map to place';
+    return 'Drag-select units. Right-click to move/attack.';
+  }, [mode]);
 
   return (
     <div className="flex flex-col h-full bg-[var(--win98-button-face)] select-none">
       {/* HUD bar */}
       <div className="flex items-center gap-3 px-2 py-1 text-[11px] border-b border-[var(--win98-button-shadow)] flex-wrap">
-        <span style={{ color: cfg.colors.resource === '#ffffff' ? '#333' : undefined }}>
-          {cfg.resourceName}: <b>{hud.resource}</b>
-        </span>
+        {cfg.resources.map((r) => (
+          <span key={r.id} className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-sm" style={{ background: r.color }} />
+            {r.name}: <b>{hud.resources[r.id] ?? 0}</b>
+          </span>
+        ))}
         <span>
           Supply: <b>{hud.supplyUsed}/{hud.supplyCap}</b>
         </span>
         <span>Kills: {hud.kills}</span>
-        <span className={hud.waveIn <= 10 ? 'text-red-700 font-bold' : ''}>Next wave: {hud.waveIn}s</span>
       </div>
 
       <div className="flex flex-1 min-h-0">
@@ -294,7 +420,7 @@ export default function RtsGame({ config, onExit }: Props) {
             width={cfg.map.width}
             height={cfg.map.height}
             className="w-full h-full block touch-none"
-            style={{ cursor: buildMode !== 'none' ? 'crosshair' : 'default', imageRendering: 'pixelated' }}
+            style={{ cursor: mode.build || mode.sup ? 'crosshair' : 'default', imageRendering: 'pixelated' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -321,39 +447,26 @@ export default function RtsGame({ config, onExit }: Props) {
         </div>
 
         {/* Command panel */}
-        <div className="w-[112px] flex-shrink-0 border-l border-[var(--win98-button-shadow)] p-1 flex flex-col gap-1 overflow-y-auto">
+        <div className="w-[124px] flex-shrink-0 border-l border-[var(--win98-button-shadow)] p-1 flex flex-col gap-1 overflow-y-auto">
           <div className="text-[10px] font-bold text-center">COMMAND</div>
-          <Button98 className={btnStyle} onClick={() => doTrain(trainWorker)}>
-            {cfg.workerName} ({cfg.costs.worker})
-          </Button98>
-          <Button98 className={btnStyle} onClick={() => doTrain(trainSoldier)}>
-            {cfg.soldierName} ({cfg.costs.soldier})
-          </Button98>
-          <Button98
-            className={btnStyle}
-            active={buildMode === 'depot'}
-            onClick={() => enterBuild('depot')}
-          >
-            {cfg.depotName} ({cfg.costs.depot})
-          </Button98>
-          <Button98
-            className={btnStyle}
-            active={buildMode === 'prod'}
-            onClick={() => enterBuild('prod')}
-          >
-            {cfg.prodName} ({cfg.costs.prod})
-          </Button98>
-          {cfg.advance && !hud.advanced && (
-            <Button98 className={btnStyle} onClick={() => doTrain(advanceAge)}>
-              {cfg.advance.label} ({cfg.advance.cost})
-            </Button98>
-          )}
-          {cfg.advance && hud.advanced && (
-            <div className="text-[9px] text-center text-green-700 font-bold">Feudal Age reached</div>
-          )}
-          <div className="text-[9px] text-center text-[var(--win98-disabled-text)] leading-tight mt-1">
-            {buildMode !== 'none' ? 'Click map to place' : 'Drag-select units. Right-click to move/attack.'}
-          </div>
+          {hud.options.map((opt) => {
+            const prefix = kindLabel[opt.kind];
+            const costText = opt.kind === 'super' ? '' : ` (${formatCost(cfg, opt.cost)})`;
+            const label = `${prefix ? prefix + ' ' : ''}${opt.name}${costText}`;
+            return (
+              <Button98
+                key={`${opt.kind}:${opt.id}`}
+                className={btnStyle}
+                disabled={!opt.enabled}
+                active={opt.kind === 'build' ? mode.build === opt.id : opt.kind === 'super' ? mode.sup : false}
+                title={opt.reason ?? label}
+                onClick={() => onCommand(opt)}
+              >
+                {label}
+              </Button98>
+            );
+          })}
+          <div className="text-[9px] text-center text-[var(--win98-disabled-text)] leading-tight mt-1">{hint}</div>
           <div className="mt-auto text-[9px] leading-tight border-t border-[var(--win98-button-shadow)] pt-1 max-h-[120px] overflow-y-auto">
             {hud.log.map((l, i) => (
               <div key={i}>{l}</div>
@@ -365,60 +478,113 @@ export default function RtsGame({ config, onExit }: Props) {
   );
 }
 
-function drawBuilding(ctx: CanvasRenderingContext2D, b: Building, cfg: RtsConfig) {
-  const color = b.owner === 'player' ? cfg.colors.player : cfg.colors.enemy;
-  ctx.fillStyle = color;
-  ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
-  // inner detail
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.fillRect(b.x - b.w / 4, b.y - b.h / 4, b.w / 2, b.h / 2);
-  // label letter
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const letter = b.type === 'base' ? 'H' : b.type === 'depot' ? 'D' : 'B';
-  ctx.fillText(letter, b.x, b.y);
-  // hp bar
+function drawBuilding(ctx: CanvasRenderingContext2D, state: RtsState, b: Building, cfg: RtsConfig) {
+  const def = cfg.buildingTypes[b.typeId];
+  const progress = buildProgress(state, b);
+
+  if (def?.sprite) {
+    const sprite = compileSprite(def.sprite, { recolor: FACTIONS[factionFor(cfg, b.owner)] });
+    drawSprite(ctx, sprite, b.x, b.y + b.h / 2, { anchor: 'bottom-center' });
+  } else {
+    const color = b.owner === 'player' ? cfg.colors.player : cfg.colors.enemy;
+    ctx.fillStyle = color;
+    ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(b.x - b.w / 4, b.y - b.h / 4, b.w / 2, b.h / 2);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText((def?.name ?? '?').charAt(0).toUpperCase(), b.x, b.y);
+  }
+
+  // construction scaffold overlay
+  if (progress < 1) {
+    const scaffold = compileSprite(SCAFFOLD);
+    const scale = Math.max(1, Math.min(b.w, b.h) / 16);
+    drawSprite(ctx, scaffold, b.x, b.y, { anchor: 'center', frame: progress < 0.5 ? 0 : 1, scale });
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(b.x - b.w / 2, b.y + b.h / 2 + 2, b.w * (1 - progress), 2);
+  }
+
   drawHpBar(ctx, b.x, b.y - b.h / 2 - 6, b.w, b.hp / b.maxHp);
 }
 
-function drawUnit(ctx: CanvasRenderingContext2D, u: Unit, cfg: RtsConfig, selected: boolean) {
-  const color = u.owner === 'player' ? cfg.colors.player : cfg.colors.enemy;
-  const r = u.kind === 'worker' ? 5 : 6;
+function drawUnit(ctx: CanvasRenderingContext2D, u: Unit, cfg: RtsConfig, selected: boolean, time: number) {
+  const def = cfg.unitTypes[u.typeId];
+  const r = u.role === 'worker' ? 5 : 6;
+
+  const shadow = compileSprite(SHADOW_BLOB);
+  drawSprite(ctx, shadow, u.x, u.y + r + 2, { anchor: 'center' });
+
   if (selected) {
-    ctx.strokeStyle = '#00ff00';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(u.x, u.y, r + 3, 0, Math.PI * 2);
-    ctx.stroke();
+    const ring = compileSprite(SELECTION_RING);
+    drawSprite(ctx, ring, u.x, u.y + r + 2, { anchor: 'center' });
   }
-  ctx.fillStyle = color;
-  if (u.kind === 'worker') {
-    ctx.beginPath();
-    ctx.arc(u.x, u.y, r, 0, Math.PI * 2);
-    ctx.fill();
+
+  if (def?.sprite) {
+    const sprite = compileSprite(def.sprite, { recolor: FACTIONS[factionFor(cfg, u.owner)] });
+    const frame = animFrame(time, 6, sprite.frameCount);
+    drawSprite(ctx, sprite, u.x, u.y + r, { anchor: 'bottom-center', frame });
   } else {
-    ctx.fillRect(u.x - r, u.y - r, r * 2, r * 2);
+    const color = u.owner === 'player' ? cfg.colors.player : cfg.colors.enemy;
+    ctx.fillStyle = color;
+    if (u.role === 'worker') {
+      ctx.beginPath();
+      ctx.arc(u.x, u.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillRect(u.x - r, u.y - r, r * 2, r * 2);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(u.x - r, u.y - r, r * 2, r * 2);
   }
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(u.x - r, u.y - r, r * 2, r * 2);
+
   if (u.cargo > 0) {
-    ctx.fillStyle = cfg.colors.resource;
-    ctx.fillRect(u.x - 2, u.y - r - 4, 4, 3);
+    const chip = compileSprite(CARGO_CHIP);
+    drawSprite(ctx, chip, u.x, u.y - r - 2, { anchor: 'center' });
   }
-  drawHpBar(ctx, u.x, u.y - r - 4, r * 2 + 2, u.hp / u.maxHp);
+
+  drawHpBar(ctx, u.x, u.y - r - 6, r * 2 + 2, u.hp / u.maxHp);
+}
+
+function drawEffect(ctx: CanvasRenderingContext2D, e: Effect) {
+  const frac = e.ttl > 0 ? e.age / e.ttl : 1;
+  if (e.kind === 'muzzle') {
+    const s = compileSprite(MUZZLE_FLASH);
+    drawSprite(ctx, s, e.x, e.y, { anchor: 'center', frame: frac < 0.5 ? 0 : 1 });
+  } else if (e.kind === 'projectile') {
+    const s = compileSprite(PROJECTILE);
+    drawSprite(ctx, s, e.x, e.y, { anchor: 'center' });
+  } else if (e.kind === 'explosion') {
+    const s = compileSprite(EXPLOSION);
+    drawSprite(ctx, s, e.x, e.y, { anchor: 'center', frame: animFrame(e.age, 6, s.frameCount), scale: 1.5 });
+  } else if (e.kind === 'strike') {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - frac);
+    ctx.strokeStyle = e.color ?? '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, (e.radius ?? 40) * frac, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  } else if (e.kind === 'corpse' || e.kind === 'rubble') {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - frac);
+    const s = compileSprite(e.kind === 'corpse' ? CORPSE : RUBBLE);
+    drawSprite(ctx, s, e.x, e.y, { anchor: 'center' });
+    ctx.restore();
+  }
 }
 
 function drawHpBar(ctx: CanvasRenderingContext2D, cx: number, top: number, w: number, frac: number) {
   if (frac >= 0.999) return;
-  const bw = w;
   ctx.fillStyle = '#400';
-  ctx.fillRect(cx - bw / 2, top, bw, 2);
+  ctx.fillRect(cx - w / 2, top, w, 2);
   ctx.fillStyle = frac > 0.5 ? '#2ecc40' : frac > 0.25 ? '#ffdc00' : '#ff4136';
-  ctx.fillRect(cx - bw / 2, top, bw * Math.max(0, frac), 2);
+  ctx.fillRect(cx - w / 2, top, w * Math.max(0, frac), 2);
 }

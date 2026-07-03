@@ -5,6 +5,13 @@ import { cn } from '@/lib/cn';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useWindows } from '@/contexts/WindowContext';
 import { playSound } from '@/lib/sounds';
+import { emit, on } from '@/lib/eventBus';
+
+interface TrayIcon {
+  id: string;
+  icon: string;
+  tooltip?: string;
+}
 
 function VolumePopup({ onClose }: { onClose: () => void }) {
   const { settings, setSetting } = useSettings();
@@ -102,6 +109,8 @@ export function SystemTray() {
   const [time, setTime] = useState('');
   const [volumeOpen, setVolumeOpen] = useState(false);
   const [dateTimeOpen, setDateTimeOpen] = useState(false);
+  const [trayIcons, setTrayIcons] = useState<TrayIcon[]>([]);
+  const [networkActive, setNetworkActive] = useState(false);
   const { openWindow } = useWindows();
 
   useEffect(() => {
@@ -120,6 +129,47 @@ export function SystemTray() {
     return () => clearInterval(interval);
   }, []);
 
+  // Apps register/unregister their own tray icons over the event bus. Icons are
+  // deduped by id (a re-register updates the existing icon in place).
+  useEffect(() => {
+    const offRegister = on('tray-register', ({ id, icon, tooltip }) => {
+      setTrayIcons((prev) =>
+        prev.some((t) => t.id === id)
+          ? prev.map((t) => (t.id === id ? { id, icon, tooltip } : t))
+          : [...prev, { id, icon, tooltip }],
+      );
+    });
+    const offUnregister = on('tray-unregister', ({ id }) => {
+      setTrayIcons((prev) => prev.filter((t) => t.id !== id));
+    });
+    return () => {
+      offRegister();
+      offUnregister();
+    };
+  }, []);
+
+  // Default activation: clicking a dynamic tray icon opens the window whose id
+  // matches. Apps wanting custom behavior can also listen for 'tray-activate'.
+  useEffect(() => on('tray-activate', ({ id }) => openWindow(id)), [openWindow]);
+
+  // Fake dial-up traffic: flash the little monitors at random intervals.
+  useEffect(() => {
+    let blinkTimer: ReturnType<typeof setTimeout>;
+    let offTimer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      blinkTimer = setTimeout(() => {
+        setNetworkActive(true);
+        offTimer = setTimeout(() => setNetworkActive(false), 500);
+        schedule();
+      }, 8000 + Math.random() * 12000);
+    };
+    schedule();
+    return () => {
+      clearTimeout(blinkTimer);
+      clearTimeout(offTimer);
+    };
+  }, []);
+
   return (
     <div
       className={cn(
@@ -130,6 +180,33 @@ export function SystemTray() {
         'font-[family-name:var(--win98-font)] text-[11px]',
       )}
     >
+      <style>{`@keyframes win98-tray-blink{0%,100%{opacity:1}25%{opacity:.25}50%{opacity:1}75%{opacity:.25}}.win98-tray-blink{animation:win98-tray-blink .5s steps(1,end)}`}</style>
+
+      {/* Dynamic app icons (AIM presence, Norton shield, ...) */}
+      {trayIcons.map((t) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={t.id}
+          src={t.icon}
+          alt={t.tooltip || t.id}
+          className="w-4 h-4 cursor-pointer"
+          style={{ imageRendering: 'pixelated' }}
+          onClick={() => emit('tray-activate', { id: t.id })}
+          title={t.tooltip || t.id}
+        />
+      ))}
+
+      {/* Static network (dial-up) icon */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/icons/network-16.svg"
+        alt="Network"
+        className={cn('w-4 h-4 cursor-pointer', networkActive && 'win98-tray-blink')}
+        style={{ imageRendering: 'pixelated' }}
+        onDoubleClick={() => openWindow('network-neighborhood')}
+        title="Dial-Up Networking"
+      />
+
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/icons/volume-16.svg"

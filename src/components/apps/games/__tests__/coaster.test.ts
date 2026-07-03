@@ -12,7 +12,57 @@ import {
   hasWon,
   PARK_MILESTONES,
   WIN_TARGET,
+  MAX_HEIGHT,
+  nextPieceHeight,
+  createParkSim,
+  stepPark,
+  stepPeep,
+  stepHandyman,
+  stepResearch,
+  buildStall,
+  togglePath,
+  hireHandyman,
+  dirtiness,
+  bfsPath,
+  adjacentPathTile,
+  RESEARCH_TIME,
+  STALL_COST,
+  STALL_INCOME,
+  PATH_COST,
+  type Peep,
+  type ParkSim,
+  type StepEvents,
 } from '../engine/coaster';
+
+function makeEvents(): StepEvents {
+  return { sales: 0, pukes: 0, sweeps: 0, boarded: 0, unlockedResearch: null, lastSaleAt: null };
+}
+
+function makePeep(sim: ParkSim, over: Partial<Peep>): Peep {
+  const p: Peep = {
+    id: sim.nextPeepId++,
+    x: sim.gate.x,
+    y: sim.gate.y,
+    z: 0,
+    facing: 1,
+    state: 'walking',
+    stateT: 0,
+    animT: 0,
+    path: [],
+    goal: 'wander',
+    targetId: -1,
+    nausea: 0,
+    happiness: 0.7,
+    hunger: 0,
+    shirt: 0,
+    hasBalloon: false,
+    rideCoaster: -1,
+    seat: 0,
+    done: false,
+    ...over,
+  };
+  return p;
+}
 
 // A small closed loop: station -> right -> down -> left back under station -> up to station.
 const validLoop: Layout = [
@@ -202,5 +252,275 @@ describe('parkValue and milestones', () => {
   it('wins at the final target', () => {
     expect(hasWon(WIN_TARGET - 1)).toBe(false);
     expect(hasWon(WIN_TARGET)).toBe(true);
+  });
+});
+
+describe('track elevation', () => {
+  it('accepts a hill that lifts up, drops back down and returns level', () => {
+    const loop: Layout = [
+      { x: 0, y: 0, type: 'station', height: 0 },
+      { x: 1, y: 0, type: 'lift', height: 1 },
+      { x: 1, y: 1, type: 'drop', height: 0 },
+      { x: 0, y: 1, type: 'straight', height: 0 },
+    ];
+    expect(validateTrack(loop)).toEqual({ valid: true, reason: 'ok' });
+  });
+
+  it('rejects a circuit that never comes back down to the station', () => {
+    const loop: Layout = [
+      { x: 0, y: 0, type: 'station', height: 0 },
+      { x: 1, y: 0, type: 'lift', height: 1 },
+      { x: 1, y: 1, type: 'straight', height: 1 },
+      { x: 0, y: 1, type: 'straight', height: 1 },
+    ];
+    expect(validateTrack(loop).reason).toBe('not-level');
+  });
+
+  it('rejects climbing more than the lift hills can pull', () => {
+    const loop: Layout = [
+      { x: 0, y: 0, type: 'station', height: 0 },
+      { x: 1, y: 0, type: 'lift', height: 1 },
+      { x: 1, y: 1, type: 'straight', height: 3 }, // +2 with no extra lift to back it
+      { x: 0, y: 1, type: 'straight', height: 0 },
+    ];
+    expect(validateTrack(loop).reason).toBe('too-steep');
+  });
+
+  it('treats a track with no heights exactly as ground level', () => {
+    const flat: Layout = [
+      { x: 0, y: 0, type: 'station' },
+      { x: 1, y: 0, type: 'lift' },
+      { x: 1, y: 1, type: 'drop' },
+      { x: 0, y: 1, type: 'straight' },
+    ];
+    expect(validateTrack(flat).valid).toBe(true);
+  });
+
+  it('scores a big drop as more exciting and more nauseating', () => {
+    const flat: Layout = [
+      { x: 0, y: 0, type: 'station', height: 0 },
+      { x: 1, y: 0, type: 'lift', height: 0 },
+      { x: 1, y: 1, type: 'drop', height: 0 },
+      { x: 0, y: 1, type: 'straight', height: 0 },
+    ];
+    const hilly: Layout = [
+      { x: 0, y: 0, type: 'station', height: 0 },
+      { x: 1, y: 0, type: 'lift', height: 2 },
+      { x: 1, y: 1, type: 'drop', height: 0 }, // a 2-level plunge
+      { x: 0, y: 1, type: 'straight', height: 0 },
+    ];
+    expect(computeRatings(hilly).excitement).toBeGreaterThan(computeRatings(flat).excitement);
+    expect(computeRatings(hilly).nausea).toBeGreaterThan(computeRatings(flat).nausea);
+  });
+
+  it('nextPieceHeight climbs on lifts, descends on drops, holds otherwise', () => {
+    expect(nextPieceHeight(0, 'lift')).toBe(1);
+    expect(nextPieceHeight(MAX_HEIGHT, 'lift')).toBe(MAX_HEIGHT); // clamped
+    expect(nextPieceHeight(2, 'drop')).toBe(1);
+    expect(nextPieceHeight(0, 'drop')).toBe(0); // clamped
+    expect(nextPieceHeight(2, 'straight')).toBe(2);
+  });
+});
+
+describe('park geometry + pathing', () => {
+  it('lays a connected path network the guests can walk', () => {
+    const sim = createParkSim(1);
+    const path = bfsPath(sim, sim.gate, { x: 2, y: 7 });
+    expect(path.length).toBeGreaterThan(0);
+    expect(path[path.length - 1]).toEqual({ x: 2, y: 7 });
+  });
+
+  it('returns no route to an unreachable grass corner', () => {
+    const sim = createParkSim(1);
+    expect(bfsPath(sim, sim.gate, { x: 0, y: 0 })).toEqual([]);
+  });
+
+  it('finds the path tile beside a ride station', () => {
+    const sim = createParkSim(1);
+    const st = sim.coasters[0].layout[0];
+    expect(adjacentPathTile(sim, st.x, st.y)).toEqual({ x: 8, y: 4 });
+  });
+});
+
+describe('peep state machine', () => {
+  it('goes dizzy then vomits, leaving a puddle behind', () => {
+    const sim = createParkSim(2);
+    const p = makePeep(sim, { state: 'dizzy', stateT: 0, nausea: 1, x: 8, y: 8 });
+    sim.peeps.push(p);
+    const ev = makeEvents();
+
+    stepPeep(sim, p, 2.5, ev); // past DIZZY_TIME
+    expect(p.state).toBe('vomiting');
+
+    stepPeep(sim, p, 1.5, ev); // past VOMIT_TIME
+    expect(ev.pukes).toBe(1);
+    expect(sim.puddles).toHaveLength(1);
+    expect(sim.puddles[0]).toMatchObject({ x: 8, y: 8 });
+    expect(p.state).not.toBe('vomiting');
+    expect(p.nausea).toBeLessThan(1);
+  });
+
+  it('a merely thrilled guest gets dizzy but walks off without puking', () => {
+    const sim = createParkSim(2);
+    const p = makePeep(sim, { state: 'dizzy', stateT: 0, nausea: 0.1, x: 8, y: 8 });
+    sim.peeps.push(p);
+    stepPeep(sim, p, 2.5, makeEvents());
+    expect(p.state).not.toBe('vomiting');
+    expect(sim.puddles).toHaveLength(0);
+  });
+
+  it('rings up a sale when a guest finishes buying at a stall', () => {
+    const sim = createParkSim(3);
+    const stall = sim.stalls[0];
+    const p = makePeep(sim, { state: 'buying', stateT: 0, goal: 'stall', targetId: stall.id, x: 10, y: 7 });
+    sim.peeps.push(p);
+    const cash0 = sim.cash;
+    const ev = makeEvents();
+
+    stepPeep(sim, p, 2.0, ev); // past BUY_TIME
+    expect(ev.sales).toBe(1);
+    expect(sim.cash).toBe(cash0 + STALL_INCOME[stall.type]);
+    expect(ev.lastSaleAt).toEqual({ x: stall.x, y: stall.y });
+    expect(p.state).not.toBe('buying');
+  });
+
+  it('kicks a queuing guest out of line when the ride closes', () => {
+    const sim = createParkSim(4);
+    const c = sim.coasters[0];
+    c.open = false;
+    const p = makePeep(sim, { state: 'queuing', goal: 'ride', targetId: c.id });
+    c.queue.push(p.id);
+    sim.peeps.push(p);
+    stepPeep(sim, p, 0.1, makeEvents());
+    expect(p.state).not.toBe('queuing');
+    expect(c.queue).not.toContain(p.id);
+  });
+});
+
+describe('handyman', () => {
+  it('walks to a puddle and sweeps it away', () => {
+    const sim = createParkSim(5);
+    expect(hireHandyman(sim)).toBe(true);
+    const h = sim.handymen[0];
+    sim.puddles.push({ id: sim.nextPuddleId++, x: 8, y: 9, age: 0 });
+
+    let swept = false;
+    let sawSweeping = false;
+    for (let i = 0; i < 500 && sim.puddles.length > 0; i++) {
+      const ev = makeEvents();
+      stepHandyman(sim, h, 0.1, ev);
+      if (h.state === 'sweeping') sawSweeping = true;
+      if (ev.sweeps > 0) swept = true;
+    }
+    expect(sim.puddles).toHaveLength(0);
+    expect(sawSweeping).toBe(true);
+    expect(swept).toBe(true);
+  });
+
+  it('charges a hiring fee and refuses when broke', () => {
+    const sim = createParkSim(5);
+    sim.cash = 50;
+    expect(hireHandyman(sim)).toBe(false);
+    expect(sim.handymen).toHaveLength(0);
+  });
+});
+
+describe('stalls + paths as build actions', () => {
+  it('places a food stall next to a path and bills for it', () => {
+    const sim = createParkSim(6);
+    const cash0 = sim.cash;
+    expect(buildStall(sim, 'food', 9, 6)).toBe(true); // beside promenade tile (9,7)
+    expect(sim.cash).toBe(cash0 - STALL_COST.food);
+  });
+
+  it('refuses a stall with no path beside it', () => {
+    const sim = createParkSim(6);
+    expect(buildStall(sim, 'food', 0, 0)).toBe(false);
+  });
+
+  it('gates the balloon stall behind research', () => {
+    const sim = createParkSim(6);
+    expect(buildStall(sim, 'balloon', 7, 6)).toBe(false);
+    sim.research.unlocked.balloonStall = true;
+    expect(buildStall(sim, 'balloon', 7, 6)).toBe(true);
+  });
+
+  it('paves and un-paves tiles but protects the gate', () => {
+    const sim = createParkSim(6);
+    const cash0 = sim.cash;
+    expect(togglePath(sim, 5, 5)).toBe('built');
+    expect(sim.terrain[5][5]).toBe('path');
+    expect(sim.cash).toBe(cash0 - PATH_COST);
+    expect(togglePath(sim, 5, 5)).toBe('removed');
+    expect(sim.terrain[5][5]).toBe('grass');
+    expect(togglePath(sim, sim.gate.x, sim.gate.y)).toBe('blocked');
+  });
+});
+
+describe('research progression', () => {
+  it('unlocks drop, then loop, then the balloon stall over time', () => {
+    const sim = createParkSim(7);
+    expect(sim.research.unlocked.drop).toBe(false);
+
+    let first: string | null = null;
+    for (let i = 0; i < 200 && !first; i++) first = stepResearch(sim, 0.5);
+    expect(first).toBe('drop');
+    expect(sim.research.unlocked.drop).toBe(true);
+
+    for (let i = 0; i < 400; i++) stepResearch(sim, 0.5);
+    expect(sim.research.unlocked.loop).toBe(true);
+    expect(sim.research.unlocked.balloonStall).toBe(true);
+  });
+
+  it('progress needs a full research period to land the first unlock', () => {
+    const sim = createParkSim(7);
+    expect(stepResearch(sim, RESEARCH_TIME - 1)).toBeNull();
+    expect(stepResearch(sim, 2)).toBe('drop');
+  });
+});
+
+describe('living park integration', () => {
+  it('spawns guests who ride an open coaster', () => {
+    const sim = createParkSim(42);
+    const c = sim.coasters[0];
+    c.layout = [
+      { x: 8, y: 3, type: 'station', height: 0 },
+      { x: 9, y: 3, type: 'lift', height: 1 },
+      { x: 9, y: 4, type: 'drop', height: 0 },
+      { x: 8, y: 4, type: 'straight', height: 0 },
+    ];
+    expect(validateTrack(c.layout).valid).toBe(true);
+    c.open = true;
+
+    let boarded = 0;
+    let sawPeep = false;
+    for (let i = 0; i < 3000; i++) {
+      const r = stepPark(sim, 0.1);
+      boarded += r.events.boarded;
+      if (sim.peeps.length > 0) sawPeep = true;
+    }
+    expect(sawPeep).toBe(true);
+    expect(sim.totalGuests).toBeGreaterThan(0);
+    expect(boarded).toBeGreaterThan(0);
+  });
+
+  it('is fully deterministic for a given seed', () => {
+    const a = createParkSim(99);
+    const b = createParkSim(99);
+    for (let i = 0; i < 500; i++) {
+      stepPark(a, 0.1);
+      stepPark(b, 0.1);
+    }
+    expect(a.totalGuests).toBe(b.totalGuests);
+    expect(a.peeps.length).toBe(b.peeps.length);
+    expect(a.cash).toBeCloseTo(b.cash, 6);
+  });
+
+  it('reports grime that rises with unswept puddles', () => {
+    const sim = createParkSim(8);
+    expect(dirtiness(sim)).toBe(0);
+    for (let i = 0; i < 4; i++) sim.puddles.push({ id: i, x: 8, y: 7, age: 0 });
+    expect(dirtiness(sim)).toBeGreaterThan(0);
+    expect(dirtiness(sim)).toBeLessThanOrEqual(1);
   });
 });

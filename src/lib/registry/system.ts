@@ -18,6 +18,7 @@ const SystemInformationApp = lazy(() => import('@/components/apps/sysinfo/System
 const DeviceManagerApp = lazy(() => import('@/components/apps/device-manager/DeviceManager'));
 const FindFilesApp = lazy(() => import('@/components/apps/find-files/FindFiles'));
 const HelpApp = lazy(() => import('@/components/apps/help/Help'));
+const PrintersApp = lazy(() => import('@/components/apps/printers/Printers'));
 
 export const systemApps: Record<string, AppDefinition> = {
   'msdos': {
@@ -202,6 +203,17 @@ export const systemApps: Record<string, AppDefinition> = {
     category: 'system',
     component: HelpApp,
     defaultWindow: { title: 'Windows Help', width: 600, height: 440, minWidth: 420, minHeight: 300 },
+    singleton: true,
+  },
+  'printers': {
+    id: 'printers',
+    name: 'Printers',
+    icon: '/icons/printer-32.svg',
+    icon16: '/icons/printer-16.svg',
+    category: 'system',
+    component: PrintersApp,
+    defaultWindow: { title: 'Printers', width: 480, height: 340, minWidth: 340, minHeight: 240 },
+    startMenuPath: ['Settings'],
     singleton: true,
   },
 };

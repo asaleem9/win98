@@ -7,6 +7,15 @@ import { site as askjeeves } from './AskJeeves';
 import { site as webring } from './WebRing';
 import { site as downloadram } from './DownloadMoreRam';
 import { site as blank } from './Blank';
+import { site as downloads } from './CnetDownloads';
+import { site as ebay } from './Ebay1998';
+import { site as amazon } from './Amazon1999';
+import { site as dancingbaby } from './DancingBaby';
+import { site as midishrine } from './MidiShrine';
+import { site as y2k } from './Y2KCountdown';
+import { site as hotmail } from './Hotmail1998';
+import { site as shadypopups } from './ShadyPopups';
+import { site as spacejam } from './SpaceOdyssey';
 
 export interface SiteRenderProps {
   onNavigate: (url: string) => void;
@@ -35,6 +44,15 @@ export const SITES: SiteDef[] = [
   askjeeves,
   webring,
   downloadram,
+  downloads,
+  ebay,
+  amazon,
+  dancingbaby,
+  midishrine,
+  y2k,
+  hotmail,
+  shadypopups,
+  spacejam,
   blank,
 ];
 

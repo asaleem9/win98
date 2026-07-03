@@ -13,6 +13,21 @@ import {
   spreadFire,
   spawnMonster,
   stepMonster,
+  spawnTornado,
+  stepTornado,
+  roadPathToFire,
+  dispatchTruck,
+  stepTruck,
+  suppressFires,
+  policeCoverage,
+  crimeFactor,
+  fireSuppressionProb,
+  truckSpeed,
+  unpoweredZoneCount,
+  generateHeadline,
+  generateStories,
+  generateEdition,
+  milestoneForPopulation,
   newMilestones,
   idx,
   MAX_LEVEL,
@@ -240,5 +255,211 @@ describe('population tally & milestones', () => {
     expect(newMilestones(0, 1500).map((m) => m.title)).toEqual(['Village']);
     expect(newMilestones(900, 2500).map((m) => m.title)).toEqual(['Village', 'Town']);
     expect(newMilestones(2000, 2500)).toHaveLength(0);
+  });
+
+  it('milestoneForPopulation returns the highest tier reached', () => {
+    expect(milestoneForPopulation(0)).toBeNull();
+    expect(milestoneForPopulation(1500)?.title).toBe('Village');
+    expect(milestoneForPopulation(20000)?.title).toBe('City');
+    expect(milestoneForPopulation(500000)?.title).toBe('Metropolis');
+  });
+});
+
+// A residential row hand-set to full development for a real population figure.
+function populatedCity(tiles = 10): CityState {
+  const c = createCity(W, H);
+  for (let x = 0; x < tiles; x++) c.grid[idx(x, 2, W)] = { type: 'residential', level: 5, powered: true, fire: 0 };
+  return c;
+}
+
+describe('police coverage & crime', () => {
+  it('an empty city is crime-free', () => {
+    const c = createCity(W, H);
+    expect(policeCoverage(c)).toBe(1);
+    expect(crimeFactor(c)).toBe(0);
+  });
+
+  it('a populous unpoliced city has high crime that stations and funding reduce', () => {
+    const c = populatedCity(10); // 10 * 5 * 50 = 2500 citizens
+    expect(crimeFactor(c)).toBeGreaterThan(0.5);
+
+    c.grid[idx(0, 4, W)] = { type: 'police', level: 0, powered: true, fire: 0 };
+    const policed = crimeFactor(c);
+    expect(policed).toBeLessThan(0.5);
+
+    // The same station at low funding covers fewer citizens.
+    expect(crimeFactor({ ...c, policeFunding: 20 })).toBeGreaterThan(policed);
+  });
+
+  it('crime dampens commercial growth relative to residential', () => {
+    // A crime-ridden city grows commercial zones slower than an identical
+    // well-policed one over many ticks.
+    const build = (police: boolean): CityState => {
+      let c = createCity(W, H);
+      c = put(c, 0, 0, 'powerplant');
+      c = put(c, 1, 0, 'commercial');
+      c = put(c, 1, 1, 'road');
+      // Seed a big population so demand and crime are both high.
+      for (let x = 5; x < 20; x++) c.grid[idx(x, 8, W)] = { type: 'residential', level: 5, powered: true, fire: 0 };
+      if (police) for (let x = 0; x < 3; x++) c.grid[idx(x, 4, W)] = { type: 'police', level: 0, powered: true, fire: 0 };
+      return c;
+    };
+    const rand = makeRng(99);
+    let unsafe = build(false);
+    let safe = build(true);
+    for (let t = 0; t < 60; t++) {
+      unsafe = tickCity(unsafe, rand);
+      safe = tickCity(safe, rand);
+    }
+    expect(safe.grid[idx(1, 0, W)].level).toBeGreaterThanOrEqual(unsafe.grid[idx(1, 0, W)].level);
+  });
+});
+
+describe('fire funding effects', () => {
+  it('suppression probability and truck speed rise with funding', () => {
+    const lo = createCity(W, H);
+    expect(fireSuppressionProb({ ...lo, fireFunding: 0 })).toBe(0);
+    expect(fireSuppressionProb({ ...lo, fireFunding: 100 })).toBeGreaterThan(0);
+    expect(truckSpeed({ ...lo, fireFunding: 100 })).toBeGreaterThan(truckSpeed({ ...lo, fireFunding: 0 }));
+  });
+
+  it('unfunded brigade never suppresses (returns the same state)', () => {
+    const rand = makeRng(3);
+    let c = createCity(W, H);
+    c = put(c, 3, 3, 'residential');
+    c = startFire(c, rand, 3, 3);
+    c = { ...c, fireFunding: 0 };
+    expect(suppressFires(c, rand)).toBe(c);
+  });
+
+  it('a funded brigade never raises a tile\'s fire', () => {
+    const rand = makeRng(8);
+    let c = createCity(W, H);
+    c = put(c, 3, 3, 'residential');
+    c = startFire(c, rand, 3, 3);
+    const before = c.grid[idx(3, 3, W)].fire;
+    const after = suppressFires({ ...c, fireFunding: 100 }, rand);
+    expect(after.grid[idx(3, 3, W)].fire).toBeLessThanOrEqual(before);
+  });
+});
+
+describe('fire truck dispatch', () => {
+  // Station -> road -> road -> road -> burning house.
+  function truckScenario(): CityState {
+    let c = createCity(W, H);
+    c = put(c, 5, 5, 'firestation');
+    c = put(c, 5, 6, 'road');
+    c = put(c, 5, 7, 'road');
+    c = put(c, 5, 8, 'road');
+    c = put(c, 5, 9, 'residential');
+    c = startFire(c, makeRng(1), 5, 9);
+    return c;
+  }
+
+  it('finds a road route from a station to the blaze', () => {
+    const c = truckScenario();
+    const truck = dispatchTruck(c);
+    expect(truck).not.toBeNull();
+    expect(truck!.path[0]).toBe(idx(5, 5, W)); // the station launches the truck
+    expect(truck!.target).toBe(idx(5, 9, W));
+  });
+
+  it('returns no truck when no road reaches the fire', () => {
+    let c = createCity(W, H);
+    c = put(c, 5, 5, 'firestation');
+    c = put(c, 10, 10, 'residential');
+    c = startFire(c, makeRng(1), 10, 10);
+    expect(dispatchTruck(c)).toBeNull();
+    expect(roadPathToFire(c, [])).toBeNull();
+  });
+
+  it('a dispatched truck reaches the fire and douses it', () => {
+    let c = truckScenario();
+    c = { ...c, truck: dispatchTruck(c) };
+    expect(c.truck).not.toBeNull();
+    for (let t = 0; t < 12 && c.truck; t++) c = stepTruck(c);
+    expect(c.grid[idx(5, 9, W)].fire).toBe(0);
+    expect(c.truck).toBeNull();
+  });
+});
+
+describe('tornado', () => {
+  function runTornado(seed: number): CityState {
+    const rand = makeRng(seed);
+    let c = createCity(W, H);
+    for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) c = put(c, x, y, 'commercial');
+    c = spawnTornado(c, rand, 12, 0);
+    for (let t = 0; t < 25 && c.tornado; t++) c = stepTornado(c, rand);
+    return c;
+  }
+
+  it('spawns, pulps buildings into rubble, and eventually leaves', () => {
+    const c = runTornado(11);
+    expect(c.tornado).toBeNull();
+    expect(c.grid.some((t) => t.type === 'rubble')).toBe(true);
+  });
+
+  it('follows a deterministic path for a given seed', () => {
+    const a = runTornado(7).grid.map((t) => t.type);
+    const b = runTornado(7).grid.map((t) => t.type);
+    expect(a).toEqual(b);
+  });
+});
+
+describe('newspaper headlines', () => {
+  it('milestone editions announce the new tier', () => {
+    const c = createCity(W, H);
+    expect(generateHeadline(c, milestoneForPopulation(1500))).toContain('VILLAGE');
+  });
+
+  it('an active disaster leads the front page', () => {
+    let fire = put(createCity(W, H), 3, 3, 'residential');
+    fire = startFire(fire, makeRng(1), 3, 3);
+    expect(generateHeadline(fire)).toContain('INFERNO');
+    expect(generateHeadline(spawnTornado(createCity(W, H), makeRng(1)))).toContain('TWISTER');
+  });
+
+  it('blackouts and high taxes surface when no disaster is running', () => {
+    const dark = createCity(W, H);
+    for (let k = 0; k < 4; k++) dark.grid[idx(k, 0, W)] = { type: 'residential', level: 2, powered: false, fire: 0 };
+    expect(unpoweredZoneCount(dark.grid)).toBeGreaterThanOrEqual(3);
+    expect(generateHeadline(dark)).toContain('BLACKOUT');
+
+    expect(generateHeadline({ ...createCity(W, H), taxRate: 12 })).toContain('12%');
+    expect(generateHeadline(createCity(W, H))).toContain('MAYOR');
+  });
+
+  it('generateStories returns 2-3 flavored stories and leads with the milestone', () => {
+    const m = milestoneForPopulation(1500)!;
+    const stories = generateStories(createCity(W, H), m);
+    expect(stories[0]).toBe(m.message);
+    const taxed = generateStories({ ...createCity(W, H), taxRate: 12 });
+    expect(taxed.length).toBeGreaterThanOrEqual(2);
+    expect(taxed.length).toBeLessThanOrEqual(3);
+  });
+
+  it('generateEdition assembles a full masthead front page', () => {
+    const e = generateEdition(createCity(W, H));
+    expect(e.masthead).toBe('The Emulation Times');
+    expect(e.headline.length).toBeGreaterThan(0);
+    expect(e.stories.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('civic tool placement & funded budget', () => {
+  it('places police / fire / park at their listed costs', () => {
+    const c = createCity(W, H);
+    expect(applyTool(c.grid, W, H, 4, 4, 'police').cost).toBe(TOOL_COSTS.police);
+    expect(applyTool(c.grid, W, H, 6, 6, 'firestation').cost).toBe(TOOL_COSTS.firestation);
+    expect(applyTool(c.grid, W, H, 8, 8, 'park').cost).toBe(TOOL_COSTS.park);
+  });
+
+  it('funding sliders scale station upkeep in the budget', () => {
+    const c = createCity(W, H);
+    c.grid[idx(0, 0, W)] = { type: 'police', level: 0, powered: true, fire: 0 };
+    const full = computeBudget({ ...c, policeFunding: 100 });
+    const half = computeBudget({ ...c, policeFunding: 50 });
+    expect(full.expenses).toBeGreaterThan(half.expenses);
+    expect(full.expenses).toBe(MAINTENANCE.police);
   });
 });

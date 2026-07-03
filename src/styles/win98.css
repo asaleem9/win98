@@ -227,25 +227,34 @@
 }
 
 /* --- Cursor Styles --- */
+/* Pixel-art cursors authored inline as SVG data URIs (crisp 1px rects), each
+   with its hotspot after the url() and a native keyword fallback. Kept here so
+   there are no external .cur files to 404 on. */
 .win98 {
-  cursor: url('/cursors/default.cur'), default;
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M1 1 L1 12 L4 9 L6 14 L8 13 L5 8 L10 8 Z' fill='%23fff' stroke='%23000'/></svg>") 1 1, default;
 }
 
 .win98-cursor-wait,
 .win98 .cursor-wait {
-  cursor: url('/cursors/wait.cur'), wait;
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M3 1 L13 1 L13 4 L9 8 L13 12 L13 15 L3 15 L3 12 L7 8 L3 4 Z' fill='%23fff' stroke='%23000'/><rect x='4' y='2' width='8' height='1' fill='%23000'/><rect x='4' y='13' width='8' height='1' fill='%23000'/><path d='M5 3 L11 3 L8 6 Z' fill='%23808080'/><path d='M8 10 L11 13 L5 13 Z' fill='%23808080'/></svg>") 8 8, wait;
 }
 
 .win98-cursor-pointer {
-  cursor: url('/cursors/pointer.cur'), pointer;
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M5 1 L7 1 L7 6 L8 6 L8 7 L10 7 L10 8 L12 8 L12 13 L11 14 L6 14 L5 13 L4 9 L4 7 L5 7 Z' fill='%23fff' stroke='%23000'/><path d='M8 8 L8 11 M10 9 L10 12' stroke='%23000'/></svg>") 5 0, pointer;
 }
 
 .win98-cursor-text {
-  cursor: url('/cursors/text.cur'), text;
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M5 2 h6 v1 h-2 v10 h2 v1 h-6 v-1 h2 v-10 h-2 z' fill='%23000'/></svg>") 8 8, text;
 }
 
 .win98-cursor-move {
-  cursor: url('/cursors/move.cur'), move;
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M8 1 L11 4 L9 4 L9 7 L12 7 L12 5 L15 8 L12 11 L12 9 L9 9 L9 12 L11 12 L8 15 L5 12 L7 12 L7 9 L4 9 L4 11 L1 8 L4 5 L4 7 L7 7 L7 4 L5 4 Z' fill='%23fff' stroke='%23000'/></svg>") 8 8, move;
+}
+
+/* Boot and login screens run "busy" — the hourglass shows over the desktop
+   chrome while interactive fields keep their native I-beam. */
+.win98-booting {
+  cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' shape-rendering='crispEdges'><path d='M3 1 L13 1 L13 4 L9 8 L13 12 L13 15 L3 15 L3 12 L7 8 L3 4 Z' fill='%23fff' stroke='%23000'/><rect x='4' y='2' width='8' height='1' fill='%23000'/><rect x='4' y='13' width='8' height='1' fill='%23000'/><path d='M5 3 L11 3 L8 6 Z' fill='%23808080'/><path d='M8 10 L11 13 L5 13 Z' fill='%23808080'/></svg>") 8 8, wait;
 }
 
 /* --- Focus Indicator (dotted inner border) --- */

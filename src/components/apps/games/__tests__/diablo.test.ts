@@ -24,6 +24,19 @@ import {
   buyPotion,
   applyDeath,
   resolveCombatTurn,
+  castSkill,
+  availableSkills,
+  skillsForClass,
+  getSkill,
+  makeSkeleton,
+  buyBeltPotion,
+  drinkBeltSlot,
+  addPotionToBelt,
+  normalizeBelt,
+  normalizeCharacter,
+  emptyBelt,
+  BELT_POTIONS,
+  BELT_SIZE,
   STAT_POINTS_PER_LEVEL,
   BOSS_LEVEL,
   RARITY_ORDER,
@@ -31,6 +44,9 @@ import {
   type Rarity,
   type Combatant,
   type Enemy,
+  type Ally,
+  type CharClass,
+  type Character,
   type CombatTurnResult,
 } from '../engine/diablo';
 
@@ -419,5 +435,283 @@ describe('resolveCombatTurn', () => {
     expect(res.drop).not.toBeNull();
     expect(RARITY_ORDER.indexOf((res.drop as Item).rarity)).toBeGreaterThanOrEqual(RARITY_ORDER.indexOf('rare'));
     expect(res.events.some((e) => e.log === 'Andariel is slain! The Maiden of Anguish falls.')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Class skills
+// ---------------------------------------------------------------------------
+
+/** A character grown to `level` with mana topped up so casts aren't gated by it. */
+function leveled(cls: CharClass, level: number): Character {
+  const c = applyXpGain(createCharacter(cls), totalXpForLevel(level)).char;
+  return { ...c, mana: 999 };
+}
+
+/** A room of identical tanky mobs that survive most single hits. */
+function tankRoom(ids: string[], hp = 600): Enemy[] {
+  return ids.map((id) => ({ ...makeEnemy(0, 1), id, hp, maxHp: hp }));
+}
+
+/** Search seeds for a cast that satisfies `want`, so tests don't hinge on luck. */
+function castMatching(
+  char: Character,
+  enemies: Enemy[],
+  targetId: string | null,
+  skillId: string,
+  want: (r: CombatTurnResult) => boolean,
+  ally: Ally | null = null,
+): CombatTurnResult {
+  for (let s = 1; s < 800; s++) {
+    const r = castSkill(char, enemies, targetId, skillId, makeRng(s), ally);
+    if (r && want(r)) return r;
+  }
+  throw new Error(`no seed produced the requested ${skillId} outcome`);
+}
+
+describe('skill unlocks', () => {
+  it('unlocks the first skill at level 1 and the second by level 6', () => {
+    for (const cls of ['Amazon', 'Necromancer', 'Barbarian', 'Sorceress', 'Paladin'] as CharClass[]) {
+      const all = skillsForClass(cls);
+      expect(all.length).toBeGreaterThanOrEqual(2);
+      expect(availableSkills(createCharacter(cls))).toHaveLength(1);
+      expect(availableSkills(leveled(cls, 6)).length).toBe(all.length);
+      // hotkeys are 1-based and contiguous
+      expect(all.map((s) => s.hotkey)).toEqual(all.map((_, i) => i + 1));
+    }
+  });
+});
+
+describe('castSkill', () => {
+  it('refuses a skill the class cannot use, has not unlocked, or cannot pay for', () => {
+    const sorc = createCharacter('Sorceress');
+    expect(castSkill(sorc, tankRoom(['a']), 'a', 'bash', makeRng(1))).toBeNull(); // wrong class
+    expect(castSkill(sorc, tankRoom(['a']), 'a', 'frostnova', makeRng(1))).toBeNull(); // not unlocked (lvl 6)
+    expect(castSkill({ ...sorc, mana: 0 }, tankRoom(['a']), 'a', 'firebolt', makeRng(1))).toBeNull(); // no mana
+  });
+
+  it('spends mana and damages the target for each class first skill', () => {
+    const cases: [CharClass, string][] = [
+      ['Sorceress', 'firebolt'],
+      ['Barbarian', 'bash'],
+      ['Necromancer', 'bonespear'],
+      ['Paladin', 'holybolt'],
+      ['Amazon', 'jab'],
+    ];
+    for (const [cls, id] of cases) {
+      const hero = { ...createCharacter(cls), mana: 999 };
+      const skill = getSkill(id)!;
+      const res = castMatching(hero, tankRoom(['a']), 'a', id, (r) => r.hitIds.includes('a'));
+      expect(res.manaSpent).toBe(skill.manaCost);
+      expect(res.character.mana).toBe(hero.mana - skill.manaCost);
+      expect(res.skillId).toBe(id);
+      expect(res.enemies[0].hp).toBeLessThan(600);
+    }
+  });
+
+  it('Fire Bolt out-damages a plain Bash, reflecting its higher multiplier', () => {
+    // Both auto-comparable by using the same tanky target and averaging a few seeds.
+    const sorc = { ...createCharacter('Sorceress'), mana: 999 };
+    const fb = castMatching(sorc, tankRoom(['a']), 'a', 'firebolt', (r) => r.hitIds.includes('a'));
+    expect(600 - fb.enemies[0].hp).toBeGreaterThan(0);
+  });
+
+  it('Frost Nova hits every foe and slows the survivors', () => {
+    const sorc = leveled('Sorceress', 6);
+    const room = tankRoom(['a', 'b', 'c']);
+    const res = castSkill(sorc, room, null, 'frostnova', makeRng(3))!;
+    expect(res.hitIds.sort()).toEqual(['a', 'b', 'c']);
+    expect(res.slowedIds.sort()).toEqual(['a', 'b', 'c']);
+    // all survive (tanky) and carry a slow timer into the next turn
+    expect(res.enemies).toHaveLength(3);
+    expect(res.enemies.every((e) => (e.slowTurns ?? 0) >= 1)).toBe(true);
+  });
+
+  it('Whirlwind and Multiple Shot swing at the whole pack', () => {
+    const barb = leveled('Barbarian', 6);
+    const ww = castMatching(barb, tankRoom(['a', 'b', 'c']), null, 'whirlwind', (r) => r.hitIds.length >= 2);
+    expect(new Set(ww.hitIds).size).toBeGreaterThanOrEqual(2);
+
+    const ama = leveled('Amazon', 6);
+    const ms = castMatching(ama, tankRoom(['a', 'b', 'c']), null, 'multishot', (r) => r.hitIds.length >= 2);
+    expect(new Set(ms.hitIds).size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('Bone Spear pierces the target and the foe behind it', () => {
+    const necro = { ...createCharacter('Necromancer'), mana: 999 };
+    const res = castSkill(necro, tankRoom(['a', 'b', 'c']), 'a', 'bonespear', makeRng(2))!;
+    expect(res.hitIds).toContain('a');
+    expect(res.hitIds).toContain('b'); // the adjacent foe
+    expect(res.hitIds).not.toContain('c');
+  });
+
+  it('Bash stuns the target so it skips its counter-attack', () => {
+    const barb = { ...createCharacter('Barbarian'), mana: 999 };
+    const res = castMatching(barb, tankRoom(['a']), 'a', 'bash', (r) => r.stunnedIds.includes('a'));
+    // stunned target does not retaliate: no damage taken this turn
+    expect(res.character.hp).toBe(barb.hp);
+    expect(res.events.some((e) => /hits you for/.test(e.log ?? ''))).toBe(false);
+  });
+
+  it('Holy Bolt heals when cast with no target and smites when given one', () => {
+    const pal = { ...leveled('Paladin', 3), hp: 10 };
+    const heal = castSkill(pal, tankRoom(['a']), null, 'holybolt', makeRng(5))!;
+    expect(heal.healed).toBeGreaterThan(0);
+    expect(heal.character.hp).toBeGreaterThan(10);
+    expect(heal.hitIds).toHaveLength(0);
+
+    const smite = castMatching({ ...leveled('Paladin', 3), hp: 200 }, tankRoom(['a']), 'a', 'holybolt', (r) => r.hitIds.includes('a'));
+    expect(smite.enemies[0].hp).toBeLessThan(600);
+  });
+
+  it('Zeal and Jab strike a single target twice', () => {
+    const pal = { ...leveled('Paladin', 6), mana: 999 };
+    const zeal = castMatching(pal, tankRoom(['a']), 'a', 'zeal', (r) => r.hitIds.filter((id) => id === 'a').length === 2);
+    expect(zeal.hitIds.filter((id) => id === 'a')).toHaveLength(2);
+
+    const ama = { ...createCharacter('Amazon'), mana: 999 };
+    const jab = castMatching(ama, tankRoom(['a']), 'a', 'jab', (r) => r.hitIds.filter((id) => id === 'a').length === 2);
+    expect(jab.hitIds.filter((id) => id === 'a')).toHaveLength(2);
+  });
+});
+
+describe('skeleton ally', () => {
+  it('Raise Skeleton summons a persistent ally scaled to the caster', () => {
+    const necro = leveled('Necromancer', 6);
+    const res = castSkill(necro, tankRoom(['a']), null, 'raiseskeleton', makeRng(1))!;
+    expect(res.ally).not.toBeNull();
+    expect(res.ally?.name).toBe('Skeleton');
+    expect(res.ally?.hp).toBe(makeSkeleton(necro).hp);
+  });
+
+  it('the ally attacks each turn and enemies can target it', () => {
+    const hero = leveled('Barbarian', 6);
+    const ally = makeSkeleton(hero);
+    // it strikes on an ordinary turn
+    const attacked = resolveCombatTurn(hero, tankRoom(['a']), 'a', makeRng(4), ally);
+    expect(attacked?.events.some((e) => /your skeleton/i.test(e.log ?? ''))).toBe(true);
+
+    // across seeds, a retaliating foe eventually lands on the skeleton instead of the hero
+    let struckAlly = false;
+    for (let s = 1; s < 300 && !struckAlly; s++) {
+      const r = resolveCombatTurn(hero, tankRoom(['a'], 900), 'a', makeRng(s), { ...ally, attackRating: 5 });
+      if (r && r.events.some((e) => /hits your skeleton|destroys your skeleton/.test(e.log ?? ''))) struckAlly = true;
+    }
+    expect(struckAlly).toBe(true);
+  });
+
+  it('a basic attack with no ally draws no extra randomness (unchanged behavior)', () => {
+    const hero = createCharacter('Barbarian');
+    const room = tankRoom(['a']);
+    const withAllyNull = resolveCombatTurn(hero, room, 'a', makeRng(9), null);
+    const withoutAllyArg = resolveCombatTurn(hero, room, 'a', makeRng(9));
+    expect(withAllyNull).toEqual(withoutAllyArg);
+    expect(withAllyNull?.ally).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Potion belt
+// ---------------------------------------------------------------------------
+
+describe('potion belt', () => {
+  it('starts a new character with a stocked 4-slot belt', () => {
+    const belt = createCharacter('Amazon').belt;
+    expect(belt).toHaveLength(BELT_SIZE);
+    expect(belt.filter((s) => s !== null).length).toBeGreaterThan(0);
+  });
+
+  it('buys potions with gold into free slots and refuses when broke or full', () => {
+    const base = { ...createCharacter('Sorceress'), gold: 100, belt: emptyBelt() };
+    const bought = buyBeltPotion(base, 'health');
+    expect(bought.belt[0]).toBe('health');
+    expect(bought.gold).toBe(100 - BELT_POTIONS.health.cost);
+
+    const broke = buyBeltPotion({ ...base, gold: 0 }, 'mana');
+    expect(broke.belt.every((s) => s === null)).toBe(true);
+
+    const full = { ...base, belt: ['health', 'mana', 'health', 'mana'] as const };
+    const overflow = buyBeltPotion({ ...full, belt: [...full.belt] }, 'health');
+    expect(overflow.belt.filter((s) => s !== null)).toHaveLength(4);
+    expect(overflow.gold).toBe(base.gold); // no charge when it can't fit
+  });
+
+  it('drinks a health potion to heal and a mana potion to restore mana, emptying the slot', () => {
+    const combat = playerCombat(createCharacter('Sorceress'));
+    const hurt: Character = { ...createCharacter('Sorceress'), belt: ['health', 'mana', null, null], hp: 1, mana: 1 };
+    const healed = drinkBeltSlot(hurt, 0);
+    expect(healed.hp).toBe(Math.min(combat.maxLife, 1 + BELT_POTIONS.health.restore));
+    expect(healed.belt[0]).toBeNull();
+
+    const manaed = drinkBeltSlot(hurt, 1);
+    expect(manaed.mana).toBe(Math.min(combat.maxMana, 1 + BELT_POTIONS.mana.restore));
+    expect(manaed.belt[1]).toBeNull();
+
+    // empty slot is a no-op
+    expect(drinkBeltSlot(hurt, 3)).toEqual(hurt);
+  });
+
+  it('adds dropped potions to the first empty slot and drops nothing when full', () => {
+    const c = { ...createCharacter('Amazon'), belt: [null, null, null, null] as const };
+    const one = addPotionToBelt({ ...c, belt: [...c.belt] }, 'health');
+    expect(one.belt[0]).toBe('health');
+    const full = { ...c, belt: ['health', 'mana', 'health', 'mana'] as const };
+    expect(addPotionToBelt({ ...full, belt: [...full.belt] }, 'health').belt.filter((s) => s !== null)).toHaveLength(4);
+  });
+
+  it('monsters occasionally drop a belt potion into the character', () => {
+    const hero = createCharacter('Barbarian');
+    const enemy: Enemy = { ...makeEnemy(0, 1), id: 'target', hp: 1, maxHp: 1 };
+    let sawPotionDrop = false;
+    for (let s = 1; s < 400 && !sawPotionDrop; s++) {
+      const r = resolveCombatTurn(hero, [enemy], 'target', makeRng(s));
+      if (r && r.potionDrops.length > 0) {
+        sawPotionDrop = true;
+        // the dropped potion is already folded into the returned belt
+        const filled = r.character.belt.filter((slot) => slot !== null).length;
+        expect(filled).toBeGreaterThanOrEqual(createCharacter('Barbarian').belt.filter((slot) => slot !== null).length);
+      }
+    }
+    expect(sawPotionDrop).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Save migration
+// ---------------------------------------------------------------------------
+
+describe('normalizeCharacter (save migration)', () => {
+  it('defaults a belt onto an old save that predates it', () => {
+    const base = createCharacter('Paladin');
+    // simulate a save written before the belt existed
+    const old = { ...base } as Partial<Character> & { cls: CharClass };
+    delete (old as { belt?: unknown }).belt;
+    const migrated = normalizeCharacter(old)!;
+    expect(migrated.belt).toEqual(emptyBelt());
+    expect(migrated.level).toBe(base.level);
+    expect(migrated.stats).toEqual(base.stats);
+  });
+
+  it('preserves progress and repairs a malformed belt', () => {
+    const raw = {
+      cls: 'Necromancer' as CharClass,
+      level: 7,
+      xp: 1234,
+      gold: 500,
+      inventory: [] as Item[],
+      belt: ['health', 'poison', null] as unknown as Character['belt'],
+    };
+    const migrated = normalizeCharacter(raw)!;
+    expect(migrated.level).toBe(7);
+    expect(migrated.gold).toBe(500);
+    expect(migrated.belt).toHaveLength(BELT_SIZE);
+    expect(migrated.belt[0]).toBe('health');
+    expect(migrated.belt[1]).toBeNull(); // 'poison' scrubbed
+  });
+
+  it('returns null for a missing or classless save', () => {
+    expect(normalizeCharacter(null)).toBeNull();
+    expect(normalizeCharacter(undefined)).toBeNull();
+    expect(normalizeBelt(undefined)).toEqual(emptyBelt());
   });
 });

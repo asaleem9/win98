@@ -14,6 +14,7 @@ import {
   isDefinitionsExpired,
 } from './nortonLogic';
 import { useSettings } from '@/contexts/SettingsContext';
+import { emit } from '@/lib/eventBus';
 
 const allThreats: Threat[] = [
   { name: 'ILOVEYOU.VBS', location: 'C:\\Windows\\System\\', risk: 'High', type: 'VBS.LoveLetter.A' },
@@ -43,8 +44,18 @@ const scanPaths = [
 const buttonClass =
   'px-4 h-[24px] text-[11px] cursor-default font-bold bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] disabled:text-[var(--win98-button-shadow)]';
 
+// Norton's real-time protection dropped a shield in the tray once the app had
+// been launched, and left it there for the rest of the session.
+let shieldRegistered = false;
+
 export default function NortonAntiVirus({ windowId }: AppComponentProps) {
   const { getAppPref, setAppPref } = useSettings();
+
+  useEffect(() => {
+    if (shieldRegistered) return;
+    shieldRegistered = true;
+    emit('tray-register', { id: 'norton', icon: '/icons/norton-16.svg', tooltip: 'Norton AntiVirus' });
+  }, []);
 
   const [scanning, setScanning] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);

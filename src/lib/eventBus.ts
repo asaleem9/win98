@@ -35,6 +35,9 @@ export interface ShellEvents {
   'tray-register': { id: string; icon: string; tooltip?: string };
   // Remove a previously registered system-tray icon.
   'tray-unregister': { id: string };
+  // A dynamic tray icon was activated (clicked). By convention the id matches
+  // the app id to open, so the tray's default handler focuses/opens that window.
+  'tray-activate': { id: string };
 }
 
 type EventName = keyof ShellEvents;

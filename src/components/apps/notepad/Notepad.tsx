@@ -12,6 +12,7 @@ import { showSystemError } from '@/hooks/useFileOpener';
 import { playSound } from '@/lib/sounds';
 import { normalizePath } from '@/lib/fs/fsOperations';
 import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
+import { usePrint } from '@/components/dialogs/PrintDialog';
 
 function baseName(path: string): string {
   const parts = normalizePath(path).split('\\');
@@ -21,6 +22,7 @@ function baseName(path: string): string {
 export default function Notepad({ windowId, launchParams, launchCount }: AppComponentProps) {
   const { updateTitle, closeWindow } = useWindows();
   const { readFile, writeFile, getNode } = useFileSystem();
+  const { openPrint, printDialog } = usePrint(windowId, 'Notepad');
 
   const [content, setContent] = useState('');
   const [wordWrap, setWordWrap] = useState(true);
@@ -280,7 +282,7 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
         { label: 'Save As...', onClick: () => setPicker('save') },
         { label: '', separator: true },
         { label: 'Page Setup...', disabled: true },
-        { label: 'Print...', shortcut: 'Ctrl+P', onClick: () => showSystemError('Notepad', 'There is no printer installed. To install a printer, point to Settings on the Start menu, and then click Printers.') },
+        { label: 'Print...', shortcut: 'Ctrl+P', onClick: () => openPrint(() => ({ kind: 'text', text: content }), fileName) },
         { label: '', separator: true },
         { label: 'Exit', onClick: handleExit },
       ],
@@ -428,6 +430,8 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
           />
         </div>
       )}
+
+      {printDialog}
     </div>
   );
 }

@@ -97,7 +97,7 @@ exports[`BSOD snapshots > default error message 1`] = `
 exports[`BootSequence snapshots > initial POST phase render 1`] = `
 <div>
   <div
-    class="fixed inset-0 z-[99999] bg-black text-white font-[family-name:var(--win98-font-fixedsys)] text-[14px] p-4 cursor-pointer"
+    class="win98-booting fixed inset-0 z-[99999] bg-black text-white font-[family-name:var(--win98-font-fixedsys)] text-[14px] p-4"
   >
     <div
       class="mb-4"

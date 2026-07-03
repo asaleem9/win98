@@ -11,6 +11,7 @@ import { showSystemError } from '@/hooks/useFileOpener';
 import { playSound } from '@/lib/sounds';
 import { normalizePath } from '@/lib/fs/fsOperations';
 import { FilePickerDialog } from '../notepad/FilePickerDialog';
+import { usePrint } from '@/components/dialogs/PrintDialog';
 
 const fonts = ['Arial', 'Times New Roman', 'Courier New', 'Verdana', 'Comic Sans MS', 'Georgia', 'Tahoma'];
 const sizes = ['8', '9', '10', '11', '12', '14', '16', '18', '20', '22', '24', '26', '28', '36', '48', '72'];
@@ -68,6 +69,7 @@ function FormatBtn({ children, onClick, active }: { children: React.ReactNode; o
 export default function WordPad({ windowId, launchParams, launchCount }: AppComponentProps) {
   const { updateTitle, closeWindow } = useWindows();
   const { getNode, writeFile } = useFileSystem();
+  const { openPrint, printDialog } = usePrint(windowId, 'WordPad');
 
   const [font, setFont] = useState('Arial');
   const [fontSize, setFontSize] = useState('10');
@@ -78,7 +80,6 @@ export default function WordPad({ windowId, launchParams, launchCount }: AppComp
   const [fileName, setFileName] = useState('Document');
   const [picker, setPicker] = useState<null | 'open' | 'save'>(null);
   const [showAbout, setShowAbout] = useState(false);
-  const [printErr, setPrintErr] = useState(false);
 
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -141,6 +142,10 @@ export default function WordPad({ windowId, launchParams, launchCount }: AppComp
     setFileName('Document');
   }, []);
 
+  const handlePrint = useCallback(() => {
+    openPrint(() => ({ kind: 'html', html: editorRef.current?.innerHTML ?? '' }), fileName);
+  }, [openPrint, fileName]);
+
   const menus: MenuDefinition[] = [
     {
       label: 'File',
@@ -150,7 +155,7 @@ export default function WordPad({ windowId, launchParams, launchCount }: AppComp
         { label: 'Save', shortcut: 'Ctrl+S', onClick: handleSave },
         { label: 'Save As...', onClick: () => setPicker('save') },
         { label: '', separator: true },
-        { label: 'Print...', shortcut: 'Ctrl+P', onClick: () => setPrintErr(true) },
+        { label: 'Print...', shortcut: 'Ctrl+P', onClick: handlePrint },
         { label: 'Print Preview', disabled: true },
         { label: 'Page Setup...', disabled: true },
         { label: '', separator: true },
@@ -220,7 +225,7 @@ export default function WordPad({ windowId, launchParams, launchCount }: AppComp
         <ToolbarBtn title="Undo" onClick={() => runCommand('undo')}>↩️</ToolbarBtn>
         <div className="w-px h-4 bg-[var(--win98-button-shadow)] mx-[2px]" />
         <ToolbarBtn title="Find" onClick={() => runCommand('selectAll')}>🔍</ToolbarBtn>
-        <ToolbarBtn title="Print" onClick={() => setPrintErr(true)}>🖨️</ToolbarBtn>
+        <ToolbarBtn title="Print" onClick={handlePrint}>🖨️</ToolbarBtn>
       </div>
 
       {/* Toolbar row 2 - formatting */}
@@ -294,17 +299,6 @@ export default function WordPad({ windowId, launchParams, launchCount }: AppComp
         />
       )}
 
-      {printErr && (
-        <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/20">
-          <Dialog98
-            title="Print"
-            icon="error"
-            message={<span>There are no printers installed.<br />To install a printer, use the Add Printer wizard in the Printers folder.</span>}
-            buttons={[{ label: 'OK', default: true, onClick: () => setPrintErr(false) }]}
-          />
-        </div>
-      )}
-
       {showAbout && (
         <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/20">
           <Dialog98
@@ -321,6 +315,8 @@ export default function WordPad({ windowId, launchParams, launchCount }: AppComp
           />
         </div>
       )}
+
+      {printDialog}
     </div>
   );
 }
