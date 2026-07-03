@@ -129,7 +129,9 @@ export function Desktop() {
         startPos: iconPosition(entry, index),
         moved: false,
       };
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      // Don't capture the pointer yet — capturing on pointerdown retargets the
+      // resulting click/dblclick away from the icon, breaking open-on-double-click.
+      // Capture starts in the move handler once an actual drag begins.
     },
     [iconPosition, renamingId, selectedIcons],
   );
@@ -140,6 +142,7 @@ export function Desktop() {
     const dx = e.clientX - drag.startPointer.x;
     const dy = e.clientY - drag.startPointer.y;
     if (!drag.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    if (!drag.moved) (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     drag.moved = true;
     setDragPreview({ id: drag.id, pos: { x: drag.startPos.x + dx, y: drag.startPos.y + dy } });
   }, []);
