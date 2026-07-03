@@ -1,10 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { TreeView98, TreeNode } from '@/components/ui/TreeView98';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { Dialog98 } from '@/components/ui/Dialog98';
+import { useWindows } from '@/contexts/WindowContext';
+import { useFileSystem } from '@/contexts/FileSystemContext';
 import { SYSTEM_SPECS } from '@/lib/constants';
+import { formatUptime, systemResourcesFree, buildSystemReport } from './sysinfoHelpers';
 
 interface InfoItem {
   label: string;
@@ -162,11 +167,68 @@ const TREE_NODES: TreeNode[] = [
 
 export default function SystemInformation({ windowId }: AppComponentProps) {
   const [selectedNode, setSelectedNode] = useState<string>('system-summary');
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [exportDialog, setExportDialog] = useState<string | null>(null);
+  const { openWindow, closeWindow } = useWindows();
+  const { createFile } = useFileSystem();
 
-  const currentData = INFO_DATA[selectedNode] || [];
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const resourcesFree = systemResourcesFree(elapsedSeconds);
+
+  const currentData = useMemo(() => {
+    const base = INFO_DATA[selectedNode] || [];
+    if (selectedNode !== 'system-summary') return base;
+    return [
+      ...base,
+      { label: 'Windows Uptime', value: formatUptime(elapsedSeconds) },
+      { label: 'System Resources Free', value: `${resourcesFree}%` },
+    ];
+  }, [selectedNode, elapsedSeconds, resourcesFree]);
+
+  const handleExport = () => {
+    const report = buildSystemReport({
+      generatedAt: new Date(),
+      uptimeSeconds: elapsedSeconds,
+      resourcesFree,
+    });
+    const result = createFile('C:\\My Documents', 'msinfo.txt', report);
+    setExportDialog(
+      result.ok
+        ? 'The system information report was saved to C:\\My Documents\\msinfo.txt.'
+        : `The report could not be saved: ${result.error}`,
+    );
+  };
+
+  const menus: MenuDefinition[] = [
+    {
+      label: 'File',
+      items: [
+        { label: 'Export...', onClick: handleExport },
+        { separator: true, label: '' },
+        { label: 'Exit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: 'Tools',
+      items: [
+        { label: 'ScanDisk', onClick: () => openWindow('scandisk') },
+        { label: 'Disk Defragmenter', onClick: () => openWindow('defrag') },
+        { label: 'Device Manager', onClick: () => openWindow('device-manager') },
+        { label: 'Registry Checker', onClick: () => openWindow('regedit') },
+      ],
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px]">
+      <MenuBar menus={menus} />
+
       {/* Toolbar area */}
       <div className="flex items-center h-[22px] px-2 border-b border-[var(--win98-button-shadow)] bg-[var(--win98-button-face)]">
         <span className="font-bold text-[11px]">System Information</span>
@@ -207,6 +269,17 @@ export default function SystemInformation({ windowId }: AppComponentProps) {
       <StatusBar98 panels={[
         { content: selectedNode === 'system-summary' ? 'System Summary' : `Viewing: ${selectedNode.replace(/-/g, ' ').replace(/(^|\s)\w/g, (m) => m.toUpperCase())}` },
       ]} />
+
+      {exportDialog && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
+          <Dialog98
+            title="System Information"
+            icon="info"
+            message={exportDialog}
+            buttons={[{ label: 'OK', onClick: () => setExportDialog(null), default: true }]}
+          />
+        </div>
+      )}
     </div>
   );
 }

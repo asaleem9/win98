@@ -3,8 +3,17 @@
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { useWindows } from '@/contexts/WindowContext';
-import { virtualFileSystem, resolvePath } from '@/lib/filesystem';
+import { useFileSystem } from '@/contexts/FileSystemContext';
+import { getParentPath } from '@/lib/filesystem';
+import { getAppIdForFile } from '@/lib/fileAssociations';
 import { FSNode } from '@/types/filesystem';
+import {
+  parseCommand,
+  resolveDosPath,
+  formatDirWide,
+  matchCompletions,
+  splitForCompletion,
+} from './dosUtils';
 
 interface OutputLine {
   text: string;
@@ -42,7 +51,8 @@ function buildTree(node: FSNode, prefix: string, isLast: boolean, depth: number)
 }
 
 export default function MSDOSPrompt({ windowId }: AppComponentProps) {
-  const { closeWindow } = useWindows();
+  const { closeWindow, openWindow } = useWindows();
+  const fs = useFileSystem();
   const [output, setOutput] = useState<OutputLine[]>([
     { text: 'Microsoft(R) Windows 98' },
     { text: '   (C)Copyright Microsoft Corp 1981-1999.' },
@@ -54,6 +64,11 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const currentPathRef = useRef(currentPath);
+
+  useEffect(() => {
+    currentPathRef.current = currentPath;
+  }, [currentPath]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
@@ -68,18 +83,16 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
   }, []);
 
   const processCommand = useCallback((rawCmd: string) => {
-    const trimmed = rawCmd.trim();
     const promptLine = `${currentPath}>`;
-    addOutput([promptLine + trimmed]);
+    const parsed = parseCommand(rawCmd);
+    addOutput([promptLine + rawCmd.trim()]);
 
-    if (!trimmed) return;
+    if (!parsed) return;
 
-    setHistory((prev) => [...prev, trimmed]);
+    setHistory((prev) => [...prev, parsed.raw]);
     setHistoryIndex(-1);
 
-    const parts = trimmed.split(/\s+/);
-    const cmd = parts[0].toLowerCase();
-    const args = parts.slice(1).join(' ');
+    const { cmd, args, rest } = parsed;
 
     switch (cmd) {
       case 'cls':
@@ -87,8 +100,10 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
         break;
 
       case 'dir': {
-        const targetPath = args ? (args.startsWith('C:') ? args : currentPath + '\\' + args) : currentPath;
-        const node = resolvePath(targetPath);
+        const wide = args.includes('/w') || args.includes('/W');
+        const pathArg = args.filter((a) => !a.startsWith('/')).join(' ');
+        const targetPath = pathArg ? resolveDosPath(currentPath, pathArg) : currentPath;
+        const node = fs.getNode(targetPath);
         if (!node || node.type !== 'directory') {
           addOutput(['File Not Found']);
           break;
@@ -100,21 +115,26 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
           '',
         ];
         let fileCount = 0, dirCount = 0, totalSize = 0;
-        if (node.children) {
-          for (const child of node.children) {
+        const children = node.children ?? [];
+        for (const child of children) {
+          if (child.type === 'directory') dirCount++;
+          else { fileCount++; totalSize += child.size || 0; }
+        }
+        if (wide) {
+          lines.push(...formatDirWide(children.map((c) => ({ name: c.name, isDir: c.type === 'directory' }))));
+        } else {
+          for (const child of children) {
             const date = formatDosDate(child.modified);
             const time = formatDosTime(child.modified);
             if (child.type === 'directory') {
               lines.push(`${date}  ${time}    <DIR>          ${child.name}`);
-              dirCount++;
             } else {
               const size = formatSize(child.size || 0);
               lines.push(`${date}  ${time}    ${size} ${child.name}`);
-              fileCount++;
-              totalSize += child.size || 0;
             }
           }
         }
+        lines.push('');
         lines.push(`        ${fileCount} File(s)  ${totalSize.toLocaleString()} bytes`);
         lines.push(`        ${dirCount} Dir(s)   1,073,741,824 bytes free`);
         addOutput(lines);
@@ -123,24 +143,146 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
 
       case 'cd':
       case 'chdir': {
-        if (!args || args === '.') break;
-        if (args === '..') {
-          const lastSlash = currentPath.lastIndexOf('\\');
-          if (lastSlash > 2) setCurrentPath(currentPath.substring(0, lastSlash));
-          else setCurrentPath('C:\\');
-          break;
-        }
-        if (args === '\\' || args === '/') {
-          setCurrentPath('C:\\');
-          break;
-        }
-        const newPath = args.startsWith('C:') ? args : currentPath + '\\' + args;
-        const node = resolvePath(newPath);
+        if (!rest || rest === '.') break;
+        const newPath = resolveDosPath(currentPath, rest);
+        const node = fs.getNode(newPath);
         if (node && node.type === 'directory') {
-          setCurrentPath(newPath.replace(/\\+$/, ''));
+          setCurrentPath(newPath.replace(/\\+$/, '') || 'C:\\');
         } else {
           addOutput(['Invalid directory']);
         }
+        break;
+      }
+
+      case 'md':
+      case 'mkdir': {
+        if (!rest) { addOutput(['Required parameter missing']); break; }
+        const newPath = resolveDosPath(currentPath, rest);
+        const dirPath = getParentPath(newPath);
+        const name = newPath.split('\\').pop()!;
+        const result = fs.createFolder(dirPath, name);
+        if (!result.ok) addOutput([result.error]);
+        break;
+      }
+
+      case 'rd':
+      case 'rmdir': {
+        if (!rest) { addOutput(['Required parameter missing']); break; }
+        const target = resolveDosPath(currentPath, rest);
+        const node = fs.getNode(target);
+        if (!node) { addOutput(['Invalid path']); break; }
+        if (node.type !== 'directory') { addOutput(['The directory name is invalid.']); break; }
+        const result = fs.deleteToRecycleBin(target);
+        if (!result.ok) addOutput([result.error]);
+        break;
+      }
+
+      case 'del':
+      case 'erase': {
+        if (!rest) { addOutput(['Required parameter missing']); break; }
+        const target = resolveDosPath(currentPath, rest);
+        const node = fs.getNode(target);
+        if (!node || node.type !== 'file') { addOutput(['File not found - ' + rest]); break; }
+        const result = fs.deleteToRecycleBin(target);
+        if (!result.ok) addOutput([result.error]);
+        break;
+      }
+
+      case 'ren':
+      case 'rename': {
+        if (args.length < 2) { addOutput(['Required parameter missing']); break; }
+        const target = resolveDosPath(currentPath, args[0]);
+        const result = fs.rename(target, args[1]);
+        if (!result.ok) addOutput([result.error]);
+        break;
+      }
+
+      case 'copy': {
+        if (args.length < 2) { addOutput(['Required parameter missing']); break; }
+        const srcPath = resolveDosPath(currentPath, args[0]);
+        const srcNode = fs.getNode(srcPath);
+        if (!srcNode || srcNode.type !== 'file') { addOutput(['File not found - ' + args[0]]); break; }
+        let destPath = resolveDosPath(currentPath, args[1]);
+        const destNode = fs.getNode(destPath);
+        if (destNode && destNode.type === 'directory') {
+          destPath = `${destPath}\\${srcNode.name}`;
+        }
+        const destDir = getParentPath(destPath);
+        const destName = destPath.split('\\').pop()!;
+        const result = fs.createFile(destDir, destName, srcNode.content ?? '');
+        if (!result.ok) addOutput([result.error]);
+        else addOutput(['        1 file(s) copied.']);
+        break;
+      }
+
+      case 'edit': {
+        if (!rest) { addOutput(['Required parameter missing']); break; }
+        const target = resolveDosPath(currentPath, rest);
+        const node = fs.getNode(target);
+        if (!node || node.type !== 'file') { addOutput(['File not found - ' + rest]); break; }
+        openWindow('notepad', { launchParams: { filePath: target } });
+        break;
+      }
+
+      case 'start': {
+        if (!rest) { addOutput(['Required parameter missing']); break; }
+        const appId = getAppIdForFile(args[0]);
+        if (!appId) { addOutput(['The system cannot find the file specified.']); break; }
+        openWindow(appId);
+        break;
+      }
+
+      case 'attrib': {
+        const targetPath = rest ? resolveDosPath(currentPath, rest) : currentPath;
+        const node = fs.getNode(targetPath);
+        if (!node) { addOutput(['File not found']); break; }
+        const list = node.type === 'directory' ? (node.children ?? []) : [node];
+        addOutput(list.map((c) => `${c.readOnly ? 'R' : ' '}  ${c.type === 'directory' ? '<DIR>' : '     '}  ${c.name}`));
+        break;
+      }
+
+      case 'mem':
+        addOutput([
+          'Memory Type        Total       Used       Free',
+          '----------------  --------  --------  --------',
+          'Conventional         640K       98K       542K',
+          'Upper                  0K        0K         0K',
+          'Reserved               0K        0K         0K',
+          'Extended (XMS)     63,488K    12,336K    51,152K',
+          '',
+          'Total memory       64,128K    12,434K    51,694K',
+          '',
+          'Largest executable program size       542K',
+          'Largest free upper memory block         0K',
+        ]);
+        break;
+
+      case 'ipconfig':
+        addOutput([
+          '',
+          'Windows 98 IP Configuration',
+          '',
+          '        Host Name . . . . . . . . . : WIN98-PC',
+          '        IP Address. . . . . . . . . : 192.168.0.42',
+          '        Subnet Mask . . . . . . . . : 255.255.255.0',
+          '        Default Gateway . . . . . . : 192.168.0.1',
+          '',
+        ]);
+        break;
+
+      case 'ping': {
+        if (!rest) { addOutput(['Usage: ping hostname']); break; }
+        const host = args[0];
+        addOutput([`Pinging ${host} with 32 bytes of data:`, '']);
+        for (let i = 0; i < 4; i++) {
+          const ms = 20 + Math.floor(Math.random() * 60);
+          addOutput([`Reply from 192.168.0.1: bytes=32 time=${ms}ms TTL=128`]);
+        }
+        addOutput([
+          '',
+          `Ping statistics for ${host}:`,
+          '    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),',
+        ]);
         break;
       }
 
@@ -148,14 +290,25 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
         addOutput([
           'For more information on a specific command, type HELP command-name',
           '',
+          'ATTRIB   Displays or changes file attributes.',
           'CD       Displays the name of or changes the current directory.',
           'CLS      Clears the screen.',
+          'COPY     Copies one or more files to another location.',
           'DATE     Displays the date.',
+          'DEL      Deletes one or more files.',
           'DIR      Displays a list of files and subdirectories in a directory.',
           'ECHO     Displays messages.',
+          'EDIT     Opens a text file for editing.',
           'EXIT     Quits the MS-DOS prompt.',
           'FORMAT   Formats a disk for use with MS-DOS.',
           'HELP     Provides Help information for MS-DOS commands.',
+          'IPCONFIG Displays network configuration.',
+          'MD       Creates a directory.',
+          'MEM      Displays the amount of used and free memory.',
+          'PING     Sends ICMP echo requests to a host.',
+          'RD       Removes a directory.',
+          'REN      Renames a file or files.',
+          'START    Starts a program.',
           'TIME     Displays the system time.',
           'TREE     Graphically displays the directory structure of a drive.',
           'TYPE     Displays the contents of a text file.',
@@ -168,7 +321,7 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
         break;
 
       case 'echo':
-        addOutput([args || '']);
+        addOutput([rest || '']);
         break;
 
       case 'date':
@@ -180,11 +333,11 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
         break;
 
       case 'type': {
-        if (!args) { addOutput(['Required parameter missing']); break; }
-        const filePath = args.startsWith('C:') ? args : currentPath + '\\' + args;
-        const fileNode = resolvePath(filePath);
+        if (!rest) { addOutput(['Required parameter missing']); break; }
+        const filePath = resolveDosPath(currentPath, rest);
+        const fileNode = fs.getNode(filePath);
         if (!fileNode || fileNode.type !== 'file') {
-          addOutput(['File not found - ' + args]);
+          addOutput(['File not found - ' + rest]);
         } else if (fileNode.content) {
           addOutput(fileNode.content.split('\n'));
         } else {
@@ -194,8 +347,8 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
       }
 
       case 'tree': {
-        const targetPath = args || currentPath;
-        const node = resolvePath(targetPath);
+        const targetPath = rest ? resolveDosPath(currentPath, rest) : currentPath;
+        const node = fs.getNode(targetPath);
         if (!node || node.type !== 'directory') {
           addOutput(['Invalid path']);
           break;
@@ -206,7 +359,7 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
       }
 
       case 'format': {
-        if (args.toLowerCase().startsWith('c:')) {
+        if (args[0]?.toLowerCase().startsWith('c:')) {
           addOutput([
             'WARNING, ALL DATA ON NON-REMOVABLE DISK',
             'DRIVE C: WILL BE LOST!',
@@ -232,12 +385,30 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
       default:
         addOutput([`Bad command or file name`]);
     }
-  }, [currentPath, addOutput, closeWindow, windowId]);
+  }, [currentPath, addOutput, closeWindow, windowId, fs, openWindow]);
+
+  const handleTabCompletion = useCallback(() => {
+    const { prefix, partial } = splitForCompletion(input);
+    if (!partial) return;
+    const dirEntries = fs.listDir(currentPathRef.current) ?? [];
+    const names = dirEntries.map((n) => n.name);
+    const matches = matchCompletions(names, partial);
+    if (matches.length === 1) {
+      const entry = dirEntries.find((n) => n.name === matches[0]);
+      const suffix = entry?.type === 'directory' ? '\\' : '';
+      setInput(prefix + matches[0] + suffix);
+    } else if (matches.length > 1) {
+      addOutput([matches.join('   ')]);
+    }
+  }, [input, fs, addOutput]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       processCommand(input);
       setInput('');
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      handleTabCompletion();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (history.length === 0) return;
@@ -256,7 +427,7 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
         setInput(history[newIndex]);
       }
     }
-  }, [input, history, historyIndex, processCommand]);
+  }, [input, history, historyIndex, processCommand, handleTabCompletion]);
 
   return (
     <div
@@ -266,7 +437,7 @@ export default function MSDOSPrompt({ windowId }: AppComponentProps) {
       <div ref={scrollRef} className="flex-1 overflow-auto p-[4px] min-h-0">
         {output.map((line, i) => (
           <div key={i} className="whitespace-pre-wrap break-all">
-            {line.text || '\u00A0'}
+            {line.text || ' '}
           </div>
         ))}
         <div className="flex">

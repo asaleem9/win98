@@ -1,25 +1,29 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
+import { Dialog98 } from '@/components/ui/Dialog98';
+import { Input98 } from '@/components/ui/Input98';
+import { useSettings } from '@/contexts/SettingsContext';
+import { playSound } from '@/lib/sounds';
+import {
+  type Card,
+  type FCState,
+  SUITS,
+  SUIT_SYMBOLS,
+  suitColor,
+  rankLabel,
+  dealGame,
+  canMoveToFoundation,
+  canPlaceOnTableau,
+  maxMovable,
+  autoMoveToFoundations,
+  sequenceStart,
+} from './logic';
 
-type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
-
-interface Card {
-  suit: Suit;
-  rank: number;
-}
-
-interface FCState {
-  tableau: Card[][];
-  freeCells: (Card | null)[];
-  foundations: Card[][];
-  gameNum: number;
-  moves: number;
-  won: boolean;
-}
+const APP_ID = 'freecell';
 
 interface Selection {
   area: 'tableau' | 'freecell';
@@ -27,88 +31,49 @@ interface Selection {
   cardIndex: number;
 }
 
-const SUITS: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
-const SUIT_SYMBOLS: Record<Suit, string> = { hearts: '\u2665', diamonds: '\u2666', clubs: '\u2663', spades: '\u2660' };
-const RANK_LABELS: Record<number, string> = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
-
-function suitColor(suit: Suit): string {
-  return suit === 'hearts' || suit === 'diamonds' ? '#c00' : '#000';
+interface DragState {
+  area: 'tableau' | 'freecell';
+  col: number;
+  cardIndex: number;
+  cards: Card[];
+  pointerId: number;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  moved: boolean;
 }
 
-function isRed(suit: Suit): boolean {
-  return suit === 'hearts' || suit === 'diamonds';
+interface Stats {
+  gamesPlayed: number;
+  gamesWon: number;
+  streak: number;
+  bestStreak: number;
 }
 
-function rankLabel(rank: number): string {
-  return RANK_LABELS[rank] || String(rank);
-}
+const DEFAULT_STATS: Stats = { gamesPlayed: 0, gamesWon: 0, streak: 0, bestStreak: 0 };
 
-function seededRandom(seed: number): () => number {
-  let s = seed;
-  return () => {
-    s = (s * 214013 + 2531011) & 0x7fffffff;
-    return (s >> 16) & 0x7fff;
-  };
-}
+type DialogState =
+  | { kind: 'selectGame' }
+  | { kind: 'moveError'; message: string }
+  | { kind: 'stats' }
+  | null;
 
-function dealGame(gameNum: number): FCState {
-  const deck: Card[] = [];
-  for (const suit of SUITS) {
-    for (let rank = 1; rank <= 13; rank++) {
-      deck.push({ suit, rank });
-    }
-  }
-
-  const rand = seededRandom(gameNum);
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = rand() % (i + 1);
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-
-  const tableau: Card[][] = [[], [], [], [], [], [], [], []];
-  for (let i = 0; i < 52; i++) {
-    tableau[i % 8].push(deck[i]);
-  }
-
-  return {
-    tableau,
-    freeCells: [null, null, null, null],
-    foundations: [[], [], [], []],
-    gameNum,
-    moves: 0,
-    won: false,
-  };
-}
-
-function canMoveToFoundation(card: Card, foundations: Card[][]): number {
-  for (let i = 0; i < 4; i++) {
-    const f = foundations[i];
-    if (f.length === 0 && card.rank === 1) return i;
-    if (f.length > 0 && f[f.length - 1].suit === card.suit && f[f.length - 1].rank === card.rank - 1) return i;
-  }
-  return -1;
-}
-
-function canPlaceOnTableau(card: Card, pile: Card[]): boolean {
-  if (pile.length === 0) return true;
-  const top = pile[pile.length - 1];
-  return isRed(card.suit) !== isRed(top.suit) && card.rank === top.rank - 1;
-}
-
-function maxMovable(freeCellsEmpty: number, emptyTableauCols: number): number {
-  return (freeCellsEmpty + 1) * Math.pow(2, emptyTableauCols);
-}
-
-function checkWin(foundations: Card[][]): boolean {
-  return foundations.every((f) => f.length === 13);
-}
-
-function CardView({ card, onClick }: { card: Card; onClick?: () => void }) {
+function CardView({
+  card,
+  faded,
+  onPointerDown,
+}: {
+  card: Card;
+  faded?: boolean;
+  onPointerDown?: (e: React.PointerEvent) => void;
+}) {
   const color = suitColor(card.suit);
   return (
     <div
-      onClick={onClick}
-      className="w-[54px] h-[74px] rounded-[3px] border border-[#999] bg-white cursor-pointer select-none flex-shrink-0 relative font-[family-name:var(--win98-font)]"
+      onPointerDown={onPointerDown}
+      className="w-[54px] h-[74px] rounded-[3px] border border-[#999] bg-white cursor-pointer select-none flex-shrink-0 relative font-[family-name:var(--win98-font)] touch-none"
+      style={{ opacity: faded ? 0.35 : 1 }}
     >
       <div className="absolute top-[1px] left-[2px] text-[9px] leading-tight font-bold" style={{ color }}>
         <div>{rankLabel(card.rank)}</div>
@@ -121,12 +86,22 @@ function CardView({ card, onClick }: { card: Card; onClick?: () => void }) {
   );
 }
 
-function EmptySlot({ label, onClick, variant }: { label?: string; onClick?: () => void; variant?: 'freecell' | 'foundation' }) {
+function EmptySlot({
+  label,
+  onClick,
+  variant,
+}: {
+  label?: string;
+  onClick?: () => void;
+  variant?: 'freecell' | 'foundation';
+}) {
   return (
     <div
       onClick={onClick}
       className={`w-[54px] h-[74px] rounded-[3px] border-2 border-dashed flex items-center justify-center text-[18px] select-none cursor-pointer ${
-        variant === 'foundation' ? 'border-[rgba(255,255,255,0.35)] text-[rgba(255,255,255,0.4)]' : 'border-[rgba(255,255,255,0.25)] text-[rgba(255,255,255,0.3)]'
+        variant === 'foundation'
+          ? 'border-[rgba(255,255,255,0.35)] text-[rgba(255,255,255,0.4)]'
+          : 'border-[rgba(255,255,255,0.25)] text-[rgba(255,255,255,0.3)]'
       }`}
     >
       {label}
@@ -134,173 +109,360 @@ function EmptySlot({ label, onClick, variant }: { label?: string; onClick?: () =
   );
 }
 
-export default function FreeCell({ windowId }: AppComponentProps) {
+function WinCascade({ foundations, onDone }: { foundations: Card[][]; onDone: () => void }) {
+  const [settled, setSettled] = useState(false);
+  const allCards = foundations.flatMap((f, fi) => f.map((card, ci) => ({ card, fi, ci })));
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setSettled(true));
+    const timer = setTimeout(onDone, 700 + allCards.length * 18);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
+      {allCards.map(({ card, fi }, idx) => (
+        <div
+          key={idx}
+          className="absolute transition-all ease-out"
+          style={{
+            transitionDuration: '550ms',
+            transitionDelay: `${idx * 16}ms`,
+            left: settled ? `${64 + fi * 60}px` : `${(idx % 8) * 60 + 8}px`,
+            top: settled ? '40px' : `${100 + (idx % 13) * 16}px`,
+          }}
+        >
+          <CardView card={card} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function FreeCell({}: AppComponentProps) {
+  const { getAppPref, setAppPref } = useSettings();
+
   const [game, setGame] = useState<FCState>(() => dealGame(Math.floor(Math.random() * 32000) + 1));
+  const [history, setHistory] = useState<FCState[]>([]);
   const [selected, setSelected] = useState<Selection | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const [gameNumInput, setGameNumInput] = useState('1');
+  const [showWinAnim, setShowWinAnim] = useState(false);
+  const [showWinDialog, setShowWinDialog] = useState(false);
 
-  const newGame = useCallback((num?: number) => {
-    const gn = num ?? Math.floor(Math.random() * 32000) + 1;
-    setGame(dealGame(gn));
-    setSelected(null);
-  }, []);
+  const gameRef = useRef(game);
+  gameRef.current = game;
+  const dragTargetRef = useRef<HTMLElement | null>(null);
+  const wonHandledRef = useRef(false);
 
-  const autoMoveToFoundations = useCallback((state: FCState): FCState => {
-    let changed = true;
-    let s = { ...state, tableau: state.tableau.map((c) => [...c]), freeCells: [...state.freeCells], foundations: state.foundations.map((f) => [...f]) };
-    while (changed) {
-      changed = false;
-      // Check tableau tops
-      for (let col = 0; col < 8; col++) {
-        if (s.tableau[col].length === 0) continue;
-        const card = s.tableau[col][s.tableau[col].length - 1];
-        const fi = canMoveToFoundation(card, s.foundations);
-        if (fi >= 0) {
-          // Only auto-move if safe: rank <= 2 or both opposite-color (rank-1) are on foundations
-          if (card.rank <= 2 || isSafeToAutoMove(card, s.foundations)) {
-            s.foundations[fi] = [...s.foundations[fi], card];
-            s.tableau[col] = s.tableau[col].slice(0, -1);
-            changed = true;
-          }
-        }
-      }
-      // Check free cells
-      for (let i = 0; i < 4; i++) {
-        const card = s.freeCells[i];
-        if (!card) continue;
-        const fi = canMoveToFoundation(card, s.foundations);
-        if (fi >= 0 && (card.rank <= 2 || isSafeToAutoMove(card, s.foundations))) {
-          s.foundations[fi] = [...s.foundations[fi], card];
-          s.freeCells[i] = null;
-          changed = true;
-        }
-      }
-    }
-    s.won = checkWin(s.foundations);
-    return s;
-  }, []);
+  const stats = getAppPref<Stats>(APP_ID, 'stats', DEFAULT_STATS);
 
-  const handleClick = useCallback((area: 'tableau' | 'freecell' | 'foundation', col: number, cardIndex?: number) => {
-    if (game.won) return;
+  const recordGameStart = useCallback(() => {
+    setAppPref<Stats>(APP_ID, 'stats', {
+      ...stats,
+      gamesPlayed: stats.gamesPlayed + 1,
+      streak: gameRef.current.won ? stats.streak : 0,
+    });
+  }, [stats, setAppPref]);
 
-    if (selected && selected.area === area && selected.col === col) {
+  const recordWin = useCallback(() => {
+    const newStreak = stats.streak + 1;
+    setAppPref<Stats>(APP_ID, 'stats', {
+      ...stats,
+      gamesWon: stats.gamesWon + 1,
+      streak: newStreak,
+      bestStreak: Math.max(stats.bestStreak, newStreak),
+    });
+  }, [stats, setAppPref]);
+
+  const newGame = useCallback(
+    (num?: number) => {
+      recordGameStart();
+      const gn = num ?? Math.floor(Math.random() * 32000) + 1;
+      wonHandledRef.current = false;
+      setShowWinAnim(false);
+      setShowWinDialog(false);
+      setGame(dealGame(gn));
+      setHistory([]);
       setSelected(null);
-      return;
-    }
+      setDrag(null);
+    },
+    [recordGameStart],
+  );
 
-    if (selected) {
-      setGame((prev) => {
+  // Handle the win transition once: play the sound, record the stat, and
+  // cascade the cards into the foundations before showing the dialog.
+  useEffect(() => {
+    if (game.won && !wonHandledRef.current) {
+      wonHandledRef.current = true;
+      playSound('cardWin');
+      recordWin();
+      setShowWinAnim(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.won]);
+
+  const pushHistory = useCallback((state: FCState) => {
+    setHistory((h) => [...h, state]);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    setHistory((h) => {
+      if (h.length === 0) return h;
+      setGame(h[h.length - 1]);
+      setSelected(null);
+      setDrag(null);
+      return h.slice(0, -1);
+    });
+  }, []);
+
+  /** Attempts to move `cards` (already lifted from `source`) onto `destArea`/`destCol`. */
+  const attemptMove = useCallback(
+    (
+      source: { area: 'tableau' | 'freecell'; col: number; cardIndex: number },
+      cards: Card[],
+      destArea: 'tableau' | 'freecell' | 'foundation',
+      destCol: number,
+    ) => {
+      const prev = gameRef.current;
+      if (prev.won || cards.length === 0) return;
+      if (source.area === destArea && source.col === destCol) return;
+
+      const stripSource = (state: FCState): FCState => {
+        const tableau = state.tableau.map((c) => [...c]);
+        const freeCells = [...state.freeCells];
+        if (source.area === 'tableau') {
+          tableau[source.col] = tableau[source.col].slice(0, source.cardIndex);
+        } else {
+          freeCells[source.col] = null;
+        }
+        return { ...state, tableau, freeCells };
+      };
+
+      if (destArea === 'foundation') {
+        if (cards.length !== 1) return;
+        const fi = canMoveToFoundation(cards[0], prev.foundations);
+        if (fi < 0 || fi !== destCol) return;
+        const stripped = stripSource(prev);
+        const foundations = stripped.foundations.map((f, i) => (i === fi ? [...f, cards[0]] : f));
+        pushHistory(prev);
+        setGame(autoMoveToFoundations({ ...stripped, foundations, moves: prev.moves + 1 }));
+        playSound('cardFlip');
+        return;
+      }
+
+      if (destArea === 'freecell') {
+        if (cards.length !== 1 || prev.freeCells[destCol] !== null) return;
+        const stripped = stripSource(prev);
+        const freeCells = [...stripped.freeCells];
+        freeCells[destCol] = cards[0];
+        pushHistory(prev);
+        setGame(autoMoveToFoundations({ ...stripped, freeCells, moves: prev.moves + 1 }));
+        playSound('cardFlip');
+        return;
+      }
+
+      // Tableau destination
+      const targetPile = prev.tableau[destCol];
+      const destIsEmpty = targetPile.length === 0;
+      if (!destIsEmpty && !canPlaceOnTableau(cards[0], targetPile)) return;
+
+      if (cards.length > 1) {
+        const freeCount = prev.freeCells.filter((c) => c === null).length;
+        const emptyCount = prev.tableau.filter(
+          (t, i) => t.length === 0 && i !== destCol && !(source.area === 'tableau' && i === source.col),
+        ).length;
+        const allowed = maxMovable(freeCount, emptyCount, destIsEmpty);
+        if (cards.length > allowed) {
+          playSound('error');
+          setDialog({
+            kind: 'moveError',
+            message: emptyCount === 0 ? 'Not enough free cells' : 'Not enough free cells and columns',
+          });
+          return;
+        }
+      }
+
+      const stripped = stripSource(prev);
+      const tableau = stripped.tableau.map((c) => [...c]);
+      tableau[destCol] = [...tableau[destCol], ...cards];
+      pushHistory(prev);
+      setGame(autoMoveToFoundations({ ...stripped, tableau, moves: prev.moves + 1 }));
+      playSound('cardFlip');
+    },
+    [pushHistory],
+  );
+
+  // ---- Click-to-move fallback ----
+
+  const handleClick = useCallback(
+    (area: 'tableau' | 'freecell' | 'foundation', col: number, cardIndex?: number) => {
+      if (game.won) return;
+
+      if (selected && selected.area === area && selected.col === col) {
+        setSelected(null);
+        return;
+      }
+
+      if (selected) {
+        const src = gameRef.current;
         let cards: Card[] = [];
         if (selected.area === 'freecell') {
-          const c = prev.freeCells[selected.col];
+          const c = src.freeCells[selected.col];
           if (c) cards = [c];
         } else {
-          cards = prev.tableau[selected.col].slice(selected.cardIndex);
+          cards = src.tableau[selected.col].slice(selected.cardIndex);
         }
-        if (cards.length === 0) return prev;
-
-        // Move to foundation
-        if (area === 'foundation' && cards.length === 1) {
-          const fi = canMoveToFoundation(cards[0], prev.foundations);
-          if (fi >= 0 && fi === col) {
-            const newFoundations = prev.foundations.map((f, i) => (i === fi ? [...f, cards[0]] : [...f]));
-            let newTableau = prev.tableau.map((c) => [...c]);
-            let newFreeCells = [...prev.freeCells];
-            if (selected.area === 'tableau') {
-              newTableau[selected.col] = newTableau[selected.col].slice(0, selected.cardIndex);
-            } else {
-              newFreeCells[selected.col] = null;
-            }
-            const s = autoMoveToFoundations({ ...prev, tableau: newTableau, freeCells: newFreeCells, foundations: newFoundations, moves: prev.moves + 1 });
-            return s;
-          }
-        }
-
-        // Move to free cell
-        if (area === 'freecell' && cards.length === 1 && prev.freeCells[col] === null) {
-          let newTableau = prev.tableau.map((c) => [...c]);
-          let newFreeCells = [...prev.freeCells];
-          if (selected.area === 'tableau') {
-            newTableau[selected.col] = newTableau[selected.col].slice(0, selected.cardIndex);
-          } else {
-            newFreeCells[selected.col] = null;
-          }
-          newFreeCells[col] = cards[0];
-          return autoMoveToFoundations({ ...prev, tableau: newTableau, freeCells: newFreeCells, moves: prev.moves + 1 });
-        }
-
-        // Move to tableau
-        if (area === 'tableau') {
-          const targetPile = prev.tableau[col];
-          if (canPlaceOnTableau(cards[0], targetPile) || targetPile.length === 0) {
-            const freeCount = prev.freeCells.filter((c) => c === null).length;
-            const emptyCount = prev.tableau.filter((t, i) => t.length === 0 && i !== col && (selected.area !== 'tableau' || i !== selected.col)).length;
-            if (cards.length > maxMovable(freeCount, emptyCount)) return prev;
-            if (cards.length > 1 && !canPlaceOnTableau(cards[0], targetPile)) return prev;
-
-            let newTableau = prev.tableau.map((c) => [...c]);
-            let newFreeCells = [...prev.freeCells];
-            if (selected.area === 'tableau') {
-              newTableau[selected.col] = newTableau[selected.col].slice(0, selected.cardIndex);
-            } else {
-              newFreeCells[selected.col] = null;
-            }
-            newTableau[col] = [...newTableau[col], ...cards];
-            return autoMoveToFoundations({ ...prev, tableau: newTableau, freeCells: newFreeCells, moves: prev.moves + 1 });
-          }
-        }
-
-        return prev;
-      });
-      setSelected(null);
-      return;
-    }
-
-    // Select a card
-    if (area === 'freecell' && game.freeCells[col]) {
-      setSelected({ area: 'freecell', col, cardIndex: 0 });
-    } else if (area === 'tableau' && game.tableau[col].length > 0) {
-      // Find the deepest valid sequence from the bottom
-      const pile = game.tableau[col];
-      let startIdx = pile.length - 1;
-      while (startIdx > 0) {
-        const above = pile[startIdx - 1];
-        const below = pile[startIdx];
-        if (isRed(above.suit) !== isRed(below.suit) && above.rank === below.rank + 1) {
-          startIdx--;
-        } else break;
+        attemptMove(selected, cards, area, col);
+        setSelected(null);
+        return;
       }
-      const ci = cardIndex !== undefined && cardIndex >= startIdx ? cardIndex : pile.length - 1;
-      setSelected({ area: 'tableau', col, cardIndex: ci });
-    }
-  }, [game, selected, autoMoveToFoundations]);
 
-  const handleDoubleClick = useCallback((area: 'tableau' | 'freecell', col: number) => {
-    if (game.won) return;
-    setGame((prev) => {
+      // Select a card
+      if (area === 'freecell' && game.freeCells[col]) {
+        setSelected({ area: 'freecell', col, cardIndex: 0 });
+      } else if (area === 'tableau' && game.tableau[col].length > 0) {
+        const pile = game.tableau[col];
+        const startIdx = sequenceStart(pile);
+        const ci = cardIndex !== undefined && cardIndex >= startIdx ? cardIndex : pile.length - 1;
+        setSelected({ area: 'tableau', col, cardIndex: ci });
+      }
+    },
+    [game, selected, attemptMove],
+  );
+
+  const handleDoubleClick = useCallback(
+    (area: 'tableau' | 'freecell', col: number) => {
+      if (game.won) return;
+      const src = gameRef.current;
       let card: Card | null = null;
-      if (area === 'tableau' && prev.tableau[col].length > 0) {
-        card = prev.tableau[col][prev.tableau[col].length - 1];
+      if (area === 'tableau' && src.tableau[col].length > 0) {
+        card = src.tableau[col][src.tableau[col].length - 1];
       } else if (area === 'freecell') {
-        card = prev.freeCells[col];
+        card = src.freeCells[col];
       }
-      if (!card) return prev;
+      if (!card) return;
+      const fi = canMoveToFoundation(card, src.foundations);
+      if (fi < 0) return;
+      const cardIndex = area === 'tableau' ? src.tableau[col].length - 1 : 0;
+      attemptMove({ area, col, cardIndex }, [card], 'foundation', fi);
+      setSelected(null);
+    },
+    [game, attemptMove],
+  );
 
-      const fi = canMoveToFoundation(card, prev.foundations);
-      if (fi >= 0) {
-        const newFoundations = prev.foundations.map((f, i) => (i === fi ? [...f, card!] : [...f]));
-        let newTableau = prev.tableau.map((c) => [...c]);
-        let newFreeCells = [...prev.freeCells];
-        if (area === 'tableau') {
-          newTableau[col] = newTableau[col].slice(0, -1);
-        } else {
-          newFreeCells[col] = null;
-        }
-        return autoMoveToFoundations({ ...prev, tableau: newTableau, freeCells: newFreeCells, foundations: newFoundations, moves: prev.moves + 1 });
+  // ---- Pointer-capture drag and drop ----
+
+  const beginDrag = useCallback(
+    (area: 'tableau' | 'freecell', col: number, cardIndex: number) => (e: React.PointerEvent) => {
+      if (gameRef.current.won) return;
+      const src = gameRef.current;
+      let cards: Card[] = [];
+      let effectiveIndex = cardIndex;
+
+      if (area === 'freecell') {
+        const c = src.freeCells[col];
+        if (!c) return;
+        cards = [c];
+        effectiveIndex = 0;
+      } else {
+        const pile = src.tableau[col];
+        if (pile.length === 0) return;
+        const startIdx = sequenceStart(pile);
+        effectiveIndex = cardIndex >= startIdx ? cardIndex : pile.length - 1;
+        cards = pile.slice(effectiveIndex);
       }
-      return prev;
-    });
-    setSelected(null);
-  }, [game, autoMoveToFoundations]);
+
+      e.preventDefault();
+      const target = e.currentTarget as HTMLElement;
+      target.setPointerCapture(e.pointerId);
+      dragTargetRef.current = target;
+      setSelected(null);
+      setDrag({
+        area,
+        col,
+        cardIndex: effectiveIndex,
+        cards,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        x: e.clientX,
+        y: e.clientY,
+        moved: false,
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const target = dragTargetRef.current;
+    if (!drag || !target) return;
+
+    const handleMove = (e: PointerEvent) => {
+      setDrag((d) => {
+        if (!d) return d;
+        const moved = d.moved || Math.abs(e.clientX - d.startX) > 4 || Math.abs(e.clientY - d.startY) > 4;
+        return { ...d, x: e.clientX, y: e.clientY, moved };
+      });
+    };
+
+    const finish = (clientX: number, clientY: number, pointerId: number) => {
+      target.releasePointerCapture(pointerId);
+      const d = drag;
+      if (!d.moved) {
+        // Treat as a click on the origin card
+        handleClick(d.area, d.col, d.cardIndex);
+        setDrag(null);
+        return;
+      }
+      const under = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+      const zoneEl = under?.closest('[data-dropzone]') as HTMLElement | null;
+      const zone = zoneEl?.dataset.dropzone;
+      if (zone) {
+        const [zoneArea, zoneColStr] = zone.split('-');
+        const zoneCol = parseInt(zoneColStr, 10);
+        if (zoneArea === 'tableau' || zoneArea === 'freecell' || zoneArea === 'foundation') {
+          attemptMove({ area: d.area, col: d.col, cardIndex: d.cardIndex }, d.cards, zoneArea, zoneCol);
+        }
+      }
+      setDrag(null);
+    };
+
+    const handleUp = (e: PointerEvent) => finish(e.clientX, e.clientY, e.pointerId);
+    const handleLost = () => setDrag(null);
+
+    target.addEventListener('pointermove', handleMove);
+    target.addEventListener('pointerup', handleUp);
+    target.addEventListener('lostpointercapture', handleLost);
+    return () => {
+      target.removeEventListener('pointermove', handleMove);
+      target.removeEventListener('pointerup', handleUp);
+      target.removeEventListener('lostpointercapture', handleLost);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag?.pointerId]);
+
+  // ---- Menu actions ----
+
+  const openSelectGame = useCallback(() => {
+    setGameNumInput(String(game.gameNum));
+    setDialog({ kind: 'selectGame' });
+  }, [game.gameNum]);
+
+  const confirmSelectGame = useCallback(() => {
+    const n = parseInt(gameNumInput, 10);
+    if (Number.isFinite(n) && n >= 1 && n <= 32000) {
+      newGame(n);
+      setDialog(null);
+    } else {
+      playSound('error');
+    }
+  }, [gameNumInput, newGame]);
 
   const menus: MenuDefinition[] = [
     {
@@ -309,34 +471,112 @@ export default function FreeCell({ windowId }: AppComponentProps) {
         { label: 'New Game', shortcut: 'F2', onClick: () => newGame() },
         { label: 'Restart', onClick: () => newGame(game.gameNum) },
         { label: '', separator: true },
-        { label: 'Select Game...', onClick: () => {
-          const num = prompt('Enter a game number (1-32000):');
-          if (num) { const n = parseInt(num); if (n >= 1 && n <= 32000) newGame(n); }
-        }},
+        { label: 'Select Game...', onClick: openSelectGame },
+        { label: '', separator: true },
+        { label: 'Undo', shortcut: 'Ctrl+Z', onClick: handleUndo, disabled: history.length === 0 },
+        { label: '', separator: true },
+        { label: 'Statistics...', onClick: () => setDialog({ kind: 'stats' }) },
       ],
     },
     {
       label: 'Help',
-      items: [
-        { label: 'About FreeCell...', onClick: () => {} },
-      ],
+      items: [{ label: 'About FreeCell...', onClick: () => window.dispatchEvent(new CustomEvent('win98-system-dialog', { detail: { title: 'About FreeCell', message: 'FreeCell for Windows 98\\n\\nThere are 32,000 numbered games. It is believed (almost) all of them can be won.', icon: 'info' } })) }],
     },
   ];
+
+  const winRate = stats.gamesPlayed > 0 ? Math.round((stats.gamesWon / stats.gamesPlayed) * 100) : 0;
 
   return (
     <div className="flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px]">
       <MenuBar menus={menus} />
 
-      <div className="flex-1 bg-[#008000] p-2 overflow-auto">
-        {game.won && (
+      <div className="relative flex-1 bg-[#008000] p-2 overflow-auto">
+        {showWinAnim && (
+          <WinCascade
+            foundations={game.foundations}
+            onDone={() => {
+              setShowWinAnim(false);
+              setShowWinDialog(true);
+            }}
+          />
+        )}
+
+        {showWinDialog && (
           <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/40">
-            <div className="bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] p-6 text-center">
-              <div className="text-lg font-bold mb-3">You Win!</div>
-              <div className="mb-3">Game #{game.gameNum} completed in {game.moves} moves!</div>
-              <button onClick={() => newGame()} className="px-4 py-1 bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]">
-                New Game
-              </button>
-            </div>
+            <Dialog98
+              title="FreeCell"
+              icon="info"
+              message={
+                <div>
+                  <div className="font-bold mb-1">You win!</div>
+                  <div>
+                    Game #{game.gameNum} completed in {game.moves} moves.
+                  </div>
+                  <div className="mt-1">Current streak: {stats.streak}</div>
+                </div>
+              }
+              buttons={[{ label: 'New Game', onClick: () => { setShowWinDialog(false); newGame(); }, default: true }]}
+            />
+          </div>
+        )}
+
+        {dialog?.kind === 'selectGame' && (
+          <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/40">
+            <Dialog98
+              title="Select Game"
+              icon="question"
+              message={
+                <div className="flex flex-col gap-2">
+                  <div>Enter a game number (1-32000):</div>
+                  <Input98
+                    type="number"
+                    min={1}
+                    max={32000}
+                    value={gameNumInput}
+                    autoFocus
+                    onChange={(e) => setGameNumInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') confirmSelectGame();
+                      if (e.key === 'Escape') setDialog(null);
+                    }}
+                  />
+                </div>
+              }
+              buttons={[
+                { label: 'OK', onClick: confirmSelectGame, default: true },
+                { label: 'Cancel', onClick: () => setDialog(null) },
+              ]}
+            />
+          </div>
+        )}
+
+        {dialog?.kind === 'moveError' && (
+          <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/40">
+            <Dialog98
+              title="FreeCell"
+              icon="error"
+              message={dialog.message}
+              buttons={[{ label: 'OK', onClick: () => setDialog(null), default: true }]}
+            />
+          </div>
+        )}
+
+        {dialog?.kind === 'stats' && (
+          <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/40">
+            <Dialog98
+              title="Statistics"
+              icon="info"
+              message={
+                <div className="flex flex-col gap-[2px]">
+                  <div>Games played: {stats.gamesPlayed}</div>
+                  <div>Games won: {stats.gamesWon}</div>
+                  <div>Win rate: {winRate}%</div>
+                  <div>Current streak: {stats.streak}</div>
+                  <div>Best streak: {stats.bestStreak}</div>
+                </div>
+              }
+              buttons={[{ label: 'OK', onClick: () => setDialog(null), default: true }]}
+            />
           </div>
         )}
 
@@ -346,12 +586,17 @@ export default function FreeCell({ windowId }: AppComponentProps) {
             {game.freeCells.map((cell, i) => (
               <div
                 key={i}
-                onClick={() => handleClick('freecell', i)}
+                data-dropzone={`freecell-${i}`}
+                onClick={() => !cell && handleClick('freecell', i)}
                 onDoubleClick={() => cell && handleDoubleClick('freecell', i)}
               >
                 {cell ? (
                   <div className={selected?.area === 'freecell' && selected?.col === i ? 'ring-2 ring-yellow-300 rounded-[3px]' : ''}>
-                    <CardView card={cell} />
+                    <CardView
+                      card={cell}
+                      faded={drag?.area === 'freecell' && drag?.col === i}
+                      onPointerDown={beginDrag('freecell', i, 0)}
+                    />
                   </div>
                 ) : (
                   <EmptySlot variant="freecell" />
@@ -361,7 +606,7 @@ export default function FreeCell({ windowId }: AppComponentProps) {
           </div>
           <div className="flex gap-1">
             {game.foundations.map((f, i) => (
-              <div key={i} onClick={() => handleClick('foundation', i)}>
+              <div key={i} data-dropzone={`foundation-${i}`} onClick={() => handleClick('foundation', i)}>
                 {f.length > 0 ? (
                   <CardView card={f[f.length - 1]} />
                 ) : (
@@ -375,48 +620,63 @@ export default function FreeCell({ windowId }: AppComponentProps) {
         {/* Tableau */}
         <div className="flex gap-1 justify-center">
           {game.tableau.map((pile, col) => (
-            <div key={col} className="relative w-[54px]" style={{ minHeight: 74 }}>
+            <div
+              key={col}
+              data-dropzone={`tableau-${col}`}
+              className="relative w-[54px]"
+              style={{ minHeight: 74 }}
+            >
               {pile.length === 0 ? (
                 <EmptySlot onClick={() => handleClick('tableau', col)} />
               ) : (
-                pile.map((card, i) => (
-                  <div
-                    key={i}
-                    className="absolute left-0"
-                    style={{ top: i * 18 }}
-                    onClick={() => handleClick('tableau', col, i)}
-                    onDoubleClick={() => i === pile.length - 1 && handleDoubleClick('tableau', col)}
-                  >
-                    <div className={
-                      selected?.area === 'tableau' && selected?.col === col && i >= selected?.cardIndex
-                        ? 'ring-2 ring-yellow-300 rounded-[3px]' : ''
-                    }>
-                      <CardView card={card} />
+                pile.map((card, i) => {
+                  const isDragging = drag?.area === 'tableau' && drag?.col === col && i >= drag?.cardIndex;
+                  return (
+                    <div
+                      key={i}
+                      className="absolute left-0"
+                      style={{ top: i * 18 }}
+                      onClick={() => handleClick('tableau', col, i)}
+                      onDoubleClick={() => i === pile.length - 1 && handleDoubleClick('tableau', col)}
+                    >
+                      <div
+                        className={
+                          selected?.area === 'tableau' && selected?.col === col && i >= selected?.cardIndex
+                            ? 'ring-2 ring-yellow-300 rounded-[3px]'
+                            : ''
+                        }
+                      >
+                        <CardView card={card} faded={isDragging} onPointerDown={beginDrag('tableau', col, i)} />
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           ))}
         </div>
       </div>
 
-      <StatusBar98 panels={[
-        { content: `Game #${game.gameNum}` },
-        { content: `Moves: ${game.moves}`, width: 80 },
-      ]} />
+      {drag?.moved && (
+        <div
+          className="fixed pointer-events-none z-[100]"
+          style={{ left: drag.x - 27, top: drag.y - 20 }}
+        >
+          {drag.cards.map((card, i) => (
+            <div key={i} className="absolute left-0" style={{ top: i * 18 }}>
+              <CardView card={card} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <StatusBar98
+        panels={[
+          { content: `Game #${game.gameNum}` },
+          { content: `Moves: ${game.moves}`, width: 80 },
+          { content: `Free cells left: ${game.freeCells.filter((c) => c === null).length}`, width: 130 },
+        ]}
+      />
     </div>
   );
-}
-
-function isSafeToAutoMove(card: Card, foundations: Card[][]): boolean {
-  const oppositeColor = isRed(card.suit) ? 'black' : 'red';
-  for (const f of foundations) {
-    if (f.length === 0) continue;
-    const topSuit = f[f.length - 1].suit;
-    if ((isRed(topSuit) ? 'red' : 'black') === oppositeColor) {
-      if (f[f.length - 1].rank < card.rank - 1) return false;
-    }
-  }
-  return true;
 }

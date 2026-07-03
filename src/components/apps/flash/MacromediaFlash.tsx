@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { playSound } from '@/lib/sounds';
+import { createEmptyFrames, isBlankFrame, nextFrame, nextLayerName, Layer } from './flashHelpers';
 
 const MENU_ITEMS = ['File', 'Edit', 'View', 'Insert', 'Modify', 'Text', 'Control', 'Window', 'Help'];
 
@@ -23,16 +25,143 @@ const TOOLS = [
   { icon: '🔍', label: 'Zoom' },
 ];
 
+const PENCIL_TOOL = 8;
+const BRUSH_TOOL = 9;
+
 const TOTAL_FRAMES = 60;
+const FPS = 12;
+const STAGE_WIDTH = 550;
+const STAGE_HEIGHT = 400;
 
 export default function MacromediaFlash({ windowId }: AppComponentProps) {
   const [selectedTool, setSelectedTool] = useState(0);
   const [currentFrame, setCurrentFrame] = useState(1);
   const [selectedLayer, setSelectedLayer] = useState(0);
+  const [currentColor, setCurrentColor] = useState('#000000');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [onionSkin, setOnionSkin] = useState(false);
+  const [layers, setLayers] = useState<Layer[]>([
+    { name: 'Layer 1', visible: true, locked: false, frames: createEmptyFrames(TOTAL_FRAMES) },
+  ]);
 
-  const layers = [
-    { name: 'Layer 1', visible: true, locked: false },
-  ];
+  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const onionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawingRef = useRef(false);
+
+  // Draw whatever's stored for the current frame onto every layer's canvas.
+  useEffect(() => {
+    layers.forEach((layer, i) => {
+      const canvas = canvasRefs.current[i];
+      const ctx = canvas?.getContext('2d');
+      if (!ctx || !canvas) return;
+      ctx.clearRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
+      const snapshot = layer.frames[currentFrame - 1];
+      if (!isBlankFrame(snapshot)) {
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0);
+        img.src = snapshot as string;
+      }
+    });
+  }, [currentFrame, layers.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Onion skin: faint preview of the previous frame on the active layer.
+  useEffect(() => {
+    const canvas = onionCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    ctx.clearRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
+    if (!onionSkin || isPlaying || currentFrame <= 1) return;
+    const prevSnapshot = layers[selectedLayer]?.frames[currentFrame - 2];
+    if (isBlankFrame(prevSnapshot)) return;
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0);
+    img.src = prevSnapshot as string;
+  }, [onionSkin, isPlaying, currentFrame, selectedLayer, layers]);
+
+  // Playback loop.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const id = setInterval(() => {
+      setCurrentFrame((f) => nextFrame(f, TOTAL_FRAMES));
+    }, 1000 / FPS);
+    return () => clearInterval(id);
+  }, [isPlaying]);
+
+  const commitStroke = () => {
+    const canvas = canvasRefs.current[selectedLayer];
+    if (!canvas) return;
+    let dataUrl: string | null = null;
+    try {
+      dataUrl = canvas.toDataURL();
+    } catch {
+      return;
+    }
+    setLayers((prev) =>
+      prev.map((layer, i) =>
+        i === selectedLayer
+          ? {
+              ...layer,
+              frames: layer.frames.map((f, fi) => (fi === currentFrame - 1 ? dataUrl : f)),
+            }
+          : layer
+      )
+    );
+  };
+
+  const canDraw = !isPlaying && (selectedTool === PENCIL_TOOL || selectedTool === BRUSH_TOOL);
+
+  const handlePointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!canDraw) return;
+    const canvas = canvasRefs.current[selectedLayer];
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    isDrawingRef.current = true;
+    const rect = canvas.getBoundingClientRect();
+    ctx.strokeStyle = currentColor;
+    ctx.lineWidth = selectedTool === BRUSH_TOOL ? 6 : 1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  const handlePointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!isDrawingRef.current) return;
+    const canvas = canvasRefs.current[selectedLayer];
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const handlePointerUp = () => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    commitStroke();
+  };
+
+  const handlePlay = () => {
+    if (isPlaying) return;
+    setIsPlaying(true);
+    playSound?.('chord');
+  };
+
+  const handleStop = () => {
+    setIsPlaying(false);
+  };
+
+  const handleAddLayer = () => {
+    setLayers((prev) => {
+      const next = [
+        ...prev,
+        { name: nextLayerName(prev), visible: true, locked: false, frames: createEmptyFrames(TOTAL_FRAMES) },
+      ];
+      setSelectedLayer(next.length - 1);
+      return next;
+    });
+    playSound?.('ding');
+  };
 
   return (
     <div className="flex flex-col h-full text-[11px] select-none" style={{ backgroundColor: '#d4d0c8', color: '#000', fontFamily: 'var(--win98-font)' }} data-window-id={windowId}>
@@ -51,9 +180,28 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
         <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">📂</button>
         <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">💾</button>
         <div className="w-px h-[18px] mx-[2px] border-l border-[#808080] border-r border-r-white" />
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">▶</button>
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">⏹</button>
+        <button
+          className={`w-[23px] h-[22px] flex items-center justify-center border text-[11px] ${isPlaying ? 'border-[#808080] border-r-white border-b-white bg-[#a0a0a0]' : 'border-transparent hover:win98-flat-raised'}`}
+          onClick={handlePlay}
+          title="Play"
+        >
+          ▶
+        </button>
+        <button
+          className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]"
+          onClick={handleStop}
+          title="Stop"
+        >
+          ⏹
+        </button>
         <div className="w-px h-[18px] mx-[2px] border-l border-[#808080] border-r border-r-white" />
+        <button
+          className={`h-[22px] px-1 flex items-center justify-center border text-[10px] ${onionSkin ? 'border-[#808080] border-r-white border-b-white bg-[#a0a0a0]' : 'border-transparent hover:win98-flat-raised'}`}
+          onClick={() => setOnionSkin((v) => !v)}
+          title="Onion Skin"
+        >
+          Onion
+        </button>
         <span className="text-[10px] ml-1">100%</span>
       </div>
 
@@ -80,7 +228,9 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
             ))}
             {/* Add layer button */}
             <div className="h-[20px] flex items-center px-1 gap-1 border-b border-[#c0c0c0]">
-              <button className="text-[10px] hover:underline">+ Add Layer</button>
+              <button className="text-[10px] hover:underline" onClick={handleAddLayer}>
+                + Add Layer
+              </button>
             </div>
           </div>
 
@@ -101,7 +251,7 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
             </div>
 
             {/* Layer frames */}
-            {layers.map((_, li) => (
+            {layers.map((layer, li) => (
               <div key={li} className="h-[20px] flex border-b border-[#c0c0c0]">
                 {Array.from({ length: TOTAL_FRAMES }, (_, fi) => (
                   <div
@@ -111,7 +261,7 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
                     } ${(fi + 1) % 5 === 0 ? 'border-r-[#808080]' : 'border-r-[#d0d0d0]'}`}
                     onClick={() => setCurrentFrame(fi + 1)}
                   >
-                    {fi === 0 && (
+                    {(fi === 0 || !isBlankFrame(layer.frames[fi])) && (
                       <div className="w-[4px] h-[4px] bg-black rounded-full mx-auto mt-[7px]" />
                     )}
                   </div>
@@ -153,16 +303,51 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
           {/* Colors */}
           <div className="mt-2 flex flex-col items-center gap-1">
             <div className="relative w-[24px] h-[24px]">
-              <div className="absolute bottom-0 right-0 w-[14px] h-[14px] border border-[#808080] bg-white" />
-              <div className="absolute top-0 left-0 w-[14px] h-[14px] border border-[#808080] bg-black" />
+              <button
+                aria-label="White"
+                className="absolute bottom-0 right-0 w-[14px] h-[14px] border border-[#808080] bg-white"
+                onClick={() => setCurrentColor('#ffffff')}
+              />
+              <button
+                aria-label="Black"
+                className="absolute top-0 left-0 w-[14px] h-[14px] border border-[#808080] bg-black"
+                onClick={() => setCurrentColor('#000000')}
+              />
             </div>
+            <div className="win98-sunken w-[20px] h-[10px]" style={{ backgroundColor: currentColor }} />
           </div>
         </div>
 
         {/* Stage (canvas) */}
         <div className="flex-1 overflow-auto flex items-center justify-center" style={{ backgroundColor: '#808080' }}>
-          <div className="bg-white border border-[#000]" style={{ width: '550px', height: '400px' }}>
-            {/* Empty stage */}
+          <div className="relative bg-white border border-[#000]" style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}>
+            <canvas
+              ref={onionCanvasRef}
+              width={STAGE_WIDTH}
+              height={STAGE_HEIGHT}
+              className="absolute inset-0 pointer-events-none"
+              style={{ opacity: 0.3 }}
+            />
+            {layers.map((layer, i) => (
+              <canvas
+                key={i}
+                ref={(el) => {
+                  canvasRefs.current[i] = el;
+                }}
+                width={STAGE_WIDTH}
+                height={STAGE_HEIGHT}
+                className="absolute inset-0 pointer-events-none"
+                style={{ display: layer.visible ? 'block' : 'none' }}
+              />
+            ))}
+            <div
+              className="absolute inset-0"
+              style={{ cursor: canDraw ? 'crosshair' : 'default' }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+            />
           </div>
         </div>
 

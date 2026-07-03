@@ -2,6 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { Select98 } from '@/components/ui/Select98';
+import { Checkbox98 } from '@/components/ui/Checkbox98';
+import { buildSubrangeCodepoints, subrangeOptions, UnicodeSubrange } from './unicodeRanges';
 
 const charNames: Record<number, string> = {
   32: 'Space', 33: 'Exclamation Mark', 34: 'Quotation Mark', 35: 'Number Sign',
@@ -33,18 +36,24 @@ function getCharName(code: number): string {
   return `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
 }
 
-export default function CharacterMap({ windowId }: AppComponentProps) {
+export default function CharacterMap({}: AppComponentProps) {
   const [selectedChar, setSelectedChar] = useState<number | null>(null);
+  const [hoveredChar, setHoveredChar] = useState<number | null>(null);
   const [selectedFont, setSelectedFont] = useState('Arial');
   const [copiedText, setCopiedText] = useState('');
+  const [advancedView, setAdvancedView] = useState(false);
+  const [subrange, setSubrange] = useState<UnicodeSubrange>('latin1');
 
   const characters = useMemo(() => {
+    if (advancedView) return buildSubrangeCodepoints(subrange);
     const chars: number[] = [];
     for (let i = 32; i <= 127; i++) chars.push(i);
     for (let i = 160; i <= 255; i++) chars.push(i);
     chars.push(8364, 8482, 8226, 8230, 8211, 8212, 8216, 8217, 8220, 8221);
     return chars;
-  }, []);
+  }, [advancedView, subrange]);
+
+  const magnifierChar = hoveredChar ?? selectedChar;
 
   const handleCopy = () => {
     if (selectedChar !== null) {
@@ -68,24 +77,64 @@ export default function CharacterMap({ windowId }: AppComponentProps) {
         </select>
       </div>
 
-      {/* Character grid */}
-      <div className="flex-1 overflow-auto bg-white border-2 border-solid border-[var(--win98-button-shadow)] min-h-0">
-        <div className="grid grid-cols-[repeat(16,1fr)]" style={{ fontFamily: selectedFont }}>
-          {characters.map(code => (
-            <button
-              key={code}
-              onClick={() => setSelectedChar(code)}
-              onDoubleClick={() => { setSelectedChar(code); handleCopy(); }}
-              className={`aspect-square flex items-center justify-center text-[14px] border border-solid cursor-default
-                ${selectedChar === code
-                  ? 'bg-[var(--win98-hilight)] text-[var(--win98-hilight-text)] border-[var(--win98-hilight)] text-[20px] z-10 relative shadow-md'
-                  : 'border-gray-200 hover:border-gray-400'
-                }
-              `}
+      {/* Advanced view toggle + subrange selector */}
+      <div className="flex items-center gap-2">
+        <Checkbox98
+          label="Advanced view"
+          checked={advancedView}
+          onChange={(e) => setAdvancedView(e.target.checked)}
+        />
+        {advancedView && (
+          <>
+            <label>Character subset:</label>
+            <Select98
+              value={subrange}
+              onChange={(e) => setSubrange(e.target.value as UnicodeSubrange)}
+              className="flex-1"
             >
-              {String.fromCharCode(code)}
-            </button>
-          ))}
+              {subrangeOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              ))}
+            </Select98>
+          </>
+        )}
+      </div>
+
+      <div className="flex gap-2 flex-1 min-h-0">
+        {/* Character grid */}
+        <div className="flex-1 overflow-auto bg-white border-2 border-solid border-[var(--win98-button-shadow)] min-h-0">
+          <div className="grid grid-cols-[repeat(16,1fr)]" style={{ fontFamily: selectedFont }}>
+            {characters.map(code => (
+              <button
+                key={code}
+                onClick={() => setSelectedChar(code)}
+                onDoubleClick={() => { setSelectedChar(code); handleCopy(); }}
+                onMouseEnter={() => setHoveredChar(code)}
+                onMouseLeave={() => setHoveredChar(null)}
+                onFocus={() => setHoveredChar(code)}
+                onBlur={() => setHoveredChar(null)}
+                className={`aspect-square flex items-center justify-center text-[14px] border border-solid cursor-default
+                  ${selectedChar === code
+                    ? 'bg-[var(--win98-hilight)] text-[var(--win98-hilight-text)] border-[var(--win98-hilight)] text-[20px] z-10 relative shadow-md'
+                    : 'border-gray-200 hover:border-gray-400'
+                  }
+                `}
+              >
+                {String.fromCharCode(code)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Magnifier preview */}
+        <div
+          className="w-[72px] h-[72px] shrink-0 flex items-center justify-center text-[42px]
+            bg-white border-2 border-solid border-[var(--win98-button-shadow)]
+            border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)]
+            border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)]"
+          style={{ fontFamily: selectedFont }}
+        >
+          {magnifierChar !== null ? String.fromCharCode(magnifierChar) : ''}
         </div>
       </div>
 

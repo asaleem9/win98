@@ -19,19 +19,14 @@ export function ScreenSaverManager({
   timeoutMs = 300000, // 5 minutes default
   forceActive = false,
 }: ScreenSaverManagerProps) {
-  const [active, setActive] = useState(false);
+  const [active, setActive] = useState(forceActive);
 
   const dismiss = useCallback(() => {
     setActive(false);
   }, []);
 
   useEffect(() => {
-    if (forceActive) {
-      setActive(true);
-      return;
-    }
-
-    if (selectedSaver === 'none') return;
+    if (forceActive || selectedSaver === 'none') return;
 
     let timer: ReturnType<typeof setTimeout>;
 

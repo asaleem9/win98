@@ -2,8 +2,17 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { playSound } from '@/lib/sounds';
+import { generateReply, renderEmoticons } from './replyEngine';
 
 type BuddyStatus = 'online' | 'away' | 'offline';
+
+interface MsgStyle {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string;
+}
 
 interface Buddy {
   name: string;
@@ -16,6 +25,7 @@ interface ChatMessage {
   from: string;
   text: string;
   timestamp: string;
+  style?: MsgStyle;
 }
 
 interface BuddyGroup {
@@ -285,6 +295,61 @@ function StatusDot({ status }: { status: BuddyStatus }) {
   );
 }
 
+function SetupPanel({ onClose }: { onClose: () => void }) {
+  const [prefs, setPrefs] = useState({
+    autoSignOn: true,
+    playSounds: true,
+    showTimestamps: true,
+    idleAway: false,
+    saveHistory: true,
+  });
+  const rows: { key: keyof typeof prefs; label: string }[] = [
+    { key: 'autoSignOn', label: 'Automatically sign on at startup' },
+    { key: 'playSounds', label: 'Play sound when buddies sign on/off' },
+    { key: 'showTimestamps', label: 'Show timestamps in IM windows' },
+    { key: 'idleAway', label: 'Set me as "Away" when idle for 10 minutes' },
+    { key: 'saveHistory', label: 'Automatically save my conversations' },
+  ];
+  return (
+    <div className="flex-1 flex flex-col bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px]">
+      <div className="bg-[#ffcc00] text-center py-1 px-2">
+        <div className="text-[13px] font-bold text-black">AIM Preferences</div>
+      </div>
+      <div className="flex-1 overflow-auto m-1 p-3 bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)]">
+        <div className="text-[10px] text-[#666] mb-2">Sign On / Sign Off</div>
+        {rows.map((r) => (
+          <label key={r.key} className="flex items-center gap-2 py-[3px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={prefs[r.key]}
+              onChange={() => setPrefs((p) => ({ ...p, [r.key]: !p[r.key] }))}
+            />
+            <span>{r.label}</span>
+          </label>
+        ))}
+        <div className="text-[10px] text-[#999] mt-3 border-t border-[#ddd] pt-2">
+          Screen Name: <b>{MY_SCREEN_NAME}</b><br />
+          AOL Instant Messenger (TM) version 4.3
+        </div>
+      </div>
+      <div className="flex justify-center gap-1 py-1">
+        <button
+          onClick={onClose}
+          className="bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] px-3 py-[2px] text-[11px] cursor-pointer active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          OK
+        </button>
+        <button
+          onClick={onClose}
+          className="bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] px-3 py-[2px] text-[11px] cursor-pointer active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)]"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function getTimeString() {
   const now = new Date();
   const h = now.getHours();
@@ -293,7 +358,29 @@ function getTimeString() {
   return `${h % 12 || 12}:${m} ${ampm}`;
 }
 
+// Deterministic per-name values so profile/warning readouts stay stable across
+// re-renders (no impure Math.random in the render path).
+function nameSeed(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+const MEMBER_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function memberSince(name: string): string {
+  const s = nameSeed(name);
+  return `${MEMBER_MONTHS[s % 12]} ${1997 + (s % 3)}`;
+}
+
+function warningLevel(name: string): number {
+  return nameSeed(name) % 16;
+}
+
+const TEXT_COLORS = ['#000000', '#cc0000', '#0000cc', '#009900', '#cc6600', '#9900cc', '#cc0099'];
+
 export default function AIM({ windowId }: AppComponentProps) {
+  void windowId;
   const [groups, setGroups] = useState(INITIAL_GROUPS);
   const [chatWith, setChatWith] = useState<Buddy | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -302,28 +389,45 @@ export default function AIM({ windowId }: AppComponentProps) {
   const [myMood, setMyMood] = useState(MOODS[3]); // 'chattin w/ my peeps'
   const [showAwayPicker, setShowAwayPicker] = useState(false);
   const [showProfile, setShowProfile] = useState<Buddy | null>(null);
+  const [showSetup, setShowSetup] = useState(false);
   const [buddyIsTyping, setBuddyIsTyping] = useState(false);
   const [doorSounds, setDoorSounds] = useState<string[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const responseIndexRef = useRef<Record<string, number>>({});
 
-  // Simulate buddy sign on/off door sounds
+  // Outgoing-message formatting state
+  const [fmtBold, setFmtBold] = useState(false);
+  const [fmtItalic, setFmtItalic] = useState(false);
+  const [fmtUnderline, setFmtUnderline] = useState(false);
+  const [fmtColor, setFmtColor] = useState('#000000');
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const responseIndexRef = useRef<Record<string, number>>({});
+  const groupsRef = useRef(groups);
+  useEffect(() => { groupsRef.current = groups; }, [groups]);
+
+  // Randomly sign buddies on and off, playing the classic AIM door sounds.
   useEffect(() => {
     const interval = setInterval(() => {
-      const allBuddies = INITIAL_GROUPS.flatMap(g => g.buddies);
-      const randomBuddy = allBuddies[Math.floor(Math.random() * allBuddies.length)];
-      if (Math.random() > 0.7) {
-        const isSignOn = Math.random() > 0.5;
-        setDoorSounds(prev => [...prev.slice(-4), `${randomBuddy.name} ${isSignOn ? 'signed on' : 'signed off'}`]);
-      }
-    }, 15000);
+      if (Math.random() > 0.55) return; // not every tick
+      const flat = groupsRef.current.flatMap((g, gi) => g.buddies.map((b, bi) => ({ gi, bi, b })));
+      if (!flat.length) return;
+      const pick = flat[Math.floor(Math.random() * flat.length)];
+      const signOn = pick.b.status === 'offline';
+      const nextStatus: BuddyStatus = signOn ? 'online' : 'offline';
+      playSound(signOn ? 'aimDoorOpen' : 'aimDoorClose');
+      setDoorSounds((ds) => [...ds.slice(-4), `${pick.b.name} has ${signOn ? 'signed on' : 'signed off'}.`]);
+      setGroups((prev) => prev.map((g, gi) => gi !== pick.gi ? g : {
+        ...g,
+        buddies: g.buddies.map((b, bi) => bi !== pick.bi ? b : { ...b, status: nextStatus }),
+      }));
+    }, 8000);
     return () => clearInterval(interval);
   }, []);
 
-  const onlineCounts = groups.map(g => {
-    const online = g.buddies.filter(b => b.status !== 'offline').length;
-    return `${g.name} (${online}/${g.buddies.length})`;
-  });
+  const insertSmiley = useCallback((emoticon: string) => {
+    setChatInput((prev) => (prev ? `${prev} ${emoticon}` : emoticon));
+    inputRef.current?.focus();
+  }, []);
 
   const toggleGroup = useCallback((idx: number) => {
     setGroups(gs => gs.map((g, i) => i === idx ? { ...g, expanded: !g.expanded } : g));
@@ -342,37 +446,44 @@ export default function AIM({ windowId }: AppComponentProps) {
   const sendMessage = useCallback(() => {
     if (!chatInput.trim() || !chatWith) return;
     const userMsg = chatInput.trim();
-    setChatMessages(prev => [...prev, { from: MY_SCREEN_NAME, text: userMsg, timestamp: getTimeString() }]);
+    const style: MsgStyle = { bold: fmtBold, italic: fmtItalic, underline: fmtUnderline, color: fmtColor };
+    setChatMessages(prev => [...prev, { from: MY_SCREEN_NAME, text: userMsg, timestamp: getTimeString(), style }]);
     setChatInput('');
 
     if (chatWith.status === 'away') {
       setTimeout(() => {
+        playSound('aimMessage');
         setChatMessages(prev => [
           ...prev,
           { from: chatWith.name, text: `[Auto-Response] ${chatWith.awayMessage}`, timestamp: getTimeString() },
         ]);
       }, 500);
     } else {
-      // Show typing indicator, then respond
+      // Show typing indicator, then respond based on what the user actually said.
       const thinkDelay = 500 + Math.random() * 1000;
       const typeDelay = 1500 + Math.random() * 2000;
 
       setTimeout(() => setBuddyIsTyping(true), thinkDelay);
       setTimeout(() => {
         setBuddyIsTyping(false);
-        const buddyResponses = BUDDY_RESPONSES[chatWith.name] || DEFAULT_RESPONSES;
-        // Track response index per buddy to avoid repeats
+        const canned = BUDDY_RESPONSES[chatWith.name] || DEFAULT_RESPONSES;
         const idx = responseIndexRef.current[chatWith.name] || 0;
-        const response = buddyResponses[idx % buddyResponses.length];
+        const response = generateReply(userMsg, { buddyName: chatWith.name, canned, index: idx });
         responseIndexRef.current[chatWith.name] = idx + 1;
+        playSound('aimMessage');
         setChatMessages(prev => [...prev, { from: chatWith.name, text: response, timestamp: getTimeString() }]);
       }, thinkDelay + typeDelay);
     }
-  }, [chatInput, chatWith]);
+  }, [chatInput, chatWith, fmtBold, fmtItalic, fmtUnderline, fmtColor]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, buddyIsTyping]);
+
+  // === Setup / Preferences ===
+  if (showSetup) {
+    return <SetupPanel onClose={() => setShowSetup(false)} />;
+  }
 
   // === Away message picker ===
   if (showAwayPicker) {
@@ -387,7 +498,7 @@ export default function AIM({ windowId }: AppComponentProps) {
               className="px-2 py-1 mb-2 cursor-pointer bg-[#ffe0e0] hover:bg-[#ffd0d0] border border-[#cc0000]"
               onClick={() => { setMyAwayMessage(null); setShowAwayPicker(false); }}
             >
-              <span className="font-bold text-[#cc0000]">I'm Back!</span>
+              <span className="font-bold text-[#cc0000]">I&apos;m Back!</span>
               <div className="text-[10px] text-[#999]">Click to remove away message</div>
             </div>
           )}
@@ -441,9 +552,9 @@ export default function AIM({ windowId }: AppComponentProps) {
             </div>
           )}
           <div className="text-[10px] text-[#999] text-center mt-2">
-            Member Since: {Math.random() > 0.5 ? 'Sep' : 'Mar'} {1997 + Math.floor(Math.random() * 2)}
+            Member Since: {memberSince(showProfile.name)}
             <br />
-            Warning Level: {Math.floor(Math.random() * 15)}%
+            Warning Level: {warningLevel(showProfile.name)}%
           </div>
         </div>
         <div className="flex justify-center gap-1 py-1">
@@ -491,7 +602,7 @@ export default function AIM({ windowId }: AppComponentProps) {
 
         {/* Warning level bar */}
         <div className="px-2 py-[2px] text-[9px] text-[#999] bg-[#f0f0f0] border-b border-[#ccc]">
-          Warning Level: 0% &nbsp;|&nbsp; {chatWith.name}&apos;s Warning Level: {Math.floor(Math.random() * 10)}%
+          Warning Level: 0% &nbsp;|&nbsp; {chatWith.name}&apos;s Warning Level: {warningLevel(chatWith.name)}%
         </div>
 
         {/* Chat messages */}
@@ -503,7 +614,16 @@ export default function AIM({ windowId }: AppComponentProps) {
               </span>
               <span className="text-[9px] text-[#999] ml-1">({msg.timestamp})</span>
               <span className="text-[#cc0000] font-bold">:</span>{' '}
-              <span>{msg.text}</span>
+              <span
+                style={{
+                  fontWeight: msg.style?.bold ? 'bold' : undefined,
+                  fontStyle: msg.style?.italic ? 'italic' : undefined,
+                  textDecoration: msg.style?.underline ? 'underline' : undefined,
+                  color: msg.style?.color && msg.style.color !== '#000000' ? msg.style.color : undefined,
+                }}
+              >
+                {renderEmoticons(msg.text)}
+              </span>
             </div>
           ))}
           {buddyIsTyping && (
@@ -518,18 +638,52 @@ export default function AIM({ windowId }: AppComponentProps) {
         <div className="mx-1 mb-1">
           {/* Formatting toolbar */}
           <div className="flex items-center gap-[2px] px-1 py-[2px] bg-[#f0f0f0] border border-[#ccc]">
-            <button className="text-[10px] font-bold px-1 hover:bg-[#ddd]" title="Bold">B</button>
-            <button className="text-[10px] italic px-1 hover:bg-[#ddd]" title="Italic">I</button>
-            <button className="text-[10px] underline px-1 hover:bg-[#ddd]" title="Underline">U</button>
+            <button
+              onClick={() => setFmtBold((v) => !v)}
+              className={`text-[10px] font-bold px-[3px] hover:bg-[#ddd] ${fmtBold ? 'bg-[#ccd] border border-[#0000cc]' : 'border border-transparent'}`}
+              title="Bold"
+            >B</button>
+            <button
+              onClick={() => setFmtItalic((v) => !v)}
+              className={`text-[10px] italic px-[3px] hover:bg-[#ddd] ${fmtItalic ? 'bg-[#ccd] border border-[#0000cc]' : 'border border-transparent'}`}
+              title="Italic"
+            >I</button>
+            <button
+              onClick={() => setFmtUnderline((v) => !v)}
+              className={`text-[10px] underline px-[3px] hover:bg-[#ddd] ${fmtUnderline ? 'bg-[#ccd] border border-[#0000cc]' : 'border border-transparent'}`}
+              title="Underline"
+            >U</button>
             <span className="text-[#ccc] mx-[2px]">|</span>
-            <button className="text-[10px] px-1 hover:bg-[#ddd]" title="Text Color">A</button>
-            <button className="text-[10px] px-1 hover:bg-[#ddd]" title="Smiley">:-)</button>
+            <button
+              onClick={() => setFmtColor((c) => TEXT_COLORS[(TEXT_COLORS.indexOf(c) + 1) % TEXT_COLORS.length])}
+              className="text-[11px] font-bold px-[3px] hover:bg-[#ddd] border border-transparent"
+              style={{ color: fmtColor }}
+              title="Text Color (click to cycle)"
+            >A</button>
+            <span className="text-[#ccc] mx-[2px]">|</span>
+            {[':-)', ':-D', ';-)', ':-P', '<3'].map((em) => (
+              <button
+                key={em}
+                onClick={() => insertSmiley(em)}
+                className="text-[11px] px-[2px] hover:bg-[#ddd] border border-transparent"
+                title={`Insert ${em}`}
+              >
+                {renderEmoticons(em)}
+              </button>
+            ))}
           </div>
           <div className="flex gap-1 mt-1">
             <input
+              ref={inputRef}
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') sendMessage(); }}
+              style={{
+                fontWeight: fmtBold ? 'bold' : undefined,
+                fontStyle: fmtItalic ? 'italic' : undefined,
+                textDecoration: fmtUnderline ? 'underline' : undefined,
+                color: fmtColor !== '#000000' ? fmtColor : undefined,
+              }}
               className="flex-1 border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] px-1 py-[2px] text-[11px] outline-none"
               placeholder="Type a message..."
               autoFocus
@@ -656,7 +810,7 @@ export default function AIM({ windowId }: AppComponentProps) {
           Set Mood
         </button>
         <span className="text-[#999]">|</span>
-        <button className="text-[10px] text-[#0000cc] underline cursor-pointer">
+        <button onClick={() => setShowSetup(true)} className="text-[10px] text-[#0000cc] underline cursor-pointer">
           Setup
         </button>
       </div>

@@ -1,7 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { useWindows } from '@/contexts/WindowContext';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { operate, applyPercent, scientific, BasicOp, AngleMode } from './calcEngine';
+
+const STANDARD_SIZE = { width: 260, height: 300 };
+const SCIENTIFIC_SIZE = { width: 400, height: 300 };
 
 function calcButton(
   label: string,
@@ -30,12 +36,18 @@ function calcButton(
   );
 }
 
+const BASIC_OPS = new Set(['+', '-', '*', '/']);
+
 export default function Calculator({ windowId }: AppComponentProps) {
+  const { resizeWindow } = useWindows();
   const [display, setDisplay] = useState('0.');
   const [memory, setMemory] = useState(0);
-  const [pendingOp, setPendingOp] = useState<string | null>(null);
+  const [pendingOp, setPendingOp] = useState<BasicOp | null>(null);
   const [accumulator, setAccumulator] = useState<number | null>(null);
   const [resetOnNext, setResetOnNext] = useState(false);
+  const [mode, setMode] = useState<'standard' | 'scientific'>('standard');
+  const [angleMode, setAngleMode] = useState<AngleMode>('deg');
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const currentValue = parseFloat(display.replace(/,/g, ''));
 
@@ -67,20 +79,10 @@ export default function Calculator({ windowId }: AppComponentProps) {
     }
   }, [display, resetOnNext]);
 
-  const calculate = useCallback((op: string, a: number, b: number): number => {
-    switch (op) {
-      case '+': return a + b;
-      case '-': return a - b;
-      case '*': return a * b;
-      case '/': return b === 0 ? NaN : a / b;
-      default: return b;
-    }
-  }, []);
-
-  const handleOperator = useCallback((op: string) => {
+  const handleOperator = useCallback((op: BasicOp) => {
     const val = currentValue;
     if (accumulator !== null && pendingOp && !resetOnNext) {
-      const result = calculate(pendingOp, accumulator, val);
+      const result = operate(accumulator, pendingOp, val);
       setAccumulator(result);
       setDisplay(formatDisplay(result));
     } else {
@@ -88,17 +90,17 @@ export default function Calculator({ windowId }: AppComponentProps) {
     }
     setPendingOp(op);
     setResetOnNext(true);
-  }, [currentValue, accumulator, pendingOp, resetOnNext, calculate]);
+  }, [currentValue, accumulator, pendingOp, resetOnNext]);
 
   const handleEquals = useCallback(() => {
     if (accumulator !== null && pendingOp) {
-      const result = calculate(pendingOp, accumulator, currentValue);
+      const result = operate(accumulator, pendingOp, currentValue);
       setDisplay(formatDisplay(result));
       setAccumulator(null);
       setPendingOp(null);
       setResetOnNext(true);
     }
-  }, [accumulator, pendingOp, currentValue, calculate]);
+  }, [accumulator, pendingOp, currentValue]);
 
   const handleClear = useCallback(() => {
     setDisplay('0.');
@@ -129,10 +131,11 @@ export default function Calculator({ windowId }: AppComponentProps) {
   }, [currentValue]);
 
   const handlePercent = useCallback(() => {
-    if (accumulator !== null) {
-      setDisplay(formatDisplay(accumulator * currentValue / 100));
+    if (accumulator !== null && pendingOp) {
+      setDisplay(formatDisplay(applyPercent(accumulator, pendingOp, currentValue)));
+      setResetOnNext(true);
     }
-  }, [accumulator, currentValue]);
+  }, [accumulator, pendingOp, currentValue]);
 
   const handleSqrt = useCallback(() => {
     const val = currentValue;
@@ -153,74 +156,190 @@ export default function Calculator({ windowId }: AppComponentProps) {
     setResetOnNext(true);
   }, [currentValue]);
 
+  const applyUnary = useCallback((fn: (x: number) => number) => {
+    setDisplay(formatDisplay(fn(currentValue)));
+    setResetOnNext(true);
+  }, [currentValue]);
+
+  const applyConstant = useCallback((fn: () => number) => {
+    setDisplay(formatDisplay(fn()));
+    setResetOnNext(true);
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(display.replace(/,/g, '').replace(/\.$/, ''));
+    }
+  }, [display]);
+
+  const handlePaste = useCallback(async () => {
+    if (!navigator.clipboard?.readText) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      const parsed = parseFloat(text);
+      if (!Number.isNaN(parsed)) {
+        setDisplay(formatDisplay(parsed));
+        setResetOnNext(false);
+      }
+    } catch {
+      // clipboard read denied/unavailable — ignore
+    }
+  }, []);
+
+  // Keyboard input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!containerRef.current?.contains(document.activeElement) && document.activeElement !== document.body) {
+        return;
+      }
+      if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleCopy();
+        return;
+      }
+      if (e.ctrlKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        handlePaste();
+        return;
+      }
+      if (e.key >= '0' && e.key <= '9') {
+        inputDigit(e.key);
+      } else if (e.key === '.') {
+        inputDigit('.');
+      } else if (BASIC_OPS.has(e.key)) {
+        handleOperator(e.key as BasicOp);
+      } else if (e.key === 'Enter' || e.key === '=') {
+        e.preventDefault();
+        handleEquals();
+      } else if (e.key === 'Escape') {
+        handleClear();
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === '%') {
+        handlePercent();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [inputDigit, handleOperator, handleEquals, handleClear, handleBackspace, handlePercent, handleCopy, handlePaste]);
+
   const redBtn = 'text-red-700';
   const blueBtn = 'text-blue-800';
 
+  const switchMode = useCallback((next: 'standard' | 'scientific') => {
+    setMode(next);
+    const size = next === 'scientific' ? SCIENTIFIC_SIZE : STANDARD_SIZE;
+    resizeWindow(windowId, size.width, size.height);
+  }, [resizeWindow, windowId]);
+
+  const menus: MenuDefinition[] = [
+    {
+      label: 'Edit',
+      items: [
+        { label: 'Copy', shortcut: 'Ctrl+C', onClick: handleCopy },
+        { label: 'Paste', shortcut: 'Ctrl+V', onClick: handlePaste },
+      ],
+    },
+    {
+      label: 'View',
+      items: [
+        { label: 'Standard', checked: mode === 'standard', onClick: () => switchMode('standard') },
+        { label: 'Scientific', checked: mode === 'scientific', onClick: () => switchMode('scientific') },
+      ],
+    },
+  ];
+
   return (
-    <div className="flex flex-col h-full bg-[var(--win98-button-face)] p-[6px] font-[family-name:var(--win98-font)] text-[11px]">
-      {/* Display */}
-      <div
-        className="h-[24px] mb-[6px] px-[4px] flex items-center justify-end
-          bg-white text-right text-[14px] font-[family-name:var(--win98-font)]
-          border-2 border-solid
-          border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)]
-          border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)]
-          shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)]
-          select-all"
-      >
-        {display}
-      </div>
-
-      {/* Memory indicator */}
-      <div className="flex gap-1 mb-1">
-        <div className="w-[24px] h-[14px] flex items-center justify-center text-[9px]">
-          {memory !== 0 && 'M'}
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      className="flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] outline-none"
+    >
+      <MenuBar menus={menus} />
+      <div className="flex flex-col flex-1 p-[6px]">
+        {/* Display */}
+        <div
+          className="h-[24px] mb-[6px] px-[4px] flex items-center justify-end
+            bg-white text-right text-[14px] font-[family-name:var(--win98-font)]
+            border-2 border-solid
+            border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)]
+            border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)]
+            shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)]
+            select-all"
+        >
+          {display}
         </div>
-      </div>
 
-      {/* Button grid */}
-      <div className="grid grid-cols-5 gap-[3px] flex-1">
-        {/* Row 1 */}
-        <div className="flex items-center justify-center text-[9px] select-none" />
-        {calcButton('Backspace', handleBackspace, `col-span-1 ${redBtn}`)}
-        {calcButton('CE', handleClearEntry, `${redBtn}`)}
-        {calcButton('C', handleClear, `${redBtn}`)}
-        <div />
+        <div className="flex gap-2 flex-1 min-h-0">
+          {mode === 'scientific' && (
+            <div className="grid grid-cols-2 gap-[3px] w-[130px]">
+              {calcButton('Deg', () => setAngleMode('deg'), angleMode === 'deg' ? blueBtn : '')}
+              {calcButton('Rad', () => setAngleMode('rad'), angleMode === 'rad' ? blueBtn : '')}
+              {calcButton('sin', () => applyUnary((x) => scientific.sin(x, angleMode)), blueBtn)}
+              {calcButton('cos', () => applyUnary((x) => scientific.cos(x, angleMode)), blueBtn)}
+              {calcButton('tan', () => applyUnary((x) => scientific.tan(x, angleMode)), blueBtn)}
+              {calcButton('log', () => applyUnary(scientific.log), blueBtn)}
+              {calcButton('ln', () => applyUnary(scientific.ln), blueBtn)}
+              {calcButton('x^y', () => handleOperator('^'), redBtn)}
+              {calcButton('sqrt', () => applyUnary(scientific.sqrt), blueBtn)}
+              {calcButton('pi', () => applyConstant(scientific.pi), blueBtn)}
+              {calcButton('e', () => applyConstant(scientific.e), blueBtn)}
+            </div>
+          )}
 
-        {/* Row 2 */}
-        {calcButton('MC', () => setMemory(0), `${redBtn}`)}
-        {calcButton('7', () => inputDigit('7'), blueBtn)}
-        {calcButton('8', () => inputDigit('8'), blueBtn)}
-        {calcButton('9', () => inputDigit('9'), blueBtn)}
-        {calcButton('/', () => handleOperator('/'), redBtn)}
+          {/* Memory indicator + button grid */}
+          <div className="flex flex-col flex-1 min-w-0">
+            <div className="flex gap-1 mb-1">
+              <div className="w-[24px] h-[14px] flex items-center justify-center text-[9px]">
+                {memory !== 0 && 'M'}
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-[3px] flex-1">
+              {/* Row 1 */}
+              <div className="flex items-center justify-center text-[9px] select-none" />
+              {calcButton('Backspace', handleBackspace, `col-span-1 ${redBtn}`)}
+              {calcButton('CE', handleClearEntry, `${redBtn}`)}
+              {calcButton('C', handleClear, `${redBtn}`)}
+              <div />
 
-        {/* Row 3 */}
-        {calcButton('MR', () => { setDisplay(formatDisplay(memory)); setResetOnNext(true); }, redBtn)}
-        {calcButton('4', () => inputDigit('4'), blueBtn)}
-        {calcButton('5', () => inputDigit('5'), blueBtn)}
-        {calcButton('6', () => inputDigit('6'), blueBtn)}
-        {calcButton('*', () => handleOperator('*'), redBtn)}
+              {/* Row 2 */}
+              {calcButton('MC', () => setMemory(0), `${redBtn}`)}
+              {calcButton('7', () => inputDigit('7'), blueBtn)}
+              {calcButton('8', () => inputDigit('8'), blueBtn)}
+              {calcButton('9', () => inputDigit('9'), blueBtn)}
+              {calcButton('/', () => handleOperator('/'), redBtn)}
 
-        {/* Row 4 */}
-        {calcButton('MS', () => setMemory(currentValue), redBtn)}
-        {calcButton('1', () => inputDigit('1'), blueBtn)}
-        {calcButton('2', () => inputDigit('2'), blueBtn)}
-        {calcButton('3', () => inputDigit('3'), blueBtn)}
-        {calcButton('-', () => handleOperator('-'), redBtn)}
+              {/* Row 3 */}
+              {calcButton('MR', () => { setDisplay(formatDisplay(memory)); setResetOnNext(true); }, redBtn)}
+              {calcButton('4', () => inputDigit('4'), blueBtn)}
+              {calcButton('5', () => inputDigit('5'), blueBtn)}
+              {calcButton('6', () => inputDigit('6'), blueBtn)}
+              {calcButton('*', () => handleOperator('*'), redBtn)}
 
-        {/* Row 5 */}
-        {calcButton('M+', () => setMemory(memory + currentValue), redBtn)}
-        {calcButton('0', () => inputDigit('0'), blueBtn)}
-        {calcButton('+/-', handlePlusMinus, blueBtn)}
-        {calcButton('.', () => inputDigit('.'), blueBtn)}
-        {calcButton('+', () => handleOperator('+'), redBtn)}
+              {/* Row 4 */}
+              {calcButton('MS', () => setMemory(currentValue), redBtn)}
+              {calcButton('1', () => inputDigit('1'), blueBtn)}
+              {calcButton('2', () => inputDigit('2'), blueBtn)}
+              {calcButton('3', () => inputDigit('3'), blueBtn)}
+              {calcButton('-', () => handleOperator('-'), redBtn)}
 
-        {/* Row 6 */}
-        <div />
-        {calcButton('sqrt', handleSqrt, blueBtn)}
-        {calcButton('%', handlePercent, blueBtn)}
-        {calcButton('1/x', handleInverse, blueBtn)}
-        {calcButton('=', handleEquals, redBtn)}
+              {/* Row 5 */}
+              {calcButton('M+', () => setMemory(memory + currentValue), redBtn)}
+              {calcButton('0', () => inputDigit('0'), blueBtn)}
+              {calcButton('+/-', handlePlusMinus, blueBtn)}
+              {calcButton('.', () => inputDigit('.'), blueBtn)}
+              {calcButton('+', () => handleOperator('+'), redBtn)}
+
+              {/* Row 6 */}
+              <div />
+              {calcButton('sqrt', handleSqrt, blueBtn)}
+              {calcButton('%', handlePercent, blueBtn)}
+              {calcButton('1/x', handleInverse, blueBtn)}
+              {calcButton('=', handleEquals, redBtn)}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

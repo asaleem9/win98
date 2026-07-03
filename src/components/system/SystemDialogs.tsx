@@ -8,6 +8,7 @@ interface SystemDialog {
   id: number;
   title: string;
   message: string;
+  icon: 'error' | 'warning' | 'info' | 'question';
 }
 
 let dialogCounter = 0;
@@ -22,12 +23,13 @@ export function SystemDialogs() {
 
   useEffect(() => {
     const onDialog = (e: Event) => {
-      const detail = (e as CustomEvent<{ title?: string; message?: string }>).detail;
+      const detail = (e as CustomEvent<{ title?: string; message?: string; icon?: SystemDialog['icon'] }>).detail;
       if (!detail?.message) return;
-      playSound('error');
+      const icon = detail.icon ?? 'error';
+      playSound(icon === 'error' ? 'error' : 'ding');
       setDialogs((prev) => [
         ...prev,
-        { id: ++dialogCounter, title: detail.title ?? 'Windows', message: detail.message! },
+        { id: ++dialogCounter, title: detail.title ?? 'Windows', message: detail.message!, icon },
       ]);
     };
     window.addEventListener('win98-system-dialog', onDialog);
@@ -46,7 +48,7 @@ export function SystemDialogs() {
         >
           <Dialog98
             title={dialog.title}
-            icon="error"
+            icon={dialog.icon}
             message={<span className="whitespace-pre-wrap">{dialog.message}</span>}
             buttons={[
               {

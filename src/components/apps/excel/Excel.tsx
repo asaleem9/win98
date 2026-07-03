@@ -2,6 +2,16 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { useWindows } from '@/contexts/WindowContext';
+import { useFileSystem } from '@/contexts/FileSystemContext';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { Dialog98 } from '@/components/ui/Dialog98';
+import { addRecentDoc } from '@/lib/recentDocs';
+import { showSystemError } from '@/hooks/useFileOpener';
+import { playSound } from '@/lib/sounds';
+import { normalizePath } from '@/lib/fs/fsOperations';
+import { FilePickerDialog } from '../notepad/FilePickerDialog';
+import { evaluateFormula, cellKey, colLabel } from './formula';
 
 const COLS = 26;
 const ROWS = 30;
@@ -9,136 +19,103 @@ const COL_WIDTH = 64;
 const ROW_HEIGHT = 20;
 const ROW_HEADER_WIDTH = 40;
 
-const MENU_ITEMS = ['File', 'Edit', 'View', 'Insert', 'Format', 'Tools', 'Data', 'Window', 'Help'];
-
-function colLabel(index: number): string {
-  return String.fromCharCode(65 + index);
+interface CellFormat {
+  bold?: boolean;
+  italic?: boolean;
 }
 
-function cellKey(col: number, row: number): string {
-  return `${colLabel(col)}${row + 1}`;
+interface Sheet {
+  name: string;
+  cells: Record<string, string>;
+  formats: Record<string, CellFormat>;
 }
 
-function parseCellRef(ref: string): { col: number; row: number } | null {
-  const match = ref.match(/^([A-Z])(\d+)$/);
-  if (!match) return null;
-  return { col: match[1].charCodeAt(0) - 65, row: parseInt(match[2]) - 1 };
+interface WorkbookFile {
+  app: 'excel';
+  version: 1;
+  sheets: Sheet[];
+  activeSheet: number;
 }
 
-function parseRange(range: string): { col: number; row: number }[] {
-  const [start, end] = range.split(':');
-  const s = parseCellRef(start);
-  const e = parseCellRef(end);
-  if (!s || !e) return [];
-  const cells: { col: number; row: number }[] = [];
-  for (let c = Math.min(s.col, e.col); c <= Math.max(s.col, e.col); c++) {
-    for (let r = Math.min(s.row, e.row); r <= Math.max(s.row, e.row); r++) {
-      cells.push({ col: c, row: r });
-    }
-  }
-  return cells;
+function newSheet(name: string): Sheet {
+  return { name, cells: {}, formats: {} };
 }
 
-export default function Excel({ windowId }: AppComponentProps) {
-  const [cells, setCells] = useState<Record<string, string>>({});
+function initialSheets(): Sheet[] {
+  return [newSheet('Sheet1'), newSheet('Sheet2'), newSheet('Sheet3')];
+}
+
+function baseName(path: string): string {
+  const parts = normalizePath(path).split('\\');
+  return parts[parts.length - 1] || 'Book1';
+}
+
+export default function Excel({ windowId, launchParams, launchCount }: AppComponentProps) {
+  const { updateTitle, closeWindow } = useWindows();
+  const { getNode, writeFile } = useFileSystem();
+
+  const [sheets, setSheets] = useState<Sheet[]>(initialSheets);
+  const [active, setActive] = useState(0);
   const [selectedCell, setSelectedCell] = useState<{ col: number; row: number }>({ col: 0, row: 0 });
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [formulaBarValue, setFormulaBarValue] = useState('');
+  const [filePath, setFilePath] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('Book1');
+  const [picker, setPicker] = useState<null | 'open' | 'save'>(null);
+  const [readOnlyText, setReadOnlyText] = useState<string | null>(null);
+  const [showAbout, setShowAbout] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const getCellRawValue = useCallback((key: string) => cells[key] || '', [cells]);
+  const sheet = sheets[active];
+  const cells = sheet.cells;
+  const formats = sheet.formats;
 
-  const evaluateFormula = useCallback((formula: string, visited: Set<string> = new Set()): string => {
-    if (!formula.startsWith('=')) return formula;
+  useEffect(() => {
+    updateTitle(windowId, `${fileName} - Microsoft Excel`);
+  }, [fileName, windowId, updateTitle]);
 
-    const expr = formula.substring(1).toUpperCase();
+  const getCellDisplayValue = useCallback(
+    (key: string) => {
+      const raw = cells[key];
+      if (!raw) return '';
+      if (raw.startsWith('=')) return evaluateFormula(raw, (k) => cells[k] || '', new Set([key]));
+      return raw;
+    },
+    [cells],
+  );
 
-    // SUM function
-    const sumMatch = expr.match(/^SUM\((.+)\)$/);
-    if (sumMatch) {
-      const arg = sumMatch[1];
-      if (arg.includes(':')) {
-        const rangeCells = parseRange(arg);
-        let sum = 0;
-        for (const c of rangeCells) {
-          const k = cellKey(c.col, c.row);
-          if (visited.has(k)) return '#REF!';
-          const val = evaluateFormula(getCellRawValue(k), new Set([...visited, k]));
-          const n = parseFloat(val);
-          if (!isNaN(n)) sum += n;
-        }
-        return String(sum);
-      }
-    }
+  const patchSheet = useCallback((updater: (s: Sheet) => Sheet) => {
+    setSheets((prev) => prev.map((s, i) => (i === active ? updater(s) : s)));
+  }, [active]);
 
-    // AVERAGE function
-    const avgMatch = expr.match(/^AVERAGE\((.+)\)$/);
-    if (avgMatch) {
-      const arg = avgMatch[1];
-      if (arg.includes(':')) {
-        const rangeCells = parseRange(arg);
-        let sum = 0;
-        let count = 0;
-        for (const c of rangeCells) {
-          const k = cellKey(c.col, c.row);
-          if (visited.has(k)) return '#REF!';
-          const val = evaluateFormula(getCellRawValue(k), new Set([...visited, k]));
-          const n = parseFloat(val);
-          if (!isNaN(n)) { sum += n; count++; }
-        }
-        return count > 0 ? String(sum / count) : '#DIV/0!';
-      }
-    }
-
-    // Simple arithmetic: replace cell references with values, then evaluate
-    let replaced = expr.replace(/[A-Z]\d+/g, (ref) => {
-      const parsed = parseCellRef(ref);
-      if (!parsed) return '0';
-      const k = cellKey(parsed.col, parsed.row);
-      if (visited.has(k)) return '0';
-      const val = evaluateFormula(getCellRawValue(k), new Set([...visited, k]));
-      const n = parseFloat(val);
-      return isNaN(n) ? '0' : String(n);
+  const setCellValue = useCallback((key: string, value: string) => {
+    patchSheet((s) => {
+      const nextCells = { ...s.cells };
+      if (value === '') delete nextCells[key];
+      else nextCells[key] = value;
+      return { ...s, cells: nextCells };
     });
+  }, [patchSheet]);
 
-    // Only allow safe characters: digits, operators, dots, parens, spaces
-    if (/^[\d+\-*/().  ]+$/.test(replaced)) {
-      try {
-        const fn = new Function(`return (${replaced})`);
-        const result = fn();
-        if (typeof result === 'number') {
-          return Number.isFinite(result) ? String(Math.round(result * 1e10) / 1e10) : '#DIV/0!';
-        }
-        return String(result);
-      } catch {
-        return '#VALUE!';
-      }
-    }
-
-    return '#VALUE!';
-  }, [getCellRawValue]);
-
-  const getCellDisplayValue = useCallback((key: string) => {
-    const raw = cells[key];
-    if (!raw) return '';
-    if (raw.startsWith('=')) {
-      return evaluateFormula(raw, new Set([key]));
-    }
-    return raw;
-  }, [cells, evaluateFormula]);
+  const toggleFormat = useCallback((prop: keyof CellFormat) => {
+    const key = cellKey(selectedCell.col, selectedCell.row);
+    patchSheet((s) => {
+      const current = s.formats[key] || {};
+      return { ...s, formats: { ...s.formats, [key]: { ...current, [prop]: !current[prop] } } };
+    });
+  }, [selectedCell, patchSheet]);
 
   const handleCellClick = useCallback((col: number, row: number) => {
     if (editingCell) {
-      // Commit current edit
-      setCells(prev => ({ ...prev, [editingCell]: editValue }));
+      setCellValue(editingCell, editValue);
       setEditingCell(null);
     }
     setSelectedCell({ col, row });
-    const key = cellKey(col, row);
-    setFormulaBarValue(cells[key] || '');
-  }, [editingCell, editValue, cells]);
+    setFormulaBarValue(cells[cellKey(col, row)] || '');
+  }, [editingCell, editValue, cells, setCellValue]);
 
   const handleCellDoubleClick = useCallback((col: number, row: number) => {
     const key = cellKey(col, row);
@@ -149,24 +126,24 @@ export default function Excel({ windowId }: AppComponentProps) {
 
   const commitEdit = useCallback(() => {
     if (editingCell) {
-      setCells(prev => ({ ...prev, [editingCell]: editValue }));
+      setCellValue(editingCell, editValue);
       setFormulaBarValue(editValue);
       setEditingCell(null);
     }
-  }, [editingCell, editValue]);
+  }, [editingCell, editValue, setCellValue]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (editingCell) {
       if (e.key === 'Enter') {
         commitEdit();
-        setSelectedCell(prev => ({ ...prev, row: Math.min(prev.row + 1, ROWS - 1) }));
+        setSelectedCell((prev) => ({ ...prev, row: Math.min(prev.row + 1, ROWS - 1) }));
       } else if (e.key === 'Escape') {
         setEditingCell(null);
         setEditValue('');
       } else if (e.key === 'Tab') {
         e.preventDefault();
         commitEdit();
-        setSelectedCell(prev => ({ ...prev, col: Math.min(prev.col + 1, COLS - 1) }));
+        setSelectedCell((prev) => ({ ...prev, col: Math.min(prev.col + 1, COLS - 1) }));
       }
       return;
     }
@@ -179,12 +156,7 @@ export default function Excel({ windowId }: AppComponentProps) {
     }
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      const key = cellKey(selectedCell.col, selectedCell.row);
-      setCells(prev => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
+      setCellValue(cellKey(selectedCell.col, selectedCell.row), '');
       setFormulaBarValue('');
       return;
     }
@@ -199,73 +171,175 @@ export default function Excel({ windowId }: AppComponentProps) {
     const move = moves[e.key];
     if (move) {
       e.preventDefault();
-      setSelectedCell(prev => ({
+      setSelectedCell((prev) => ({
         col: Math.max(0, Math.min(COLS - 1, prev.col + move.dc)),
         row: Math.max(0, Math.min(ROWS - 1, prev.row + move.dr)),
       }));
       return;
     }
 
-    // Start typing to edit
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
       const key = cellKey(selectedCell.col, selectedCell.row);
       setEditingCell(key);
       setEditValue(e.key);
     }
-  }, [editingCell, selectedCell, cells, commitEdit]);
+  }, [editingCell, selectedCell, cells, commitEdit, setCellValue]);
 
-  // Update formula bar when selection changes
   useEffect(() => {
     const key = cellKey(selectedCell.col, selectedCell.row);
     setFormulaBarValue(cells[key] || '');
   }, [selectedCell, cells]);
 
-  // Focus input when editing
   useEffect(() => {
-    if (editingCell && inputRef.current) {
-      inputRef.current.focus();
-    }
+    if (editingCell && inputRef.current) inputRef.current.focus();
   }, [editingCell]);
 
+  const loadPath = useCallback((rawPath: string) => {
+    const path = normalizePath(rawPath);
+    const node = getNode(path);
+    if (!node || node.type !== 'file') {
+      showSystemError('Microsoft Excel', `Cannot find the ${baseName(path)} file.`);
+      return;
+    }
+    const content = node.content ?? '';
+    try {
+      const parsed = JSON.parse(content) as WorkbookFile;
+      if (parsed && parsed.app === 'excel' && Array.isArray(parsed.sheets)) {
+        setSheets(parsed.sheets.length ? parsed.sheets : initialSheets());
+        setActive(Math.min(parsed.activeSheet ?? 0, parsed.sheets.length - 1));
+        setReadOnlyText(null);
+        setFilePath(path);
+        setFileName(baseName(path));
+        addRecentDoc(path);
+        return;
+      }
+      throw new Error('not our format');
+    } catch {
+      const shown = initialSheets();
+      shown[0].cells['A1'] = content;
+      setSheets(shown);
+      setActive(0);
+      setReadOnlyText(baseName(path));
+      setFilePath(null);
+      setFileName(baseName(path));
+      addRecentDoc(path);
+    }
+  }, [getNode]);
+
+  useEffect(() => {
+    if (launchParams?.filePath) loadPath(launchParams.filePath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [launchCount]);
+
+  const doSave = useCallback((path: string) => {
+    const payload: WorkbookFile = { app: 'excel', version: 1, sheets, activeSheet: active };
+    const result = writeFile(path, JSON.stringify(payload));
+    if (!result.ok) {
+      showSystemError('Microsoft Excel', result.error);
+      return;
+    }
+    setFilePath(path);
+    setFileName(baseName(path));
+    setReadOnlyText(null);
+    addRecentDoc(path);
+    playSound('ding');
+  }, [sheets, active, writeFile]);
+
+  const handleSave = useCallback(() => {
+    if (filePath) doSave(filePath);
+    else setPicker('save');
+  }, [filePath, doSave]);
+
+  const handleNew = useCallback(() => {
+    setSheets(initialSheets());
+    setActive(0);
+    setFilePath(null);
+    setFileName('Book1');
+    setReadOnlyText(null);
+  }, []);
+
+  const menus: MenuDefinition[] = [
+    {
+      label: 'File',
+      items: [
+        { label: 'New', onClick: handleNew },
+        { label: 'Open...', shortcut: 'Ctrl+O', onClick: () => setPicker('open') },
+        { label: 'Save', shortcut: 'Ctrl+S', onClick: handleSave },
+        { label: 'Save As...', onClick: () => setPicker('save') },
+        { label: '', separator: true },
+        { label: 'Print...', shortcut: 'Ctrl+P', onClick: () => showSystemError('Microsoft Excel', 'There are no printers installed. To install a printer, use the Add Printer wizard in the Printers folder.') },
+        { label: '', separator: true },
+        { label: 'Exit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: 'Edit',
+      items: [
+        { label: 'Clear Contents', shortcut: 'Del', onClick: () => setCellValue(cellKey(selectedCell.col, selectedCell.row), '') },
+        { label: 'Copy', shortcut: 'Ctrl+C', onClick: () => { const v = getCellDisplayValue(cellKey(selectedCell.col, selectedCell.row)); if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(v).catch(() => {}); } },
+      ],
+    },
+    {
+      label: 'Insert',
+      items: [
+        { label: 'Function...', onClick: () => showSystemError('Microsoft Excel', 'The Function Wizard is not available in this version.') },
+        { label: 'Worksheet', disabled: true },
+      ],
+    },
+    {
+      label: 'Format',
+      items: [
+        { label: 'Bold', onClick: () => toggleFormat('bold') },
+        { label: 'Italic', onClick: () => toggleFormat('italic') },
+      ],
+    },
+    {
+      label: 'Help',
+      items: [{ label: 'About Microsoft Excel', onClick: () => setShowAbout(true) }],
+    },
+  ];
+
+  const selKey = cellKey(selectedCell.col, selectedCell.row);
+  const selFmt = formats[selKey] || {};
+
   return (
-    <div className="flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] select-none" data-window-id={windowId} onKeyDown={handleKeyDown} tabIndex={0}>
-      {/* Menu Bar */}
-      <div className="flex items-center h-[20px] px-1 border-b border-[var(--win98-button-shadow)]">
-        {MENU_ITEMS.map((item) => (
-          <button key={item} className="px-2 h-[18px] hover:bg-[var(--win98-highlight)] hover:text-[var(--win98-highlight-text)]">
-            {item}
-          </button>
-        ))}
-      </div>
+    <div className="relative flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] select-none" data-window-id={windowId} onKeyDown={handleKeyDown} tabIndex={0}>
+      <MenuBar menus={menus} />
 
       {/* Toolbar */}
       <div className="flex items-center h-[26px] px-1 gap-[1px] border-b border-[var(--win98-button-shadow)]">
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">📄</button>
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">📂</button>
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">💾</button>
+        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="New" onClick={handleNew}>📄</button>
+        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="Open" onClick={() => setPicker('open')}>📂</button>
+        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="Save" onClick={handleSave}>💾</button>
         <div className="w-px h-[18px] mx-[2px] border-l border-[var(--win98-button-shadow)] border-r border-r-[var(--win98-button-highlight)]" />
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">✂</button>
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">📋</button>
+        <button className={`w-[23px] h-[22px] flex items-center justify-center border text-[11px] font-bold ${selFmt.bold ? 'border-t-[var(--win98-button-dark-shadow)] border-l-[var(--win98-button-dark-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] bg-[var(--win98-button-shadow)]/20' : 'border-transparent hover:win98-flat-raised'}`} title="Bold" onClick={() => toggleFormat('bold')}>B</button>
+        <button className={`w-[23px] h-[22px] flex items-center justify-center border text-[11px] italic ${selFmt.italic ? 'border-t-[var(--win98-button-dark-shadow)] border-l-[var(--win98-button-dark-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] bg-[var(--win98-button-shadow)]/20' : 'border-transparent hover:win98-flat-raised'}`} title="Italic" onClick={() => toggleFormat('italic')}>I</button>
         <div className="w-px h-[18px] mx-[2px] border-l border-[var(--win98-button-shadow)] border-r border-r-[var(--win98-button-highlight)]" />
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">Σ</button>
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">📊</button>
+        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="AutoSum" onClick={() => { const key = cellKey(selectedCell.col, selectedCell.row); setEditingCell(key); setEditValue('=SUM()'); }}>Σ</button>
       </div>
 
       {/* Formula Bar */}
       <div className="flex items-center h-[22px] px-1 gap-1 border-b border-[var(--win98-button-shadow)]">
-        <div className="win98-sunken bg-white h-[18px] w-[60px] flex items-center px-1 font-bold">
-          {cellKey(selectedCell.col, selectedCell.row)}
-        </div>
+        <div className="win98-sunken bg-white h-[18px] w-[60px] flex items-center px-1 font-bold">{selKey}</div>
         <div className="w-px h-[18px] mx-[2px] border-l border-[var(--win98-button-shadow)] border-r border-r-[var(--win98-button-highlight)]" />
-        <div className="win98-sunken bg-white h-[18px] flex-1 flex items-center px-1">
-          {formulaBarValue}
-        </div>
+        <input
+          className="win98-sunken bg-white h-[18px] flex-1 flex items-center px-1 outline-none font-[family-name:var(--win98-font)] text-[11px]"
+          value={editingCell ? editValue : formulaBarValue}
+          onChange={(e) => {
+            const key = editingCell ?? cellKey(selectedCell.col, selectedCell.row);
+            if (!editingCell) setEditingCell(key);
+            setEditValue(e.target.value);
+            setFormulaBarValue(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { commitEdit(); e.stopPropagation(); }
+          }}
+        />
       </div>
 
       {/* Spreadsheet Grid */}
       <div className="flex-1 overflow-auto" ref={gridRef}>
         <div style={{ display: 'grid', gridTemplateColumns: `${ROW_HEADER_WIDTH}px repeat(${COLS}, ${COL_WIDTH}px)` }}>
-          {/* Header row */}
           <div className="win98-raised h-[20px] flex items-center justify-center sticky top-0 left-0 z-20 bg-[var(--win98-button-face)]" />
           {Array.from({ length: COLS }, (_, c) => (
             <div key={c} className="win98-raised h-[20px] flex items-center justify-center sticky top-0 z-10 bg-[var(--win98-button-face)] text-[10px] font-bold">
@@ -273,23 +347,20 @@ export default function Excel({ windowId }: AppComponentProps) {
             </div>
           ))}
 
-          {/* Data rows */}
           {Array.from({ length: ROWS }, (_, r) => (
-            <>
-              {/* Row header */}
-              <div key={`rh-${r}`} className="win98-raised h-[20px] flex items-center justify-center sticky left-0 z-10 bg-[var(--win98-button-face)] text-[10px] font-bold">
+            <div key={`row-${r}`} className="contents">
+              <div className="win98-raised h-[20px] flex items-center justify-center sticky left-0 z-10 bg-[var(--win98-button-face)] text-[10px] font-bold">
                 {r + 1}
               </div>
-              {/* Cells */}
               {Array.from({ length: COLS }, (_, c) => {
                 const key = cellKey(c, r);
                 const isSelected = selectedCell.col === c && selectedCell.row === r;
                 const isEditing = editingCell === key;
-
+                const fmt = formats[key] || {};
                 return (
                   <div
                     key={key}
-                    className={`h-[${ROW_HEIGHT}px] border-r border-b border-[#c0c0c0] bg-white flex items-center px-[2px] text-[11px] cursor-cell ${
+                    className={`border-r border-b border-[#c0c0c0] bg-white flex items-center px-[2px] text-[11px] cursor-cell ${
                       isSelected ? 'outline outline-2 outline-[#000080] -outline-offset-1 z-[5]' : ''
                     }`}
                     style={{ height: ROW_HEIGHT }}
@@ -301,18 +372,17 @@ export default function Excel({ windowId }: AppComponentProps) {
                         ref={inputRef}
                         className="w-full h-full outline-none bg-white text-[11px] font-[family-name:var(--win98-font)]"
                         value={editValue}
-                        onChange={(e) => {
-                          setEditValue(e.target.value);
-                          setFormulaBarValue(e.target.value);
-                        }}
+                        onChange={(e) => { setEditValue(e.target.value); setFormulaBarValue(e.target.value); }}
                       />
                     ) : (
-                      <span className="truncate">{getCellDisplayValue(key)}</span>
+                      <span className="truncate" style={{ fontWeight: fmt.bold ? 'bold' : undefined, fontStyle: fmt.italic ? 'italic' : undefined }}>
+                        {getCellDisplayValue(key)}
+                      </span>
                     )}
                   </div>
                 );
               })}
-            </>
+            </div>
           ))}
         </div>
       </div>
@@ -320,20 +390,59 @@ export default function Excel({ windowId }: AppComponentProps) {
       {/* Sheet tabs */}
       <div className="flex items-center h-[20px] border-t border-[var(--win98-button-highlight)]">
         <div className="flex items-center gap-0">
-          <button className="win98-raised px-1 h-[16px] text-[9px] mx-[1px]">◀</button>
-          <button className="win98-raised px-1 h-[16px] text-[9px] mx-[1px]">▶</button>
+          <button className="win98-raised px-1 h-[16px] text-[9px] mx-[1px]" onClick={() => setActive((a) => Math.max(0, a - 1))}>◀</button>
+          <button className="win98-raised px-1 h-[16px] text-[9px] mx-[1px]" onClick={() => setActive((a) => Math.min(sheets.length - 1, a + 1))}>▶</button>
         </div>
         <div className="flex ml-2">
-          <div className="bg-white border border-[var(--win98-button-shadow)] px-3 h-[16px] flex items-center text-[10px] font-bold">Sheet1</div>
-          <div className="bg-[var(--win98-button-face)] border border-[var(--win98-button-shadow)] px-3 h-[16px] flex items-center text-[10px]">Sheet2</div>
-          <div className="bg-[var(--win98-button-face)] border border-[var(--win98-button-shadow)] px-3 h-[16px] flex items-center text-[10px]">Sheet3</div>
+          {sheets.map((s, i) => (
+            <button
+              key={s.name}
+              onClick={() => { if (editingCell) commitEdit(); setActive(i); }}
+              className={`border border-[var(--win98-button-shadow)] px-3 h-[16px] flex items-center text-[10px] ${
+                i === active ? 'bg-white font-bold' : 'bg-[var(--win98-button-face)]'
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Status Bar */}
       <div className="flex items-center h-[20px] px-1 border-t border-[var(--win98-button-highlight)]">
-        <span className="win98-sunken px-2 py-0 flex-1">Ready</span>
+        <span className="win98-sunken px-2 py-0 flex-1">{readOnlyText ? `${readOnlyText} (read-only, unsupported format)` : 'Ready'}</span>
       </div>
+
+      {picker && (
+        <FilePickerDialog
+          mode={picker}
+          extensions={['xls']}
+          defaultName={picker === 'save' ? (fileName.includes('.') ? fileName : `${fileName}.xls`) : ''}
+          onCancel={() => setPicker(null)}
+          onConfirm={(path) => {
+            const target = picker;
+            setPicker(null);
+            if (target === 'open') loadPath(path);
+            else doSave(path);
+          }}
+        />
+      )}
+
+      {showAbout && (
+        <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/20">
+          <Dialog98
+            title="About Microsoft Excel"
+            icon="info"
+            message={
+              <div className="space-y-1">
+                <p className="font-bold">Microsoft Excel 97</p>
+                <p>Copyright (C) 1985-1997 Microsoft Corp.</p>
+              </div>
+            }
+            buttons={[{ label: 'OK', default: true, onClick: () => setShowAbout(false) }]}
+          />
+        </div>
+      )}
     </div>
   );
 }

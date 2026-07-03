@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { TreeView98, TreeNode } from '@/components/ui/TreeView98';
 import { Button98 } from '@/components/ui/Button98';
 import { TabControl98 } from '@/components/ui/TabControl98';
+import { Dialog98 } from '@/components/ui/Dialog98';
+import { useSettings } from '@/contexts/SettingsContext';
 import { SYSTEM_SPECS } from '@/lib/constants';
+import { DisabledMap, toggleDisabled, isDeviceDisabled, CONFLICT_DEVICE_ID, CONFLICT_DEVICE_STATUS } from './deviceManagerHelpers';
 
 interface DeviceInfo {
   name: string;
@@ -36,9 +39,10 @@ const DEVICE_DATA: Record<string, DeviceInfo> = {
   'sys-speaker': { name: 'System speaker', manufacturer: 'Microsoft', status: 'This device is working properly.', driver: 'N/A', driverVersion: 'N/A' },
   'usb-controller': { name: 'Intel 82371AB/EB PCI to USB Universal Host Controller', manufacturer: 'Intel Corporation', status: 'This device is working properly.', driver: 'UHCD.SYS', driverVersion: '4.10.1998', resources: 'IRQ 11' },
   'usb-hub': { name: 'USB Root Hub', manufacturer: 'Microsoft', status: 'This device is working properly.', driver: 'USBHUB.SYS', driverVersion: '4.10.1998' },
+  [CONFLICT_DEVICE_ID]: { name: 'PCI Ethernet Controller', manufacturer: '(Unknown)', status: CONFLICT_DEVICE_STATUS, driver: 'Not installed', driverVersion: 'N/A' },
 };
 
-const TREE_NODES: TreeNode[] = [
+const BASE_TREE_NODES: TreeNode[] = [
   {
     id: 'root',
     label: 'DESKTOP-WIN98',
@@ -73,6 +77,7 @@ const TREE_NODES: TreeNode[] = [
       ]},
       { id: 'cat-network', label: 'Network adapters', children: [
         { id: 'network-3com', label: '3Com EtherLink XL 10/100 PCI' },
+        { id: CONFLICT_DEVICE_ID, label: 'PCI Ethernet Controller' },
       ]},
       { id: 'cat-sound', label: 'Sound, video and game controllers', children: [
         { id: 'sound-sblive', label: SYSTEM_SPECS.sound },
@@ -93,12 +98,67 @@ const TREE_NODES: TreeNode[] = [
   },
 ];
 
+// Decorates device labels with the yellow-warning / red-disabled markers based on current state.
+function decorateNodes(nodes: TreeNode[], disabled: DisabledMap): TreeNode[] {
+  return nodes.map((node) => {
+    const isKnownDevice = node.id in DEVICE_DATA;
+    let label = node.label;
+    if (isKnownDevice) {
+      if (isDeviceDisabled(disabled, node.id)) label = `✕ ${label}`;
+      if (node.id === CONFLICT_DEVICE_ID) label = `⚠ ${label}`;
+    }
+    return {
+      ...node,
+      label,
+      children: node.children ? decorateNodes(node.children, disabled) : undefined,
+    };
+  });
+}
+
+const WIZARD_STEPS = [
+  {
+    title: 'Update Device Driver Wizard',
+    message: 'This wizard will search for an updated driver for this device. Click Next to continue.',
+  },
+  {
+    title: 'Update Device Driver Wizard',
+    message: 'Windows is searching for new drivers in its driver database and on your hardware installation CDs.',
+  },
+  {
+    title: 'Update Device Driver Wizard',
+    message: 'Windows could not find a better driver than the one you are currently using. Windows will keep the current driver.',
+  },
+];
+
 export default function DeviceManager({ windowId }: AppComponentProps) {
+  const { getAppPref, setAppPref } = useSettings();
   const [selectedNode, setSelectedNode] = useState<string>('root');
   const [showProperties, setShowProperties] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [wizardStep, setWizardStep] = useState<number | null>(null);
+  const [printDialog, setPrintDialog] = useState(false);
+
+  const disabledMap = getAppPref<DisabledMap>('device-manager', 'disabled', {});
+
+  const treeNodes = useMemo(() => decorateNodes(BASE_TREE_NODES, disabledMap), [disabledMap]);
 
   const deviceInfo = DEVICE_DATA[selectedNode];
   const isDevice = !!deviceInfo;
+  const deviceIsDisabled = isDevice && isDeviceDisabled(disabledMap, selectedNode);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshKey((k) => k + 1);
+      setRefreshing(false);
+    }, 600);
+  };
+
+  const handleToggleDisabled = () => {
+    if (!isDevice) return;
+    setAppPref('device-manager', 'disabled', toggleDisabled(disabledMap, selectedNode));
+  };
 
   const propertiesTabs = deviceInfo ? [
     {
@@ -118,7 +178,12 @@ export default function DeviceManager({ windowId }: AppComponentProps) {
           <div><span className="font-bold">Manufacturer: </span>{deviceInfo.manufacturer}</div>
           <div className="mt-2 p-2 border border-[var(--win98-button-shadow)] bg-white">
             <div className="font-bold mb-1">Device status</div>
-            <div>{deviceInfo.status}</div>
+            <div>{deviceIsDisabled ? 'This device has been disabled.' : deviceInfo.status}</div>
+          </div>
+          <div className="mt-2">
+            <Button98 onClick={handleToggleDisabled}>
+              {deviceIsDisabled ? 'Enable device' : 'Disable in this hardware profile'}
+            </Button98>
           </div>
         </div>
       ),
@@ -133,7 +198,7 @@ export default function DeviceManager({ windowId }: AppComponentProps) {
           <div><span className="font-bold">Driver File: </span>{deviceInfo.driver}</div>
           <div><span className="font-bold">Driver Version: </span>{deviceInfo.driverVersion}</div>
           <div className="mt-3 flex gap-2">
-            <Button98 disabled>Update Driver...</Button98>
+            <Button98 onClick={() => setWizardStep(0)}>Update Driver...</Button98>
           </div>
         </div>
       ),
@@ -153,7 +218,11 @@ export default function DeviceManager({ windowId }: AppComponentProps) {
           )}
           <div className="mt-2 p-2 border border-[var(--win98-button-shadow)] bg-white">
             <div className="font-bold mb-1">Conflicting device list:</div>
-            <div>No conflicts.</div>
+            <div>
+              {selectedNode === CONFLICT_DEVICE_ID
+                ? 'This device is conflicting with another device installed on your computer.'
+                : 'No conflicts.'}
+            </div>
           </div>
         </div>
       ),
@@ -173,9 +242,10 @@ export default function DeviceManager({ windowId }: AppComponentProps) {
       </div>
 
       {/* Tree view */}
-      <div className="flex-1 mx-3 mb-1 overflow-auto">
+      <div className={`flex-1 mx-3 mb-1 overflow-auto ${refreshing ? 'cursor-wait' : ''}`}>
         <TreeView98
-          nodes={TREE_NODES}
+          key={refreshKey}
+          nodes={treeNodes}
           selectedId={selectedNode}
           onSelect={(node) => setSelectedNode(node.id)}
           className="h-full"
@@ -183,12 +253,12 @@ export default function DeviceManager({ windowId }: AppComponentProps) {
       </div>
 
       {/* Buttons */}
-      <div className="flex justify-end gap-2 px-3 py-2 border-t border-[var(--win98-button-shadow)]">
+      <div className={`flex justify-end gap-2 px-3 py-2 border-t border-[var(--win98-button-shadow)] ${refreshing ? 'cursor-wait' : ''}`}>
         <Button98 onClick={() => isDevice && setShowProperties(true)} disabled={!isDevice}>
           Properties
         </Button98>
-        <Button98 disabled>Refresh</Button98>
-        <Button98 disabled>Print...</Button98>
+        <Button98 onClick={handleRefresh}>Refresh</Button98>
+        <Button98 onClick={() => setPrintDialog(true)}>Print...</Button98>
       </div>
 
       {/* Properties dialog overlay */}
@@ -217,6 +287,37 @@ export default function DeviceManager({ windowId }: AppComponentProps) {
               <Button98 onClick={() => setShowProperties(false)}>Cancel</Button98>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Update driver wizard */}
+      {wizardStep !== null && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
+          <Dialog98
+            title={WIZARD_STEPS[wizardStep].title}
+            icon={wizardStep === WIZARD_STEPS.length - 1 ? 'info' : undefined}
+            message={WIZARD_STEPS[wizardStep].message}
+            buttons={
+              wizardStep < WIZARD_STEPS.length - 1
+                ? [
+                    { label: 'Cancel', onClick: () => setWizardStep(null) },
+                    { label: 'Next >', onClick: () => setWizardStep((s) => (s ?? 0) + 1), default: true },
+                  ]
+                : [{ label: 'Finish', onClick: () => setWizardStep(null), default: true }]
+            }
+          />
+        </div>
+      )}
+
+      {/* Print dialog */}
+      {printDialog && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
+          <Dialog98
+            title="Print"
+            icon="error"
+            message="There is no printer installed. Please install a printer before printing device information."
+            buttons={[{ label: 'OK', onClick: () => setPrintDialog(false), default: true }]}
+          />
         </div>
       )}
     </div>

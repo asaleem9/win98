@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { cn } from '@/lib/cn';
 
 export type ContextMenuItem =
@@ -27,8 +27,8 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
     };
   }, [onClose]);
 
-  // Adjust position so menu doesn't go off-screen
-  const [adjusted, setAdjusted] = useState(position);
+  // Adjust position so menu doesn't go off-screen: measure after layout and
+  // flip via direct style mutation (runs before paint, so no flicker)
   useLayoutEffect(() => {
     const el = menuRef.current;
     if (!el) return;
@@ -37,10 +37,11 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
     let y = position.y;
     if (x + rect.width > window.innerWidth) x = Math.max(0, position.x - rect.width);
     if (y + rect.height > window.innerHeight) y = Math.max(0, position.y - rect.height);
-    setAdjusted({ x, y });
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
   }, [position]);
 
-  const style: React.CSSProperties = { left: adjusted.x, top: adjusted.y };
+  const style: React.CSSProperties = { left: position.x, top: position.y };
 
   return (
     <div

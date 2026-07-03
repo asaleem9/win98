@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { playSound } from '@/lib/sounds';
+import { addLayer, boxBlurPixels, invertPixels, nextLayerName, removeLayer, PsLayer } from './photoshopHelpers';
 
 const MENU_ITEMS = ['File', 'Edit', 'Image', 'Layer', 'Select', 'Filter', 'View', 'Window', 'Help'];
 
@@ -24,23 +26,187 @@ const TOOLS = [
   { icon: '💉', label: 'Eyedropper' },
 ];
 
-const FILTERS = ['Blur', 'Gaussian Blur', 'Sharpen', 'Noise', 'Pixelate', 'Distort', 'Render', 'Stylize'];
+const TOOL_BRUSH = 7;
+const TOOL_PENCIL = 8;
+const TOOL_ERASER = 9;
 
-const LAYERS = [
-  { name: 'Background', visible: true, locked: true },
-];
+const FILTERS = ['Blur', 'Gaussian Blur', 'Sharpen', 'Noise', 'Pixelate', 'Distort', 'Render', 'Stylize'];
+const REAL_FILTERS = new Set(['Invert', 'Blur']);
+
+const SWATCHES = ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#808080'];
+
+const CANVAS_WIDTH = 400;
+const CANVAS_HEIGHT = 300;
+
+interface HistoryEntry {
+  label: string;
+  layerId: string;
+  snapshot: ImageData;
+}
+
+let layerCounter = 0;
+function makeLayerId() {
+  layerCounter += 1;
+  return `layer-${layerCounter}-${Date.now()}`;
+}
 
 export default function Photoshop5({ windowId }: AppComponentProps) {
-  const [selectedTool, setSelectedTool] = useState(1);
+  const [selectedTool, setSelectedTool] = useState(TOOL_BRUSH);
   const [fgColor, setFgColor] = useState('#000000');
   const [bgColor, setBgColor] = useState('#ffffff');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [showError, setShowError] = useState(false);
   const [activePanel, setActivePanel] = useState<'layers' | 'history' | 'color'>('layers');
 
-  const handleFilterClick = () => {
+  const [layers, setLayers] = useState<PsLayer[]>(() => [
+    { id: makeLayerId(), name: 'Background', visible: true },
+  ]);
+  const [activeLayerId, setActiveLayerId] = useState(layers[0].id);
+  const canvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const isDrawing = useRef(false);
+  const strokeSnapshot = useRef<ImageData | null>(null);
+
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  const getActiveCanvas = useCallback(() => canvasRefs.current.get(activeLayerId) ?? null, [activeLayerId]);
+
+  const pushHistory = useCallback((label: string) => {
+    const canvas = getActiveCanvas();
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    setHistory((prev) => {
+      const truncated = prev.slice(0, historyIndex + 1);
+      return [...truncated, { label, layerId: activeLayerId, snapshot }];
+    });
+    setHistoryIndex((prev) => prev + 1);
+  }, [activeLayerId, getActiveCanvas, historyIndex]);
+
+  // Seed history with the initial blank state once canvases exist.
+  useEffect(() => {
+    if (history.length === 0) {
+      pushHistory('New');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const restoreHistory = useCallback((index: number) => {
+    const entry = history[index];
+    if (!entry) return;
+    const canvas = canvasRefs.current.get(entry.layerId);
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    ctx.putImageData(entry.snapshot, 0, 0);
+    setHistoryIndex(index);
+  }, [history]);
+
+  const getPos = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const strokeAt = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
+    if (selectedTool === TOOL_ERASER) {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+      ctx.beginPath();
+      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (selectedTool === TOOL_PENCIL) {
+      ctx.fillStyle = fgColor;
+      ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+    } else {
+      // Brush: soft-ish thicker stroke
+      ctx.fillStyle = fgColor;
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  const isDrawTool = selectedTool === TOOL_BRUSH || selectedTool === TOOL_PENCIL || selectedTool === TOOL_ERASER;
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawTool) return;
+    const canvas = getActiveCanvas();
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    isDrawing.current = true;
+    strokeSnapshot.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const { x, y } = getPos(e);
+    strokeAt(ctx, x, y);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current) return;
+    const canvas = getActiveCanvas();
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const { x, y } = getPos(e);
+    strokeAt(ctx, x, y);
+  };
+
+  const finishStroke = () => {
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
+    strokeSnapshot.current = null;
+    const label = selectedTool === TOOL_ERASER ? 'Eraser' : selectedTool === TOOL_PENCIL ? 'Pencil' : 'Brush';
+    pushHistory(label);
+  };
+
+  const handleMouseUp = () => finishStroke();
+  const handleMouseLeave = () => finishStroke();
+
+  const handleFilterClick = (name: string) => {
     setActiveMenu(null);
-    setShowError(true);
+    if (!REAL_FILTERS.has(name)) {
+      setShowError(true);
+      playSound('error');
+      return;
+    }
+    const canvas = getActiveCanvas();
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    if (name === 'Invert') {
+      invertPixels(imageData.data);
+    } else if (name === 'Blur') {
+      boxBlurPixels(imageData.data, imageData.width, imageData.height, 2);
+    }
+    ctx.putImageData(imageData, 0, 0);
+    pushHistory(name);
+    playSound('ding');
+  };
+
+  const handleAddLayer = () => {
+    const name = nextLayerName(layers);
+    const newLayer: PsLayer = { id: makeLayerId(), name, visible: true };
+    setLayers((prev) => addLayer(prev, () => newLayer));
+    setActiveLayerId(newLayer.id);
+    playSound('chord');
+  };
+
+  const handleDeleteLayer = () => {
+    setLayers((prev) => {
+      const result = removeLayer(prev, activeLayerId);
+      if (result !== prev) {
+        canvasRefs.current.delete(activeLayerId);
+        setActiveLayerId(result[result.length - 1].id);
+      }
+      return result;
+    });
+    pushHistory('Delete Layer');
+  };
+
+  const toggleLayerVisibility = (id: string) => {
+    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) restoreHistory(historyIndex - 1);
   };
 
   return (
@@ -58,9 +224,16 @@ export default function Photoshop5({ windowId }: AppComponentProps) {
             </button>
             {activeMenu === item && item === 'Filter' && (
               <div className="absolute top-full left-0 z-50 win98-menu min-w-[180px]" style={{ backgroundColor: '#c0c0c0', color: '#000' }}>
-                {FILTERS.map((f) => (
-                  <div key={f} className="win98-menu-item" onClick={handleFilterClick}>{f}...</div>
+                <div className="win98-menu-item" onClick={() => handleFilterClick('Invert')}>Invert</div>
+                <div className="win98-menu-item" onClick={() => handleFilterClick('Blur')}>Blur</div>
+                {FILTERS.filter((f) => f !== 'Blur').map((f) => (
+                  <div key={f} className="win98-menu-item" onClick={() => handleFilterClick(f)}>{f}...</div>
                 ))}
+              </div>
+            )}
+            {activeMenu === item && item === 'Edit' && (
+              <div className="absolute top-full left-0 z-50 win98-menu min-w-[140px]" style={{ backgroundColor: '#c0c0c0', color: '#000' }}>
+                <div className="win98-menu-item" onClick={() => { setActiveMenu(null); handleUndo(); }}>Undo</div>
               </div>
             )}
           </div>
@@ -108,12 +281,10 @@ export default function Photoshop5({ windowId }: AppComponentProps) {
             <div
               className="absolute bottom-0 right-0 w-[22px] h-[22px] border border-[#808080]"
               style={{ backgroundColor: bgColor }}
-              onClick={() => setBgColor(bgColor)}
             />
             <div
               className="absolute top-0 left-0 w-[22px] h-[22px] border border-[#808080]"
               style={{ backgroundColor: fgColor }}
-              onClick={() => setFgColor(fgColor)}
             />
             {/* Swap icon */}
             <button
@@ -124,6 +295,19 @@ export default function Photoshop5({ windowId }: AppComponentProps) {
               ⇄
             </button>
           </div>
+
+          {/* Quick swatch palette */}
+          <div className="grid grid-cols-3 gap-[1px] mt-2">
+            {SWATCHES.map((c) => (
+              <button
+                key={c}
+                className="w-[10px] h-[10px] border border-[#808080]"
+                style={{ backgroundColor: c }}
+                title={c}
+                onClick={() => setFgColor(c)}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Canvas area */}
@@ -133,11 +317,34 @@ export default function Photoshop5({ windowId }: AppComponentProps) {
             <div className="h-[18px] flex items-center px-2 text-[10px] font-bold" style={{ backgroundColor: '#000080', color: '#fff' }}>
               Untitled-1 @ 100% (RGB)
             </div>
-            {/* White canvas */}
+            {/* Layered canvas stack */}
             <div
-              className="bg-white border border-[#000]"
-              style={{ width: '400px', height: '300px', cursor: 'crosshair' }}
-            />
+              className="relative bg-white border border-[#000]"
+              style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}
+            >
+              {layers.map((layer) => (
+                <canvas
+                  key={layer.id}
+                  ref={(el) => {
+                    if (el) canvasRefs.current.set(layer.id, el);
+                    else canvasRefs.current.delete(layer.id);
+                  }}
+                  width={CANVAS_WIDTH}
+                  height={CANVAS_HEIGHT}
+                  className="absolute top-0 left-0"
+                  style={{
+                    display: layer.visible ? 'block' : 'none',
+                    cursor: isDrawTool ? 'crosshair' : 'default',
+                    pointerEvents: layer.id === activeLayerId ? 'auto' : 'none',
+                  }}
+                  onMouseDown={layer.id === activeLayerId ? handleMouseDown : undefined}
+                  onMouseMove={layer.id === activeLayerId ? handleMouseMove : undefined}
+                  onMouseUp={layer.id === activeLayerId ? handleMouseUp : undefined}
+                  onMouseLeave={layer.id === activeLayerId ? handleMouseLeave : undefined}
+                  data-layer-name={layer.name}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
@@ -197,25 +404,38 @@ export default function Photoshop5({ windowId }: AppComponentProps) {
               <div className="win98-sunken bg-white h-[14px] flex-1 flex items-center px-1 text-[10px]">100%</div>
             </div>
             <div className="flex-1 bg-white overflow-auto" style={{ color: '#000' }}>
-              {LAYERS.map((layer, i) => (
-                <div key={i} className="flex items-center gap-1 px-1 py-[2px] bg-[#000080] text-white text-[10px]">
-                  <span>{layer.visible ? '👁' : '  '}</span>
+              {[...layers].reverse().map((layer) => (
+                <div
+                  key={layer.id}
+                  className={`flex items-center gap-1 px-1 py-[2px] text-[10px] cursor-pointer ${
+                    layer.id === activeLayerId ? 'bg-[#000080] text-white' : 'text-black hover:bg-[#dcdcdc]'
+                  }`}
+                  onClick={() => setActiveLayerId(layer.id)}
+                >
+                  <span
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleLayerVisibility(layer.id);
+                    }}
+                  >
+                    {layer.visible ? '👁' : '  '}
+                  </span>
                   <div className="w-[24px] h-[18px] bg-white border border-[#808080]" />
                   <span className="flex-1">{layer.name}</span>
-                  {layer.locked && <span>🔒</span>}
                 </div>
               ))}
             </div>
             {/* Layer buttons */}
             <div className="flex items-center gap-[1px] p-[2px]" style={{ borderTop: '1px solid #808080', color: '#000' }}>
-              <button className="w-[20px] h-[18px] win98-raised text-[10px] flex items-center justify-center">📄</button>
+              <button className="w-[20px] h-[18px] win98-raised text-[10px] flex items-center justify-center" onClick={handleAddLayer} title="New Layer">📄</button>
               <button className="w-[20px] h-[18px] win98-raised text-[10px] flex items-center justify-center">📁</button>
-              <button className="w-[20px] h-[18px] win98-raised text-[10px] flex items-center justify-center">🗑</button>
+              <button className="w-[20px] h-[18px] win98-raised text-[10px] flex items-center justify-center" onClick={handleDeleteLayer} title="Delete Layer">🗑</button>
             </div>
           </div>
 
           {/* History */}
-          <div className="h-[80px] border-t border-[#808080]">
+          <div className="h-[80px] border-t border-[#808080] flex flex-col">
             <div className="flex" style={{ borderBottom: '1px solid #808080' }}>
               <button
                 className={`px-2 py-[1px] text-[10px] ${activePanel === 'history' ? 'font-bold bg-[#c0c0c0]' : 'bg-[#a0a0a0]'}`}
@@ -226,8 +446,16 @@ export default function Photoshop5({ windowId }: AppComponentProps) {
               </button>
               <button className="px-2 py-[1px] text-[10px] bg-[#a0a0a0]" style={{ color: '#000' }}>Actions</button>
             </div>
-            <div className="bg-white flex-1 p-1 text-[10px]" style={{ color: '#000' }}>
-              <div className="bg-[#000080] text-white px-1">New</div>
+            <div className="bg-white flex-1 p-1 text-[10px] overflow-auto" style={{ color: '#000' }}>
+              {history.map((entry, i) => (
+                <div
+                  key={i}
+                  className={`px-1 cursor-pointer ${i === historyIndex ? 'bg-[#000080] text-white' : 'hover:bg-[#dcdcdc]'}`}
+                  onClick={() => restoreHistory(i)}
+                >
+                  {entry.label}
+                </div>
+              ))}
             </div>
           </div>
         </div>

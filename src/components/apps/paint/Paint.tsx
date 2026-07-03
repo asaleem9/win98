@@ -3,6 +3,22 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { useWindows } from '@/contexts/WindowContext';
+import { useFileSystem } from '@/contexts/FileSystemContext';
+import { normalizePath } from '@/lib/fs/fsOperations';
+import { getParentPath } from '@/lib/filesystem';
+import { addRecentDoc } from '@/lib/recentDocs';
+import { showSystemError } from '@/hooks/useFileOpener';
+import { playSound } from '@/lib/sounds';
+import {
+  invertImageData,
+  flipImageDataHorizontal,
+  flipImageDataVertical,
+  isDataUrl,
+  buildFileName,
+  rgbToHex,
+} from './paintHelpers';
 
 type Tool = 'pencil' | 'brush' | 'eraser' | 'fill' | 'line' | 'rectangle' | 'ellipse' | 'text' | 'picker';
 
@@ -25,8 +41,17 @@ const TOOLS: { id: Tool; label: string }[] = [
   { id: 'picker', label: '💉' },
 ];
 
-export default function Paint({ windowId }: AppComponentProps) {
+function baseName(path: string): string {
+  const parts = normalizePath(path).split('\\');
+  return parts[parts.length - 1] || 'Untitled.bmp';
+}
+
+export default function Paint({ windowId, launchParams, launchCount }: AppComponentProps) {
+  const { updateTitle } = useWindows();
+  const { readFile, writeFile } = useFileSystem();
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<Tool>('pencil');
   const [color, setColor] = useState('#000000');
@@ -36,7 +61,13 @@ export default function Paint({ windowId }: AppComponentProps) {
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [undoStack, setUndoStack] = useState<ImageData[]>([]);
+  const [redoStack, setRedoStack] = useState<ImageData[]>([]);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [textEdit, setTextEdit] = useState<{ x: number; y: number; value: string } | null>(null);
+  const textCommitted = useRef(false);
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize canvas
   useEffect(() => {
@@ -71,22 +102,189 @@ export default function Paint({ windowId }: AppComponentProps) {
     return () => observer.disconnect();
   }, [canvasSize.width, canvasSize.height]);
 
+  // Keep the overlay canvas (used for live shape previews) the same size as the main canvas.
+  useEffect(() => {
+    const overlay = overlayCanvasRef.current;
+    if (!overlay) return;
+    overlay.width = canvasSize.width;
+    overlay.height = canvasSize.height;
+  }, [canvasSize.width, canvasSize.height]);
+
+  // Reflect the current file + dirty state in the window title.
+  useEffect(() => {
+    const name = currentFilePath ? baseName(currentFilePath) : 'Untitled';
+    updateTitle(windowId, `${dirty ? '*' : ''}${name} - Paint`);
+  }, [currentFilePath, dirty, windowId, updateTitle]);
+
   const saveUndo = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
     setUndoStack((prev) => [...prev.slice(-9), data]);
+    setRedoStack([]);
+    setDirty(true);
   }, []);
 
   const handleUndo = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx || undoStack.length === 0) return;
+    const current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const last = undoStack[undoStack.length - 1];
     ctx.putImageData(last, 0, 0);
     setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev, current]);
+    setDirty(true);
   }, [undoStack]);
+
+  const handleRedo = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx || redoStack.length === 0) return;
+    const current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const next = redoStack[redoStack.length - 1];
+    ctx.putImageData(next, 0, 0);
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [...prev, current]);
+    setDirty(true);
+  }, [redoStack]);
+
+  const clearCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    saveUndo();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, [saveUndo]);
+
+  const handleFlipHorizontal = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    saveUndo();
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    flipImageDataHorizontal(imgData);
+    ctx.putImageData(imgData, 0, 0);
+  }, [saveUndo]);
+
+  const handleFlipVertical = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    saveUndo();
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    flipImageDataVertical(imgData);
+    ctx.putImageData(imgData, 0, 0);
+  }, [saveUndo]);
+
+  const handleInvertColors = useCallback(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    saveUndo();
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    invertImageData(imgData.data);
+    ctx.putImageData(imgData, 0, 0);
+  }, [saveUndo]);
+
+  const handleNew = useCallback(() => {
+    if (dirty) {
+      const proceed = window.confirm('Do you want to discard changes and start a new picture?');
+      if (!proceed) return;
+    }
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (canvas && ctx) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    setUndoStack([]);
+    setRedoStack([]);
+    setCurrentFilePath(null);
+    setDirty(false);
+  }, [dirty]);
+
+  const loadPath = useCallback(
+    (rawPath: string) => {
+      const path = normalizePath(rawPath);
+      const content = readFile(path);
+      if (content == null) {
+        showSystemError('Paint', `Cannot find the file '${path}'. Make sure the path and filename are correct.`);
+        return;
+      }
+      if (!isDataUrl(content)) {
+        showSystemError('Paint', 'This does not appear to be a valid bitmap file.');
+        return;
+      }
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (canvas && ctx) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+        };
+        img.onerror = () => {
+          showSystemError('Paint', 'This does not appear to be a valid bitmap file.');
+        };
+        img.src = content;
+      }
+      setUndoStack([]);
+      setRedoStack([]);
+      setCurrentFilePath(path);
+      setDirty(false);
+      addRecentDoc(path);
+    },
+    [readFile],
+  );
+
+  const handleOpen = useCallback(() => {
+    const path = window.prompt('Open file:', currentFilePath ?? 'C:\\My Documents\\');
+    if (!path) return;
+    loadPath(path);
+  }, [currentFilePath, loadPath]);
+
+  const doSave = useCallback(
+    (path: string): boolean => {
+      const canvas = canvasRef.current;
+      if (!canvas) return false;
+      const dataUrl = canvas.toDataURL('image/png');
+      const result = writeFile(path, dataUrl);
+      if (!result.ok) {
+        showSystemError('Paint', result.error);
+        return false;
+      }
+      setCurrentFilePath(path);
+      setDirty(false);
+      addRecentDoc(path);
+      playSound('ding');
+      return true;
+    },
+    [writeFile],
+  );
+
+  const handleSaveAs = useCallback(() => {
+    const defaultName = currentFilePath ? baseName(currentFilePath) : 'Untitled.bmp';
+    const name = window.prompt('Save As - file name:', defaultName);
+    if (!name) return;
+    const fileName = buildFileName(name);
+    const dir = currentFilePath ? getParentPath(currentFilePath) : 'C:\\My Documents';
+    doSave(`${dir}\\${fileName}`);
+  }, [currentFilePath, doSave]);
+
+  const handleSave = useCallback(() => {
+    if (currentFilePath) doSave(currentFilePath);
+    else handleSaveAs();
+  }, [currentFilePath, doSave, handleSaveAs]);
+
+  // Honor launch params on mount and whenever the app is re-launched with a file.
+  useEffect(() => {
+    if (launchParams?.filePath) loadPath(launchParams.filePath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [launchCount]);
 
   const getCanvasPos = (e: React.MouseEvent): { x: number; y: number } => {
     const canvas = canvasRef.current;
@@ -134,6 +332,70 @@ export default function Paint({ windowId }: AppComponentProps) {
     ctx.putImageData(imgData, 0, 0);
   }, []);
 
+  const drawPreview = useCallback(
+    (pos: { x: number; y: number }) => {
+      const overlay = overlayCanvasRef.current;
+      const octx = overlay?.getContext('2d');
+      if (!overlay || !octx || !startPos) return;
+      octx.clearRect(0, 0, overlay.width, overlay.height);
+      octx.strokeStyle = color;
+      octx.lineWidth = brushSize;
+      if (tool === 'line') {
+        octx.beginPath();
+        octx.moveTo(startPos.x, startPos.y);
+        octx.lineTo(pos.x, pos.y);
+        octx.stroke();
+      } else if (tool === 'rectangle') {
+        octx.strokeRect(startPos.x, startPos.y, pos.x - startPos.x, pos.y - startPos.y);
+      } else if (tool === 'ellipse') {
+        const cx = (startPos.x + pos.x) / 2;
+        const cy = (startPos.y + pos.y) / 2;
+        const rx = Math.abs(pos.x - startPos.x) / 2;
+        const ry = Math.abs(pos.y - startPos.y) / 2;
+        octx.beginPath();
+        octx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        octx.stroke();
+      }
+    },
+    [startPos, tool, color, brushSize],
+  );
+
+  const clearOverlay = useCallback(() => {
+    const overlay = overlayCanvasRef.current;
+    const octx = overlay?.getContext('2d');
+    if (overlay && octx) octx.clearRect(0, 0, overlay.width, overlay.height);
+  }, []);
+
+  const commitText = useCallback(() => {
+    if (textCommitted.current) return;
+    textCommitted.current = true;
+    setTextEdit((current) => {
+      if (current && current.value) {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (canvas && ctx) {
+          const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          setUndoStack((prev) => [...prev.slice(-9), data]);
+          setRedoStack([]);
+          setDirty(true);
+          ctx.fillStyle = color;
+          ctx.font = '14px "MS Sans Serif", Arial, sans-serif';
+          ctx.fillText(current.value, current.x, current.y);
+        }
+      }
+      return null;
+    });
+  }, [color]);
+
+  const cancelText = useCallback(() => {
+    textCommitted.current = true;
+    setTextEdit(null);
+  }, []);
+
+  useEffect(() => {
+    if (textEdit) textInputRef.current?.focus();
+  }, [textEdit]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const pos = getCanvasPos(e);
     setMousePos(pos);
@@ -141,28 +403,24 @@ export default function Paint({ windowId }: AppComponentProps) {
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
 
-    saveUndo();
-
     if (tool === 'fill') {
+      saveUndo();
       floodFill(Math.floor(pos.x), Math.floor(pos.y), e.button === 2 ? bgColor : color);
       return;
     }
     if (tool === 'picker') {
       const pixel = ctx.getImageData(Math.floor(pos.x), Math.floor(pos.y), 1, 1).data;
-      const hex = '#' + [pixel[0], pixel[1], pixel[2]].map((c) => c.toString(16).padStart(2, '0')).join('');
+      const hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
       if (e.button === 2) setBgColor(hex); else setColor(hex);
       return;
     }
     if (tool === 'text') {
-      const text = prompt('Enter text:');
-      if (text) {
-        ctx.fillStyle = color;
-        ctx.font = '14px "MS Sans Serif", Arial, sans-serif';
-        ctx.fillText(text, pos.x, pos.y);
-      }
+      textCommitted.current = false;
+      setTextEdit({ x: pos.x, y: pos.y, value: '' });
       return;
     }
 
+    saveUndo();
     setIsDrawing(true);
     setStartPos(pos);
 
@@ -188,8 +446,10 @@ export default function Paint({ windowId }: AppComponentProps) {
     if (tool === 'pencil' || tool === 'brush' || tool === 'eraser') {
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
+    } else if (tool === 'line' || tool === 'rectangle' || tool === 'ellipse') {
+      drawPreview(pos);
     }
-  }, [isDrawing, tool]);
+  }, [isDrawing, tool, drawPreview]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (!isDrawing || !startPos) {
@@ -227,12 +487,45 @@ export default function Paint({ windowId }: AppComponentProps) {
       ctx.stroke();
     }
 
+    clearOverlay();
     setIsDrawing(false);
     setStartPos(null);
-  }, [isDrawing, startPos, tool, color, brushSize]);
+  }, [isDrawing, startPos, tool, color, brushSize, clearOverlay]);
+
+  const menus: MenuDefinition[] = [
+    {
+      label: 'File',
+      items: [
+        { label: 'New', shortcut: 'Ctrl+N', onClick: handleNew },
+        { label: 'Open...', shortcut: 'Ctrl+O', onClick: handleOpen },
+        { label: 'Save', shortcut: 'Ctrl+S', onClick: handleSave },
+        { label: 'Save As...', onClick: handleSaveAs },
+      ],
+    },
+    {
+      label: 'Edit',
+      items: [
+        { label: 'Undo', shortcut: 'Ctrl+Z', onClick: handleUndo, disabled: undoStack.length === 0 },
+        { label: 'Redo', shortcut: 'Ctrl+Y', onClick: handleRedo, disabled: redoStack.length === 0 },
+        { label: '', separator: true },
+        { label: 'Clear Image', onClick: clearCanvas },
+      ],
+    },
+    {
+      label: 'Image',
+      items: [
+        { label: 'Clear Image', onClick: clearCanvas },
+        { label: 'Flip Horizontal', onClick: handleFlipHorizontal },
+        { label: 'Flip Vertical', onClick: handleFlipVertical },
+        { label: 'Invert Colors', onClick: handleInvertColors },
+      ],
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-[var(--win98-button-face)]" onContextMenu={(e) => e.preventDefault()}>
+      <MenuBar menus={menus} />
+
       {/* Toolbar row */}
       <div className="flex items-center h-[26px] px-1 gap-1 bg-[var(--win98-button-face)] border-b border-[var(--win98-button-shadow)] font-[family-name:var(--win98-font)] text-[11px]">
         <button
@@ -280,15 +573,51 @@ export default function Paint({ windowId }: AppComponentProps) {
 
         {/* Canvas area */}
         <div ref={containerRef} className="flex-1 min-w-0 overflow-auto bg-[#808080] p-0">
-          <canvas
-            ref={canvasRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={() => { if (isDrawing) setIsDrawing(false); }}
-            className="block cursor-crosshair"
-            style={{ imageRendering: 'pixelated' }}
-          />
+          <div className="relative" style={{ width: canvasSize.width, height: canvasSize.height }}>
+            <canvas
+              ref={canvasRef}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={() => { if (isDrawing) { clearOverlay(); setIsDrawing(false); } }}
+              className="block cursor-crosshair"
+              style={{ imageRendering: 'pixelated' }}
+            />
+            <canvas
+              ref={overlayCanvasRef}
+              className="absolute top-0 left-0 pointer-events-none"
+              style={{ imageRendering: 'pixelated' }}
+            />
+            {textEdit && (
+              <input
+                ref={textInputRef}
+                value={textEdit.value}
+                onChange={(e) => setTextEdit((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitText();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelText();
+                  }
+                }}
+                onBlur={commitText}
+                style={{
+                  position: 'absolute',
+                  left: textEdit.x,
+                  top: textEdit.y - 14,
+                  font: '14px "MS Sans Serif", Arial, sans-serif',
+                  color,
+                  background: 'transparent',
+                  border: '1px dashed #000',
+                  outline: 'none',
+                  padding: 0,
+                  minWidth: 60,
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
