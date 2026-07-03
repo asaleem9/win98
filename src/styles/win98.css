@@ -495,3 +495,57 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Color schemes (Display Properties → Appearance) */
+html[data-win98-scheme='desert'] {
+  --win98-button-face: #d5ccbb;
+  --win98-button-light: #e8e0d0;
+  --win98-button-shadow: #a28d68;
+  --win98-titlebar-active-start: #008080;
+  --win98-titlebar-active-end: #40a0a0;
+  --win98-highlight: #008080;
+  --win98-menu-bg: #d5ccbb;
+  --win98-taskbar-bg: #d5ccbb;
+  --win98-desktop: #a28d68;
+}
+
+html[data-win98-scheme='eggplant'] {
+  --win98-button-face: #b0a8b8;
+  --win98-button-light: #c8c0d0;
+  --win98-button-shadow: #6e5a78;
+  --win98-titlebar-active-start: #3f2f4f;
+  --win98-titlebar-active-end: #7a5a8a;
+  --win98-highlight: #573b63;
+  --win98-menu-bg: #b0a8b8;
+  --win98-taskbar-bg: #b0a8b8;
+  --win98-desktop: #573b63;
+}
+
+html[data-win98-scheme='rainy-day'] {
+  --win98-button-face: #9fb6cd;
+  --win98-button-light: #bccfe0;
+  --win98-button-shadow: #5b7a99;
+  --win98-titlebar-active-start: #2f4f6f;
+  --win98-titlebar-active-end: #5b7a99;
+  --win98-highlight: #2f4f6f;
+  --win98-menu-bg: #9fb6cd;
+  --win98-taskbar-bg: #9fb6cd;
+  --win98-desktop: #4a6580;
+}
+
+html[data-win98-scheme='high-contrast'] {
+  --win98-button-face: #000000;
+  --win98-button-highlight: #ffffff;
+  --win98-button-light: #c0c0c0;
+  --win98-button-shadow: #808080;
+  --win98-button-text: #ffffff;
+  --win98-titlebar-active-start: #8000ff;
+  --win98-titlebar-active-end: #8000ff;
+  --win98-highlight: #008000;
+  --win98-menu-bg: #000000;
+  --win98-menu-text: #ffffff;
+  --win98-taskbar-bg: #000000;
+  --win98-input-bg: #000000;
+  --win98-input-text: #ffffff;
+  --win98-desktop: #000000;
+}

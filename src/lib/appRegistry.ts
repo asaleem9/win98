@@ -2,9 +2,6 @@ import { lazy } from 'react';
 import { AppDefinition } from '@/types/app';
 import { setAppRegistry } from '@/hooks/useWindowManager';
 
-// Placeholder app for apps not yet implemented
-const PlaceholderApp = lazy(() => import('@/components/apps/placeholder/PlaceholderApp'));
-
 // Real implementations
 const DiskDefragmenter = lazy(() => import('@/components/apps/defrag/DiskDefragmenter'));
 const TaskManagerApp = lazy(() => import('@/components/apps/task-manager/TaskManager'));
@@ -59,6 +56,12 @@ const QuickTimePlayerApp = lazy(() => import('@/components/apps/quicktime/QuickT
 const OutlookExpressApp = lazy(() => import('@/components/apps/outlook/OutlookExpress'));
 const MyComputerApp = lazy(() => import('@/components/apps/my-computer/MyComputer'));
 const ControlPanelApp = lazy(() => import('@/components/apps/control-panel/ControlPanel'));
+const RecycleBinApp = lazy(() => import('@/components/apps/recycle-bin/RecycleBin'));
+const MyDocumentsApp = lazy(() => import('@/components/apps/my-documents/MyDocuments'));
+const NetworkNeighborhoodApp = lazy(() => import('@/components/apps/network-neighborhood/NetworkNeighborhood'));
+const FindFilesApp = lazy(() => import('@/components/apps/find-files/FindFiles'));
+const HelpApp = lazy(() => import('@/components/apps/help/Help'));
+const VolumeControlApp = lazy(() => import('@/components/apps/volume-control/VolumeControl'));
 
 const apps: Record<string, AppDefinition> = {
   'notepad': {
@@ -70,7 +73,6 @@ const apps: Record<string, AppDefinition> = {
     component: NotepadApp,
     defaultWindow: { title: 'Untitled - Notepad', width: 500, height: 400, minWidth: 250, minHeight: 200 },
     startMenuPath: ['Programs', 'Accessories'],
-    desktopIcon: true,
     singleton: false,
   },
   'calculator': {
@@ -82,7 +84,6 @@ const apps: Record<string, AppDefinition> = {
     component: CalculatorApp,
     defaultWindow: { title: 'Calculator', width: 260, height: 300, minWidth: 260, minHeight: 300 },
     startMenuPath: ['Programs', 'Accessories'],
-    desktopIcon: true,
     singleton: true,
   },
   'paint': {
@@ -94,7 +95,6 @@ const apps: Record<string, AppDefinition> = {
     component: PaintApp,
     defaultWindow: { title: 'untitled - Paint', width: 600, height: 480, minWidth: 300, minHeight: 250 },
     startMenuPath: ['Programs', 'Accessories'],
-    desktopIcon: true,
     singleton: true,
   },
   'minesweeper': {
@@ -106,7 +106,6 @@ const apps: Record<string, AppDefinition> = {
     component: MinesweeperApp,
     defaultWindow: { title: 'Minesweeper', width: 200, height: 260, minWidth: 200, minHeight: 260 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'solitaire': {
@@ -118,7 +117,6 @@ const apps: Record<string, AppDefinition> = {
     component: SolitaireApp,
     defaultWindow: { title: 'Solitaire', width: 580, height: 440, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'msdos': {
@@ -130,7 +128,6 @@ const apps: Record<string, AppDefinition> = {
     component: MSDOSApp,
     defaultWindow: { title: 'MS-DOS Prompt', width: 520, height: 340, minWidth: 320, minHeight: 200 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: false,
   },
   'explorer': {
@@ -142,7 +139,6 @@ const apps: Record<string, AppDefinition> = {
     component: ExplorerApp,
     defaultWindow: { title: 'Exploring - C:\\', width: 640, height: 480, minWidth: 350, minHeight: 250 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: false,
   },
   'ie5': {
@@ -154,9 +150,9 @@ const apps: Record<string, AppDefinition> = {
     component: InternetExplorer,
     defaultWindow: { title: 'Microsoft Internet Explorer', width: 700, height: 500, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     quickLaunch: true,
     singleton: false,
+    desktopIcon: true,
   },
   'my-computer': {
     id: 'my-computer',
@@ -166,8 +162,8 @@ const apps: Record<string, AppDefinition> = {
     category: 'system',
     component: MyComputerApp,
     defaultWindow: { title: 'My Computer', width: 500, height: 400, minWidth: 300, minHeight: 250 },
-    desktopIcon: true,
     singleton: true,
+    desktopIcon: true,
   },
   'my-documents': {
     id: 'my-documents',
@@ -175,10 +171,10 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/my-documents-32.svg',
     icon16: '/icons/my-documents-16.svg',
     category: 'system',
-    component: PlaceholderApp,
+    component: MyDocumentsApp,
     defaultWindow: { title: 'My Documents', width: 500, height: 400, minWidth: 300, minHeight: 250 },
-    desktopIcon: true,
     singleton: true,
+    desktopIcon: true,
   },
   'recycle-bin': {
     id: 'recycle-bin',
@@ -186,10 +182,10 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/recycle-bin-32.svg',
     icon16: '/icons/recycle-bin-16.svg',
     category: 'system',
-    component: PlaceholderApp,
+    component: RecycleBinApp,
     defaultWindow: { title: 'Recycle Bin', width: 400, height: 300, minWidth: 250, minHeight: 200 },
-    desktopIcon: true,
     singleton: true,
+    desktopIcon: true,
   },
   'network-neighborhood': {
     id: 'network-neighborhood',
@@ -197,10 +193,10 @@ const apps: Record<string, AppDefinition> = {
     icon: '/icons/network-32.svg',
     icon16: '/icons/network-16.svg',
     category: 'system',
-    component: PlaceholderApp,
+    component: NetworkNeighborhoodApp,
     defaultWindow: { title: 'Network Neighborhood', width: 500, height: 400, minWidth: 300, minHeight: 250 },
-    desktopIcon: true,
     singleton: true,
+    desktopIcon: true,
   },
   'aol': {
     id: 'aol',
@@ -211,8 +207,8 @@ const apps: Record<string, AppDefinition> = {
     component: AOL,
     defaultWindow: { title: 'America Online', width: 640, height: 480, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Internet Tools'],
-    desktopIcon: true,
     singleton: true,
+    desktopIcon: true,
   },
   'aim': {
     id: 'aim',
@@ -224,7 +220,6 @@ const apps: Record<string, AppDefinition> = {
     defaultWindow: { title: 'AIM Buddy List', width: 200, height: 400, minWidth: 150, minHeight: 250 },
     startMenuPath: ['Programs', 'Internet Tools'],
     quickLaunch: true,
-    desktopIcon: true,
     singleton: true,
   },
   'winamp': {
@@ -237,8 +232,8 @@ const apps: Record<string, AppDefinition> = {
     defaultWindow: { title: 'Winamp', width: 275, height: 260, minWidth: 275, minHeight: 140 },
     startMenuPath: ['Programs', 'Multimedia'],
     quickLaunch: true,
-    desktopIcon: true,
     singleton: true,
+    desktopIcon: true,
   },
   'word97': {
     id: 'word97',
@@ -249,7 +244,6 @@ const apps: Record<string, AppDefinition> = {
     component: Word97App,
     defaultWindow: { title: 'Document1 - Microsoft Word', width: 700, height: 500, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'excel': {
@@ -261,7 +255,6 @@ const apps: Record<string, AppDefinition> = {
     component: ExcelApp,
     defaultWindow: { title: 'Book1 - Microsoft Excel', width: 700, height: 500, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'control-panel': {
@@ -273,7 +266,6 @@ const apps: Record<string, AppDefinition> = {
     component: ControlPanelApp,
     defaultWindow: { title: 'Control Panel', width: 500, height: 400, minWidth: 300, minHeight: 250 },
     startMenuPath: ['Settings'],
-    desktopIcon: true,
     singleton: true,
   },
   'defrag': {
@@ -285,7 +277,6 @@ const apps: Record<string, AppDefinition> = {
     component: DiskDefragmenter,
     defaultWindow: { title: 'Disk Defragmenter', width: 500, height: 400, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Accessories', 'System Tools'],
-    desktopIcon: true,
     singleton: true,
   },
   'task-manager': {
@@ -296,7 +287,6 @@ const apps: Record<string, AppDefinition> = {
     category: 'system',
     component: TaskManagerApp,
     defaultWindow: { title: 'Windows Task Manager', width: 400, height: 350, minWidth: 300, minHeight: 250 },
-    desktopIcon: true,
     singleton: true,
   },
   'regedit': {
@@ -308,7 +298,6 @@ const apps: Record<string, AppDefinition> = {
     component: RegistryEditor,
     defaultWindow: { title: 'Registry Editor', width: 600, height: 400, minWidth: 400, minHeight: 250 },
     startMenuPath: ['Programs', 'Accessories', 'System Tools'],
-    desktopIcon: true,
     singleton: true,
   },
   'display-properties': {
@@ -320,7 +309,6 @@ const apps: Record<string, AppDefinition> = {
     component: DisplayProperties,
     defaultWindow: { title: 'Display Properties', width: 400, height: 440, minWidth: 380, minHeight: 400, resizable: false },
     startMenuPath: ['Settings', 'Control Panel'],
-    desktopIcon: true,
     singleton: true,
   },
   'napster': {
@@ -332,7 +320,6 @@ const apps: Record<string, AppDefinition> = {
     component: NapsterApp,
     defaultWindow: { title: 'Napster', width: 550, height: 400, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Internet Tools'],
-    desktopIcon: true,
     singleton: true,
   },
   'powerpoint': {
@@ -344,7 +331,6 @@ const apps: Record<string, AppDefinition> = {
     component: PowerPointApp,
     defaultWindow: { title: 'Presentation1 - Microsoft PowerPoint', width: 750, height: 550, minWidth: 500, minHeight: 400 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'photoshop5': {
@@ -356,7 +342,6 @@ const apps: Record<string, AppDefinition> = {
     component: Photoshop5App,
     defaultWindow: { title: 'Adobe Photoshop', width: 800, height: 600, minWidth: 600, minHeight: 400 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'flash': {
@@ -368,7 +353,6 @@ const apps: Record<string, AppDefinition> = {
     component: MacromediaFlashApp,
     defaultWindow: { title: 'Macromedia Flash 5', width: 800, height: 600, minWidth: 600, minHeight: 400 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'frontpage': {
@@ -380,7 +364,6 @@ const apps: Record<string, AppDefinition> = {
     component: FrontPageApp,
     defaultWindow: { title: 'FrontPage Editor', width: 700, height: 500, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'vb6': {
@@ -392,7 +375,6 @@ const apps: Record<string, AppDefinition> = {
     component: VisualBasic6App,
     defaultWindow: { title: 'Microsoft Visual Basic [design]', width: 800, height: 600, minWidth: 600, minHeight: 400 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'winrar': {
@@ -404,7 +386,6 @@ const apps: Record<string, AppDefinition> = {
     component: WinRARApp,
     defaultWindow: { title: 'WinRAR - archive.rar', width: 600, height: 400, minWidth: 400, minHeight: 250 },
     startMenuPath: ['Programs', 'WinRAR'],
-    desktopIcon: true,
     singleton: false,
   },
   'winzip': {
@@ -416,7 +397,6 @@ const apps: Record<string, AppDefinition> = {
     component: WinZipApp,
     defaultWindow: { title: 'WinZip - website.zip', width: 580, height: 380, minWidth: 400, minHeight: 250 },
     startMenuPath: ['Programs', 'WinZip'],
-    desktopIcon: true,
     singleton: false,
   },
   'nero': {
@@ -428,7 +408,6 @@ const apps: Record<string, AppDefinition> = {
     component: NeroBurningROMApp,
     defaultWindow: { title: 'Nero Burning ROM', width: 650, height: 450, minWidth: 450, minHeight: 300 },
     startMenuPath: ['Programs', 'Ahead Nero'],
-    desktopIcon: true,
     singleton: true,
   },
   'norton': {
@@ -440,7 +419,6 @@ const apps: Record<string, AppDefinition> = {
     component: NortonAntiVirusApp,
     defaultWindow: { title: 'Norton AntiVirus 2000', width: 450, height: 500, minWidth: 350, minHeight: 400 },
     startMenuPath: ['Programs', 'Norton AntiVirus'],
-    desktopIcon: true,
     singleton: true,
   },
   'bonzi-buddy': {
@@ -452,7 +430,6 @@ const apps: Record<string, AppDefinition> = {
     component: BonziBuddyApp,
     defaultWindow: { title: 'BonziBUDDY', width: 300, height: 420, minWidth: 250, minHeight: 350 },
     startMenuPath: ['Programs'],
-    desktopIcon: true,
     singleton: true,
   },
   'add-remove-programs': {
@@ -464,7 +441,6 @@ const apps: Record<string, AppDefinition> = {
     component: AddRemoveProgramsApp,
     defaultWindow: { title: 'Add/Remove Programs Properties', width: 420, height: 450, minWidth: 380, minHeight: 350 },
     startMenuPath: ['Settings', 'Control Panel'],
-    desktopIcon: true,
     singleton: true,
   },
   'wordpad': {
@@ -476,7 +452,6 @@ const apps: Record<string, AppDefinition> = {
     component: WordPadApp,
     defaultWindow: { title: 'Document - WordPad', width: 600, height: 450, minWidth: 350, minHeight: 250 },
     startMenuPath: ['Programs', 'Accessories'],
-    desktopIcon: true,
     singleton: false,
   },
   'character-map': {
@@ -488,7 +463,6 @@ const apps: Record<string, AppDefinition> = {
     component: CharacterMapApp,
     defaultWindow: { title: 'Character Map', width: 380, height: 340, minWidth: 320, minHeight: 280 },
     startMenuPath: ['Programs', 'Accessories'],
-    desktopIcon: true,
     singleton: true,
   },
   'sound-recorder': {
@@ -500,7 +474,6 @@ const apps: Record<string, AppDefinition> = {
     component: SoundRecorderApp,
     defaultWindow: { title: 'Sound - Sound Recorder', width: 280, height: 220, minWidth: 280, minHeight: 220, resizable: false },
     startMenuPath: ['Programs', 'Accessories', 'Multimedia'],
-    desktopIcon: true,
     singleton: true,
   },
   'media-player': {
@@ -512,7 +485,6 @@ const apps: Record<string, AppDefinition> = {
     component: MediaPlayerApp,
     defaultWindow: { title: 'Windows Media Player', width: 420, height: 380, minWidth: 300, minHeight: 280 },
     startMenuPath: ['Programs', 'Accessories', 'Multimedia'],
-    desktopIcon: true,
     singleton: true,
   },
   'freecell': {
@@ -524,7 +496,6 @@ const apps: Record<string, AppDefinition> = {
     component: FreeCellApp,
     defaultWindow: { title: 'FreeCell', width: 580, height: 440, minWidth: 480, minHeight: 350 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'hearts': {
@@ -536,7 +507,6 @@ const apps: Record<string, AppDefinition> = {
     component: HeartsApp,
     defaultWindow: { title: 'The Microsoft Hearts Network', width: 580, height: 480, minWidth: 450, minHeight: 380 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'scandisk': {
@@ -548,7 +518,6 @@ const apps: Record<string, AppDefinition> = {
     component: ScanDiskApp,
     defaultWindow: { title: 'ScanDisk', width: 420, height: 440, minWidth: 350, minHeight: 350 },
     startMenuPath: ['Programs', 'Accessories', 'System Tools'],
-    desktopIcon: true,
     singleton: true,
   },
   'sysinfo': {
@@ -560,7 +529,6 @@ const apps: Record<string, AppDefinition> = {
     component: SystemInformationApp,
     defaultWindow: { title: 'Microsoft System Information', width: 600, height: 400, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Accessories', 'System Tools'],
-    desktopIcon: true,
     singleton: true,
   },
   'device-manager': {
@@ -572,7 +540,6 @@ const apps: Record<string, AppDefinition> = {
     component: DeviceManagerApp,
     defaultWindow: { title: 'System Properties - Device Manager', width: 420, height: 480, minWidth: 350, minHeight: 350 },
     startMenuPath: ['Settings', 'Control Panel'],
-    desktopIcon: true,
     singleton: true,
   },
   'oregon-trail': {
@@ -584,7 +551,6 @@ const apps: Record<string, AppDefinition> = {
     component: OregonTrailApp,
     defaultWindow: { title: 'The Oregon Trail', width: 550, height: 400, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'rollercoaster-tycoon': {
@@ -596,7 +562,6 @@ const apps: Record<string, AppDefinition> = {
     component: RollerCoasterTycoonApp,
     defaultWindow: { title: 'RollerCoaster Tycoon', width: 500, height: 450, minWidth: 350, minHeight: 350 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'simcity': {
@@ -608,7 +573,6 @@ const apps: Record<string, AppDefinition> = {
     component: SimCityApp,
     defaultWindow: { title: 'SimCity 2000', width: 550, height: 450, minWidth: 400, minHeight: 350 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'age-of-empires-2': {
@@ -620,7 +584,6 @@ const apps: Record<string, AppDefinition> = {
     component: AgeOfEmpires2App,
     defaultWindow: { title: 'Age of Empires II: The Age of Kings', width: 500, height: 480, minWidth: 350, minHeight: 380 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'diablo-2': {
@@ -632,7 +595,6 @@ const apps: Record<string, AppDefinition> = {
     component: Diablo2App,
     defaultWindow: { title: 'Diablo II', width: 480, height: 500, minWidth: 350, minHeight: 400 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'starcraft': {
@@ -644,7 +606,6 @@ const apps: Record<string, AppDefinition> = {
     component: StarCraftApp,
     defaultWindow: { title: 'StarCraft', width: 480, height: 420, minWidth: 350, minHeight: 350 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'command-conquer': {
@@ -656,7 +617,6 @@ const apps: Record<string, AppDefinition> = {
     component: CommandConquerApp,
     defaultWindow: { title: 'Command & Conquer: Red Alert', width: 500, height: 430, minWidth: 400, minHeight: 350 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'tony-hawk-2': {
@@ -668,7 +628,6 @@ const apps: Record<string, AppDefinition> = {
     component: TonyHawk2App,
     defaultWindow: { title: "Tony Hawk's Pro Skater 2", width: 450, height: 450, minWidth: 300, minHeight: 350 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'pinball': {
@@ -680,7 +639,6 @@ const apps: Record<string, AppDefinition> = {
     component: SpaceCadetPinballApp,
     defaultWindow: { title: '3D Pinball for Windows - Space Cadet', width: 340, height: 560, minWidth: 300, minHeight: 450 },
     startMenuPath: ['Programs', 'Games'],
-    desktopIcon: true,
     singleton: true,
   },
   'realplayer': {
@@ -692,7 +650,6 @@ const apps: Record<string, AppDefinition> = {
     component: RealPlayerApp,
     defaultWindow: { title: 'RealPlayer', width: 380, height: 340, minWidth: 300, minHeight: 280 },
     startMenuPath: ['Programs', 'Multimedia'],
-    desktopIcon: true,
     singleton: true,
   },
   'limewire': {
@@ -704,7 +661,6 @@ const apps: Record<string, AppDefinition> = {
     component: LimeWireApp,
     defaultWindow: { title: 'LimeWire', width: 550, height: 420, minWidth: 400, minHeight: 300 },
     startMenuPath: ['Programs', 'Internet Tools'],
-    desktopIcon: true,
     singleton: true,
   },
   'quicktime': {
@@ -716,7 +672,6 @@ const apps: Record<string, AppDefinition> = {
     component: QuickTimePlayerApp,
     defaultWindow: { title: 'QuickTime Player', width: 320, height: 280, minWidth: 280, minHeight: 240 },
     startMenuPath: ['Programs', 'Multimedia'],
-    desktopIcon: true,
     singleton: true,
   },
   'outlook-express': {
@@ -728,7 +683,38 @@ const apps: Record<string, AppDefinition> = {
     component: OutlookExpressApp,
     defaultWindow: { title: 'Outlook Express', width: 700, height: 500, minWidth: 500, minHeight: 350 },
     startMenuPath: ['Programs'],
+    singleton: true,
     desktopIcon: true,
+  },
+  'find-files': {
+    id: 'find-files',
+    name: 'Find: Files or Folders',
+    icon: '/icons/find-32.svg',
+    icon16: '/icons/find-16.svg',
+    category: 'system',
+    component: FindFilesApp,
+    defaultWindow: { title: 'Find: All Files', width: 520, height: 420, minWidth: 400, minHeight: 300 },
+    singleton: true,
+  },
+  'help': {
+    id: 'help',
+    name: 'Windows Help',
+    icon: '/icons/find-32.svg',
+    icon16: '/icons/find-16.svg',
+    category: 'system',
+    component: HelpApp,
+    defaultWindow: { title: 'Windows Help', width: 600, height: 440, minWidth: 420, minHeight: 300 },
+    singleton: true,
+  },
+  'volume-control': {
+    id: 'volume-control',
+    name: 'Volume Control',
+    icon: '/icons/volume-32.svg',
+    icon16: '/icons/volume-16.svg',
+    category: 'multimedia',
+    component: VolumeControlApp,
+    defaultWindow: { title: 'Volume Control', width: 360, height: 240, minWidth: 300, minHeight: 220 },
+    startMenuPath: ['Programs', 'Accessories', 'Multimedia'],
     singleton: true,
   },
 };

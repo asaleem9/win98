@@ -28,8 +28,8 @@ describe('getApp', () => {
 });
 
 describe('getAllApps', () => {
-  it('returns an array with 56 entries', () => {
-    expect(getAllApps()).toHaveLength(56);
+  it('returns an array with 59 entries', () => {
+    expect(getAllApps()).toHaveLength(59);
   });
 });
 

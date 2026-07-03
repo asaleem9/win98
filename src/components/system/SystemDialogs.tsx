@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Dialog98 } from '@/components/ui/Dialog98';
+import { playSound } from '@/lib/sounds';
 
 interface SystemDialog {
   id: number;
@@ -23,6 +24,7 @@ export function SystemDialogs() {
     const onDialog = (e: Event) => {
       const detail = (e as CustomEvent<{ title?: string; message?: string }>).detail;
       if (!detail?.message) return;
+      playSound('error');
       setDialogs((prev) => [
         ...prev,
         { id: ++dialogCounter, title: detail.title ?? 'Windows', message: detail.message! },

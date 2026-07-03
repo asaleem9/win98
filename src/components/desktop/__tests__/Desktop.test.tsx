@@ -1,6 +1,18 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Desktop } from '../Desktop';
 import { getDesktopApps } from '@/lib/appRegistry';
+import { SettingsProvider } from '@/contexts/SettingsContext';
+import { FileSystemProvider } from '@/contexts/FileSystemContext';
+
+function renderDesktop() {
+  return render(
+    <SettingsProvider>
+      <FileSystemProvider>
+        <Desktop />
+      </FileSystemProvider>
+    </SettingsProvider>,
+  );
+}
 
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) => <img {...props} />,
@@ -31,7 +43,7 @@ describe('Desktop', () => {
   });
 
   it('renders the correct number of desktop icons', () => {
-    render(<Desktop />);
+    renderDesktop();
     // Each desktop app renders its name as text
     for (const app of desktopApps) {
       expect(screen.getByText(app.name)).toBeInTheDocument();
@@ -42,7 +54,7 @@ describe('Desktop', () => {
   });
 
   it('double-clicking an icon calls openWindow with the correct appId', () => {
-    render(<Desktop />);
+    renderDesktop();
     const firstApp = desktopApps[0];
     const icon = screen.getByText(firstApp.name);
     fireEvent.doubleClick(icon.closest('div[class*="flex flex-col items-center"]')!);
@@ -50,7 +62,7 @@ describe('Desktop', () => {
   });
 
   it('single-clicking an icon selects it (highlighted state)', () => {
-    render(<Desktop />);
+    renderDesktop();
     const firstApp = desktopApps[0];
     const iconContainer = screen.getByText(firstApp.name).closest('div[class*="flex flex-col items-center"]')!;
     fireEvent.click(iconContainer);
@@ -60,7 +72,7 @@ describe('Desktop', () => {
   });
 
   it('clicking empty desktop area deselects all icons', () => {
-    const { container } = render(<Desktop />);
+    const { container } = renderDesktop();
     const firstApp = desktopApps[0];
     // Select an icon first
     const iconContainer = screen.getByText(firstApp.name).closest('div[class*="flex flex-col items-center"]')!;
@@ -74,13 +86,13 @@ describe('Desktop', () => {
   });
 
   it('desktop has bottom-[28px] class for taskbar space', () => {
-    const { container } = render(<Desktop />);
+    const { container } = renderDesktop();
     const desktopDiv = container.firstElementChild!;
     expect(desktopDiv.className).toContain('bottom-[28px]');
   });
 
   it('icons display name and icon image', () => {
-    render(<Desktop />);
+    renderDesktop();
     const firstApp = desktopApps[0];
     expect(screen.getByText(firstApp.name)).toBeInTheDocument();
     const img = screen.getByAltText(firstApp.name);
@@ -88,7 +100,7 @@ describe('Desktop', () => {
   });
 
   it('right-click on desktop opens context menu', () => {
-    const { container } = render(<Desktop />);
+    const { container } = renderDesktop();
     const desktopDiv = container.firstElementChild!;
     fireEvent.contextMenu(desktopDiv);
     expect(screen.getByText('Arrange Icons')).toBeInTheDocument();
@@ -96,13 +108,13 @@ describe('Desktop', () => {
   });
 
   it('right-click on icon opens icon-specific context menu', () => {
-    render(<Desktop />);
+    renderDesktop();
     const firstApp = desktopApps[0];
     const iconWrapper = screen.getByText(firstApp.name).closest('div[class*="flex flex-col items-center"]')!;
     // The wrapping div with onContextMenu is the parent
     const contextTarget = iconWrapper.parentElement!;
     fireEvent.contextMenu(contextTarget);
     expect(screen.getByText('Open')).toBeInTheDocument();
-    expect(screen.getByText('Create Shortcut')).toBeInTheDocument();
+    expect(screen.getByText('Rename')).toBeInTheDocument();
   });
 });

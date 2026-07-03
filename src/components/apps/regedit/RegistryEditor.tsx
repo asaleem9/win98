@@ -113,11 +113,7 @@ const VALUES_BY_KEY: Record<string, RegistryValue[]> = {
   ],
 };
 
-interface RegistryEditorProps extends AppComponentProps {
-  onBSOD?: (message?: string) => void;
-}
-
-export default function RegistryEditor({ windowId, onBSOD }: RegistryEditorProps) {
+export default function RegistryEditor({}: AppComponentProps) {
   const [selectedKey, setSelectedKey] = useState<string>('my-computer');
   const [selectedKeyPath, setSelectedKeyPath] = useState('My Computer');
   const [editingValue, setEditingValue] = useState<string | null>(null);
@@ -141,9 +137,13 @@ export default function RegistryEditor({ windowId, onBSOD }: RegistryEditorProps
   }, [findPath]);
 
   const handleValueDoubleClick = (value: RegistryValue) => {
-    if (onBSOD) {
-      onBSOD(`A fatal exception 0E has occurred at 0028:C0011E36 in VxD VMM(01) + 00010E36 while modifying registry key "${selectedKeyPath}\\${value.name}"`);
-    }
+    window.dispatchEvent(
+      new CustomEvent('win98-bsod', {
+        detail: {
+          message: `A fatal exception 0E has occurred at 0028:C0011E36 in VxD VMM(01) + 00010E36 while modifying registry key "${selectedKeyPath}\\${value.name}"`,
+        },
+      }),
+    );
   };
 
   const values = VALUES_BY_KEY[selectedKey] || [{ name: '(Default)', type: 'REG_SZ', data: '(value not set)' }];

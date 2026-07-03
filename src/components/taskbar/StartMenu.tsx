@@ -1,71 +1,195 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { useWindows } from '@/contexts/WindowContext';
 import { getStartMenuApps } from '@/lib/appRegistry';
 import { AppDefinition } from '@/types/app';
+import { getRecentDocs, requestOpenFile } from '@/lib/recentDocs';
+import { playSound } from '@/lib/sounds';
 
 interface StartMenuProps {
   onClose: () => void;
 }
 
-interface MenuGroup {
+export interface MenuNode {
   label: string;
-  icon?: string;
-  apps?: AppDefinition[];
-  children?: MenuGroup[];
-  action?: () => void;
-  separator?: boolean;
+  apps: AppDefinition[];
+  children: MenuNode[];
 }
 
-function buildStartMenuTree(apps: AppDefinition[]): MenuGroup[] {
-  const groups: Record<string, MenuGroup> = {};
+/**
+ * Builds a true nested tree from startMenuPath arrays, so
+ * ['Programs', 'Accessories', 'Multimedia'] nests Multimedia inside
+ * Accessories (and stays distinct from ['Programs', 'Multimedia']).
+ */
+export function buildStartMenuTree(apps: AppDefinition[]): { programs: MenuNode; settingsApps: AppDefinition[] } {
+  const programs: MenuNode = { label: 'Programs', apps: [], children: [] };
+  const settingsApps: AppDefinition[] = [];
 
   for (const app of apps) {
-    if (!app.startMenuPath) continue;
-    const path = app.startMenuPath;
+    if (!app.startMenuPath || app.startMenuPath.length === 0) continue;
+    const [head, ...rest] = app.startMenuPath;
 
-    if (path.length === 1 && path[0] === 'Programs') {
-      if (!groups['__root']) groups['__root'] = { label: 'Programs', apps: [], children: [] };
-      groups['__root'].apps!.push(app);
-    } else if (path.length >= 2 && path[0] === 'Programs') {
-      const subPath = path.slice(1).join(' > ');
-      if (!groups[subPath]) groups[subPath] = { label: path[path.length - 1], apps: [] };
-      groups[subPath].apps!.push(app);
-    } else if (path[0] === 'Settings') {
-      if (!groups['__settings']) groups['__settings'] = { label: 'Settings', apps: [] };
-      groups['__settings'].apps!.push(app);
+    if (head === 'Settings') {
+      settingsApps.push(app);
+      continue;
     }
+    if (head !== 'Programs') continue;
+
+    let node = programs;
+    for (const segment of rest) {
+      let child = node.children.find((c) => c.label === segment);
+      if (!child) {
+        child = { label: segment, apps: [], children: [] };
+        node.children.push(child);
+      }
+      node = child;
+    }
+    node.apps.push(app);
   }
 
-  return Object.values(groups);
+  const sortTree = (node: MenuNode) => {
+    node.children.sort((a, b) => a.label.localeCompare(b.label));
+    node.apps.sort((a, b) => a.name.localeCompare(b.name));
+    node.children.forEach(sortTree);
+  };
+  sortTree(programs);
+
+  return { programs, settingsApps };
 }
+
+const flyoutClass = cn(
+  'absolute left-full top-0 min-w-[180px] max-h-[calc(100vh-60px)] overflow-y-auto',
+  'bg-[var(--win98-button-face)] py-[2px]',
+  'border-2 border-solid',
+  'border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)]',
+  'border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]',
+);
+
+function AppItem({ app, onOpen }: { app: AppDefinition; onOpen: (appId: string) => void }) {
+  return (
+    <button
+      onClick={() => onOpen(app.id)}
+      className={cn(
+        'flex items-center gap-2 w-full px-3 py-[2px] cursor-default select-none text-left',
+        'hover:bg-[var(--win98-highlight)] hover:text-white',
+      )}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={app.icon16 || app.icon} alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+      <span>{app.name}</span>
+    </button>
+  );
+}
+
+/** A folder row that opens its own flyout on hover; recursive for any depth. */
+function MenuFolder({ node, onOpen }: { node: MenuNode; onOpen: (appId: string) => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <div
+        className={cn(
+          'flex items-center gap-2 px-3 py-[2px] cursor-default select-none',
+          open && 'bg-[var(--win98-highlight)] text-white',
+        )}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icons/folder-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+        <span className="flex-1">{node.label}</span>
+        <span>▶</span>
+      </div>
+      {open && (
+        <div className={flyoutClass}>
+          {node.children.map((child) => (
+            <MenuFolder key={child.label} node={child} onOpen={onOpen} />
+          ))}
+          {node.children.length > 0 && node.apps.length > 0 && (
+            <div className="mx-[2px] my-[2px] border-t border-[var(--win98-button-shadow)]" />
+          )}
+          {node.apps.map((app) => (
+            <AppItem key={app.id} app={app} onOpen={onOpen} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A top-level Start menu row (bold label, 16px icon) with an optional flyout. */
+function TopRow({
+  icon,
+  label,
+  arrow,
+  onClick,
+  flyout,
+}: {
+  icon: string;
+  label: string;
+  arrow?: boolean;
+  onClick?: () => void;
+  flyout?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => flyout && setOpen(true)}
+      onMouseLeave={() => flyout && setOpen(false)}
+    >
+      <div
+        className={cn(
+          'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
+          open ? 'bg-[var(--win98-highlight)] text-white' : 'hover:bg-[var(--win98-highlight)] hover:text-white',
+        )}
+        onClick={onClick}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={icon} alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+        <span className="flex-1">{label}</span>
+        {arrow && <span className="ml-auto">▶</span>}
+      </div>
+      {open && flyout}
+    </div>
+  );
+}
+
+const FAVORITE_SITES: Array<{ label: string; url: string }> = [
+  { label: 'Yahoo!', url: 'www.yahoo.com' },
+  { label: 'GeoCities', url: 'www.geocities.com' },
+  { label: 'AltaVista', url: 'www.altavista.com' },
+];
 
 export function StartMenu({ onClose }: StartMenuProps) {
   const { openWindow } = useWindows();
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoveredSubmenu, setHoveredSubmenu] = useState<string | null>(null);
 
-  const startMenuApps = getStartMenuApps();
-  const menuTree = buildStartMenuTree(startMenuApps);
-
-  // Programs submenu items
-  const programsRoot = menuTree.find((g) => g.label === 'Programs');
-  const subfolders = menuTree.filter((g) => g.label !== 'Programs' && g.label !== 'Settings');
-  const settingsGroup = menuTree.find((g) => g.label === 'Settings');
+  const { programs, settingsApps } = buildStartMenuTree(getStartMenuApps());
+  const recentDocs = getRecentDocs();
 
   useEffect(() => {
+    playSound('menuOpen');
     const handleClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('mousedown', handleClick);
-    return () => window.removeEventListener('mousedown', handleClick);
+    window.addEventListener('keydown', handleKey);
+    return () => {
+      window.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('keydown', handleKey);
+    };
   }, [onClose]);
 
   const handleOpenApp = (appId: string) => {
+    playSound('menuClick');
     openWindow(appId);
     onClose();
   };
@@ -96,7 +220,7 @@ export function StartMenu({ onClose }: StartMenuProps) {
 
         {/* Menu items */}
         <div className="flex-1 py-[2px]">
-          {/* Programs with submenu */}
+          {/* Programs with recursive submenu */}
           <div
             className="relative"
             onMouseEnter={() => setHoveredSubmenu('programs')}
@@ -108,187 +232,155 @@ export function StartMenu({ onClose }: StartMenuProps) {
                 hoveredSubmenu === 'programs' && 'bg-[var(--win98-highlight)] text-white',
               )}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/icons/programs-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
               <span className="flex-1 font-bold">Programs</span>
               <span>▶</span>
             </div>
 
             {hoveredSubmenu === 'programs' && (
-              <div
-                className={cn(
-                  'absolute left-full top-0 min-w-[180px]',
-                  'bg-[var(--win98-button-face)] py-[2px]',
-                  'border-2 border-solid',
-                  'border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)]',
-                  'border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]',
-                )}
-              >
-                {/* Subfolder groups */}
-                {subfolders.map((group) => (
-                  <div key={group.label} className="relative group/sub">
-                    <div
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-[2px] cursor-default select-none',
-                        'hover:bg-[var(--win98-highlight)] hover:text-white',
-                      )}
-                    >
-                      <img src="/icons/folder-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-                      <span className="flex-1">{group.label}</span>
-                      <span>▶</span>
-                    </div>
-                    {/* Subfolder apps */}
-                    <div
-                      className={cn(
-                        'absolute left-full top-0 min-w-[160px] hidden group-hover/sub:block',
-                        'bg-[var(--win98-button-face)] py-[2px]',
-                        'border-2 border-solid',
-                        'border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)]',
-                        'border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]',
-                      )}
-                    >
-                      {group.apps?.map((app) => (
-                        <button
-                          key={app.id}
-                          onClick={() => handleOpenApp(app.id)}
-                          className={cn(
-                            'flex items-center gap-2 w-full px-3 py-[2px] cursor-default select-none text-left',
-                            'hover:bg-[var(--win98-highlight)] hover:text-white',
-                          )}
-                        >
-                          <img
-                            src={app.icon16 || app.icon}
-                            alt=""
-                            className="w-4 h-4"
-                            style={{ imageRendering: 'pixelated' }}
-                          />
-                          <span>{app.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              <div className={flyoutClass}>
+                {programs.children.map((child) => (
+                  <MenuFolder key={child.label} node={child} onOpen={handleOpenApp} />
                 ))}
-
-                {subfolders.length > 0 && programsRoot?.apps && programsRoot.apps.length > 0 && (
+                {programs.children.length > 0 && programs.apps.length > 0 && (
                   <div className="mx-[2px] my-[2px] border-t border-[var(--win98-button-shadow)]" />
                 )}
-
-                {/* Root-level program items */}
-                {programsRoot?.apps?.map((app) => (
-                  <button
-                    key={app.id}
-                    onClick={() => handleOpenApp(app.id)}
-                    className={cn(
-                      'flex items-center gap-2 w-full px-3 py-[2px] cursor-default select-none text-left',
-                      'hover:bg-[var(--win98-highlight)] hover:text-white',
-                    )}
-                  >
-                    <img
-                      src={app.icon16 || app.icon}
-                      alt=""
-                      className="w-4 h-4"
-                      style={{ imageRendering: 'pixelated' }}
-                    />
-                    <span>{app.name}</span>
-                  </button>
+                {programs.apps.map((app) => (
+                  <AppItem key={app.id} app={app} onOpen={handleOpenApp} />
                 ))}
               </div>
             )}
           </div>
 
           {/* Favorites */}
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
-              'hover:bg-[var(--win98-highlight)] hover:text-white',
-            )}
-            onClick={() => { handleOpenApp('ie5'); }}
-          >
-            <img src="/icons/ie-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-            <span>Favorites</span>
-            <span className="ml-auto">▶</span>
-          </div>
+          <TopRow
+            icon="/icons/ie-16.svg"
+            label="Favorites"
+            arrow
+            flyout={
+              <div className={flyoutClass}>
+                {FAVORITE_SITES.map((site) => (
+                  <button
+                    key={site.url}
+                    onClick={() => {
+                      playSound('menuClick');
+                      openWindow('ie5', { launchParams: { url: site.url } });
+                      onClose();
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-[2px] cursor-default select-none text-left hover:bg-[var(--win98-highlight)] hover:text-white"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/icons/ie-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+                    <span>{site.label}</span>
+                  </button>
+                ))}
+              </div>
+            }
+          />
 
           {/* Documents */}
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
-              'hover:bg-[var(--win98-highlight)] hover:text-white',
-            )}
-            onClick={() => { handleOpenApp('my-documents'); }}
-          >
-            <img src="/icons/my-documents-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-            <span>Documents</span>
-          </div>
+          <TopRow
+            icon="/icons/my-documents-16.svg"
+            label="Documents"
+            arrow
+            flyout={
+              <div className={flyoutClass}>
+                <button
+                  onClick={() => handleOpenApp('my-documents')}
+                  className="flex items-center gap-2 w-full px-3 py-[2px] cursor-default select-none text-left hover:bg-[var(--win98-highlight)] hover:text-white"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/icons/my-documents-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+                  <span>My Documents</span>
+                </button>
+                {recentDocs.length > 0 && (
+                  <div className="mx-[2px] my-[2px] border-t border-[var(--win98-button-shadow)]" />
+                )}
+                {recentDocs.map((path) => (
+                  <button
+                    key={path}
+                    onClick={() => {
+                      playSound('menuClick');
+                      requestOpenFile(path);
+                      onClose();
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-[2px] cursor-default select-none text-left hover:bg-[var(--win98-highlight)] hover:text-white"
+                    title={path}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/icons/txt-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+                    <span className="truncate max-w-[160px]">{path.split('\\').pop()}</span>
+                  </button>
+                ))}
+              </div>
+            }
+          />
 
           {/* Separator */}
           <div className="mx-[2px] my-[2px] border-t border-[var(--win98-button-shadow)]" />
 
           {/* Settings */}
-          {settingsGroup && settingsGroup.apps && settingsGroup.apps.length > 0 && (
-            <div
-              className={cn(
-                'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
-                'hover:bg-[var(--win98-highlight)] hover:text-white',
-              )}
-              onClick={() => { handleOpenApp('control-panel'); }}
-            >
-              <img src="/icons/settings-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-              <span>Settings</span>
-              <span className="ml-auto">▶</span>
-            </div>
+          {settingsApps.length > 0 && (
+            <TopRow
+              icon="/icons/settings-16.svg"
+              label="Settings"
+              arrow
+              flyout={
+                <div className={flyoutClass}>
+                  {settingsApps.map((app) => (
+                    <AppItem key={app.id} app={app} onOpen={handleOpenApp} />
+                  ))}
+                </div>
+              }
+            />
           )}
 
           {/* Find */}
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
-              'hover:bg-[var(--win98-highlight)] hover:text-white',
-            )}
-          >
-            <img src="/icons/find-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-            <span>Find</span>
-            <span className="ml-auto">▶</span>
-          </div>
+          <TopRow
+            icon="/icons/find-16.svg"
+            label="Find"
+            arrow
+            flyout={
+              <div className={flyoutClass}>
+                <button
+                  onClick={() => handleOpenApp('find-files')}
+                  className="flex items-center gap-2 w-full px-3 py-[2px] cursor-default select-none text-left hover:bg-[var(--win98-highlight)] hover:text-white"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/icons/find-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+                  <span>Files or Folders...</span>
+                </button>
+              </div>
+            }
+          />
 
           {/* Help */}
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
-              'hover:bg-[var(--win98-highlight)] hover:text-white',
-            )}
-          >
-            <img src="/icons/find-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-            <span>Help</span>
-          </div>
+          <TopRow icon="/icons/find-16.svg" label="Help" onClick={() => handleOpenApp('help')} />
 
           {/* Run */}
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
-              'hover:bg-[var(--win98-highlight)] hover:text-white',
-            )}
-          >
-            <img src="/icons/run-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-            <span>Run...</span>
-          </div>
+          <TopRow
+            icon="/icons/run-16.svg"
+            label="Run..."
+            onClick={() => {
+              playSound('menuClick');
+              onClose();
+              window.dispatchEvent(new CustomEvent('win98-run-dialog'));
+            }}
+          />
 
           {/* Separator */}
           <div className="mx-[2px] my-[2px] border-t border-[var(--win98-button-shadow)]" />
 
           {/* Shut Down */}
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
-              'hover:bg-[var(--win98-highlight)] hover:text-white',
-            )}
+          <TopRow
+            icon="/icons/shutdown-16.svg"
+            label="Shut Down..."
             onClick={() => {
               onClose();
-              window.dispatchEvent(new CustomEvent('win98-shutdown'));
+              window.dispatchEvent(new CustomEvent('win98-shutdown-dialog'));
             }}
-          >
-            <img src="/icons/shutdown-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
-            <span>Shut Down...</span>
-          </div>
+          />
         </div>
       </div>
     </div>

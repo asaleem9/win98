@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { cn } from '@/lib/cn';
 import { useWindows } from '@/contexts/WindowContext';
 import { getApp } from '@/lib/appRegistry';
+import { ContextMenu, ContextMenuItem } from '@/components/desktop/ContextMenu';
 
 export function TaskbarWindowList() {
-  const { windows, focusWindow, minimizeWindow } = useWindows();
+  const { windows, focusWindow, minimizeWindow, maximizeWindow, restoreWindow, closeWindow } = useWindows();
+  const [contextMenu, setContextMenu] = useState<{ items: ContextMenuItem[]; position: { x: number; y: number } } | null>(null);
 
   return (
     <div className="flex-1 flex items-center gap-[2px] overflow-hidden px-[2px]">
@@ -22,6 +25,19 @@ export function TaskbarWindowList() {
               } else {
                 focusWindow(win.id);
               }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({
+                position: { x: e.clientX, y: e.clientY },
+                items: [
+                  { label: 'Restore', disabled: win.state === 'normal', onClick: () => restoreWindow(win.id) },
+                  { label: 'Minimize', disabled: win.state === 'minimized', onClick: () => minimizeWindow(win.id) },
+                  { label: 'Maximize', disabled: win.state === 'maximized', onClick: () => maximizeWindow(win.id) },
+                  { separator: true },
+                  { label: 'Close', bold: true, onClick: () => closeWindow(win.id) },
+                ],
+              });
             }}
             className={cn(
               'flex items-center gap-[3px] h-[22px] px-[4px] min-w-[60px] max-w-[160px]',
@@ -52,6 +68,10 @@ export function TaskbarWindowList() {
           </button>
         );
       })}
+
+      {contextMenu && (
+        <ContextMenu items={contextMenu.items} position={contextMenu.position} onClose={() => setContextMenu(null)} />
+      )}
     </div>
   );
 }

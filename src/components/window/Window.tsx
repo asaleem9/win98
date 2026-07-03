@@ -6,6 +6,7 @@ import { WindowState } from '@/types/window';
 import { useWindows } from '@/contexts/WindowContext';
 import { TitleBar } from './TitleBar';
 import { WINDOW_DEFAULTS } from '@/lib/constants';
+import { playSound } from '@/lib/sounds';
 
 interface WindowProps {
   windowState: WindowState;
@@ -50,25 +51,29 @@ export function Window({ windowState, icon16, children }: WindowProps) {
     const handleMove = (e: PointerEvent) => {
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
-      const newX = dragStart.current.winX + dx;
+      let newX = dragStart.current.winX + dx;
       let newY = dragStart.current.winY + dy;
-      // Keep at least 50px of titlebar visible
-      newY = Math.max(-size.height + WINDOW_DEFAULTS.minVisibleTitlebar, newY);
+      const minVisible = WINDOW_DEFAULTS.minVisibleTitlebar;
+      // Keep part of the titlebar reachable on every edge: never above the
+      // top, never fully past the sides or below the taskbar
+      newX = Math.min(Math.max(newX, -size.width + minVisible), window.innerWidth - minVisible);
+      newY = Math.min(Math.max(newY, 0), window.innerHeight - WINDOW_DEFAULTS.taskbarHeight - minVisible);
       moveWindow(id, newX, newY);
     };
     const handleUp = (e: PointerEvent) => {
       target.releasePointerCapture(e.pointerId);
       setDragging(false);
     };
+    const handleLost = () => setDragging(false);
     target.addEventListener('pointermove', handleMove);
     target.addEventListener('pointerup', handleUp);
-    target.addEventListener('lostpointercapture', () => setDragging(false));
+    target.addEventListener('lostpointercapture', handleLost);
     return () => {
       target.removeEventListener('pointermove', handleMove);
       target.removeEventListener('pointerup', handleUp);
-      target.removeEventListener('lostpointercapture', () => setDragging(false));
+      target.removeEventListener('lostpointercapture', handleLost);
     };
-  }, [dragging, id, moveWindow, size.height]);
+  }, [dragging, id, moveWindow, size.width, size.height]);
 
   // Resize handling
   const resizeTargetRef = useRef<HTMLElement | null>(null);
@@ -137,13 +142,14 @@ export function Window({ windowState, icon16, children }: WindowProps) {
       target.releasePointerCapture(e.pointerId);
       setResizing(null);
     };
+    const handleLost = () => setResizing(null);
     target.addEventListener('pointermove', handleMove);
     target.addEventListener('pointerup', handleUp);
-    target.addEventListener('lostpointercapture', () => setResizing(null));
+    target.addEventListener('lostpointercapture', handleLost);
     return () => {
       target.removeEventListener('pointermove', handleMove);
       target.removeEventListener('pointerup', handleUp);
-      target.removeEventListener('lostpointercapture', () => setResizing(null));
+      target.removeEventListener('lostpointercapture', handleLost);
     };
   }, [resizing, id, minSize, moveWindow, resizeWindow]);
 
@@ -177,9 +183,9 @@ export function Window({ windowState, icon16, children }: WindowProps) {
         icon16={icon16}
         isFocused={isFocused}
         windowState={state}
-        onMinimize={() => minimizeWindow(id)}
-        onMaximize={() => maximizeWindow(id)}
-        onRestore={() => restoreWindow(id)}
+        onMinimize={() => { playSound('minimize'); minimizeWindow(id); }}
+        onMaximize={() => { playSound('maximize'); maximizeWindow(id); }}
+        onRestore={() => { playSound('restoreDown'); restoreWindow(id); }}
         onClose={() => closeWindow(id)}
         onDoubleClick={() => {
           if (state === 'maximized') restoreWindow(id);

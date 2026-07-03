@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/cn';
 import { StartButton } from './StartButton';
 import { StartMenu } from './StartMenu';
@@ -10,6 +10,13 @@ import { SystemTray } from './SystemTray';
 
 export function Taskbar() {
   const [startMenuOpen, setStartMenuOpen] = useState(false);
+
+  // Ctrl+Esc toggles the Start menu from anywhere in the shell
+  useEffect(() => {
+    const onToggle = () => setStartMenuOpen((open) => !open);
+    window.addEventListener('win98-toggle-start', onToggle);
+    return () => window.removeEventListener('win98-toggle-start', onToggle);
+  }, []);
 
   return (
     <div

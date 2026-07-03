@@ -11,6 +11,7 @@ import { BootSequence } from '@/components/system/BootSequence';
 import { ShutdownScreen, ShutdownDialog } from '@/components/system/ShutdownScreen';
 import { BSOD } from '@/components/system/BSOD';
 import { ShellShortcuts } from '@/components/system/ShellShortcuts';
+import { ShellEventHost } from '@/components/system/ShellEventHost';
 import { SystemDialogs } from '@/components/system/SystemDialogs';
 import { ScreenSaverManager } from '@/components/system/ScreenSaverManager';
 import { playSound } from '@/lib/sounds';
@@ -25,6 +26,19 @@ function ScreenSaverHost() {
       timeoutMs={settings.screenSaver.timeoutMinutes * 60000}
     />
   );
+}
+
+/** Applies the selected color scheme's CSS variables document-wide. */
+function SchemeApplier() {
+  const { settings } = useSettings();
+  useEffect(() => {
+    if (settings.colorScheme === 'standard') {
+      delete document.documentElement.dataset.win98Scheme;
+    } else {
+      document.documentElement.dataset.win98Scheme = settings.colorScheme;
+    }
+  }, [settings.colorScheme]);
+  return null;
 }
 
 export default function Home() {
@@ -107,8 +121,14 @@ export default function Home() {
             {/* Globally-dispatched system dialogs */}
             <SystemDialogs />
 
+            {/* Run dialog + open-file event bridge */}
+            <ShellEventHost />
+
             {/* Idle screensaver */}
             <ScreenSaverHost />
+
+            {/* Color scheme CSS variables */}
+            <SchemeApplier />
 
             {/* Shut Down Windows dialog */}
             {shutdownDialogOpen && (
