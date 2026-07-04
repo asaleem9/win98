@@ -1,5 +1,14 @@
 import { FSNode } from '@/types/filesystem';
-import { walkFsStats, buildScanReport, badClusterIndices, formatBytes, SURFACE_GRID_SIZE } from '../scandiskHelpers';
+import type { RecycleBinItem } from '@/contexts/FileSystemContext';
+import {
+  walkFsStats,
+  walkFilePaths,
+  detectOrphans,
+  buildScanReport,
+  badClusterIndices,
+  formatBytes,
+  SURFACE_GRID_SIZE,
+} from '../scandiskHelpers';
 
 function makeRoot(children: FSNode[]): FSNode {
   return {
@@ -84,5 +93,66 @@ describe('badClusterIndices', () => {
 
   it('returns no more than requested count (dedup allowed)', () => {
     expect(badClusterIndices(1, 2).length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('walkFilePaths', () => {
+  it('lists every file path in tree order and skips folders', () => {
+    const root: FSNode = {
+      name: 'C:', type: 'directory', created: '', modified: '',
+      children: [
+        { name: 'a.txt', type: 'file', created: '', modified: '' },
+        {
+          name: 'Sub', type: 'directory', created: '', modified: '',
+          children: [{ name: 'b.txt', type: 'file', created: '', modified: '' }],
+        },
+      ],
+    };
+    expect(walkFilePaths(root)).toEqual(['C:\\a.txt', 'C:\\Sub\\b.txt']);
+  });
+
+  it('returns nothing for an empty drive', () => {
+    const root: FSNode = { name: 'C:', type: 'directory', created: '', modified: '', children: [] };
+    expect(walkFilePaths(root)).toEqual([]);
+  });
+});
+
+describe('detectOrphans', () => {
+  const item = (originalPath: string): RecycleBinItem => ({
+    id: originalPath,
+    originalPath,
+    deletedAt: '2026-01-01',
+    node: { name: originalPath.split('\\').pop()!, type: 'file', created: '', modified: '' },
+  });
+
+  it('flags entries whose original parent folder no longer exists', () => {
+    const bin = [item('C:\\Gone\\a.txt'), item('C:\\My Documents\\b.txt')];
+    const exists = (p: string) => p === 'C:\\My Documents';
+    const orphans = detectOrphans(bin, exists);
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0].originalPath).toBe('C:\\Gone\\a.txt');
+  });
+
+  it('returns nothing when every parent still exists', () => {
+    const bin = [item('C:\\My Documents\\a.txt')];
+    expect(detectOrphans(bin, () => true)).toHaveLength(0);
+  });
+
+  it('returns nothing for an empty bin', () => {
+    expect(detectOrphans([], () => false)).toHaveLength(0);
+  });
+});
+
+describe('buildScanReport fixed flag', () => {
+  const stats = { fileCount: 5, totalBytes: 10000, folderCount: 2 };
+
+  it('reports errors as found-and-fixed by default', () => {
+    const lines = buildScanReport({ stats, scanType: 'standard', badClusters: 0, lostFragments: 3 });
+    expect(lines[0]).toBe('ScanDisk found and fixed 3 error(s) on this drive.');
+  });
+
+  it('reports errors as only found when fixed is false', () => {
+    const lines = buildScanReport({ stats, scanType: 'standard', badClusters: 0, lostFragments: 3, fixed: false });
+    expect(lines[0]).toBe('ScanDisk found 3 error(s) on this drive.');
   });
 });

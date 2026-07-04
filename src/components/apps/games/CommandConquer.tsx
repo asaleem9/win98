@@ -6,13 +6,31 @@ import { Dialog98 } from '@/components/ui/Dialog98';
 import { playSound } from '@/lib/sounds';
 import RtsGame from './engine/RtsGame';
 import { RtsConfig } from './engine/rts';
+import {
+  ORE_TRUCK,
+  RIFLE_INFANTRY,
+  ROCKET_SOLDIER,
+  MEDIUM_TANK,
+  TANYA,
+  HEAVY_TANK,
+  TESLA_COIL,
+  PILLBOX,
+  CON_YARD,
+  POWER_PLANT,
+  BARRACKS,
+  WAR_FACTORY,
+} from './engine/sprites/redalert';
 
-// Same engine as StarCraft, re-skinned with Ore/Allies-vs-Soviets flavour, a
-// different map layout and its own win text.
-const CNC_CONFIG: RtsConfig = {
+// The shared RTS engine dressed as Red Alert. Its identity is a different
+// economy and relentless harassment: a single resource (Ore) hauled by a few
+// fat, slow Ore Trucks, and a Soviet AI that alternates between hunting those
+// trucks and hitting the base. The whole loop is about screening your harvesters
+// with Pillboxes and infantry while the Soviets bring Tesla Coils and Heavy
+// Tanks. Exported for the config + smoke tests.
+export const CNC_CONFIG: RtsConfig = {
   gameId: 'command-conquer',
   resources: [{ id: 'ore', name: 'Ore', color: '#e0c840' }],
-  startResources: { ore: 200 },
+  startResources: { ore: 500 },
   colors: {
     player: '#3a7fd0',
     enemy: '#c02020',
@@ -21,90 +39,232 @@ const CNC_CONFIG: RtsConfig = {
   },
   factions: { player: 'blue', enemy: 'red' },
   unitTypes: {
+    // Few, expensive, slow, and heavy-hauling — losing one truck really stings.
     truck: {
       name: 'Ore Truck',
       role: 'worker',
-      hp: 60,
-      speed: 60,
+      hp: 90,
+      speed: 42,
       damage: 0,
       range: 0,
       rate: 1,
-      cost: { ore: 60 },
+      cost: { ore: 175 },
       supply: 1,
       trainedAt: 'base',
       sightRange: 110,
+      sprite: ORE_TRUCK,
     },
     rifle: {
       name: 'Rifle Infantry',
       role: 'combat',
-      hp: 40,
-      speed: 62,
-      damage: 7,
-      range: 30,
-      rate: 0.65,
+      hp: 45,
+      speed: 66,
+      damage: 6,
+      range: 28,
+      rate: 0.5, // fast-firing
       cost: { ore: 50 },
       supply: 1,
-      trainedAt: 'prod',
+      trainedAt: 'barracks',
       sightRange: 120,
+      sprite: RIFLE_INFANTRY,
+    },
+    rocket: {
+      name: 'Rocket Soldier',
+      role: 'combat',
+      hp: 40,
+      speed: 52,
+      damage: 20,
+      range: 58, // outranges tanks
+      rate: 1.3,
+      cost: { ore: 120 },
+      supply: 1,
+      trainedAt: 'barracks',
+      sightRange: 135,
+      sprite: ROCKET_SOLDIER,
+    },
+    mtank: {
+      name: 'Medium Tank',
+      role: 'combat',
+      hp: 200,
+      speed: 58,
+      damage: 24,
+      range: 46,
+      rate: 1.1,
+      cost: { ore: 350 },
+      supply: 2,
+      trainedAt: 'warfactory',
+      sightRange: 130,
+      sprite: MEDIUM_TANK,
+    },
+    tanya: {
+      name: 'Tanya',
+      role: 'combat',
+      hp: 60, // fragile hero
+      speed: 74,
+      damage: 45, // devastating
+      range: 34,
+      rate: 0.4,
+      cost: { ore: 550 },
+      supply: 2,
+      trainedAt: 'barracks',
+      sightRange: 145,
+      sprite: TANYA,
+    },
+    // The Soviet workhorse. Fielded by the enemy from the start; the player can
+    // only build it after capturing Soviet Ordnance at the War Factory.
+    htank: {
+      name: 'Heavy Tank',
+      role: 'combat',
+      hp: 280,
+      speed: 48,
+      damage: 30,
+      range: 46,
+      rate: 1.2,
+      cost: { ore: 500 },
+      supply: 3,
+      trainedAt: 'warfactory',
+      requiresUpgrade: 'soviet-ordnance',
+      sightRange: 130,
+      sprite: HEAVY_TANK,
     },
   },
   buildingTypes: {
     base: {
       name: 'Construction Yard',
-      hp: 1600,
+      hp: 1500,
       cost: { ore: 400 },
-      size: { w: 46, h: 46 },
+      size: { w: 30, h: 22 },
       isBase: true,
       buildTimeSec: 0,
-      sightRange: 200,
+      sightRange: 210,
+      sprite: CON_YARD,
     },
-    depot: {
+    power: {
       name: 'Power Plant',
-      hp: 450,
-      cost: { ore: 100 },
-      size: { w: 30, h: 30 },
-      supplyGrant: 10,
+      hp: 400,
+      cost: { ore: 150 },
+      size: { w: 24, h: 18 },
+      supplyGrant: 12,
       buildTimeSec: 4,
+      sprite: POWER_PLANT,
     },
-    prod: {
+    barracks: {
       name: 'Barracks',
-      hp: 900,
-      cost: { ore: 200 },
-      size: { w: 38, h: 38 },
+      hp: 800,
+      cost: { ore: 250 },
+      size: { w: 24, h: 16 },
       buildTimeSec: 6,
+      sprite: BARRACKS,
+    },
+    warfactory: {
+      name: 'War Factory',
+      hp: 1000,
+      cost: { ore: 500 },
+      size: { w: 28, h: 18 },
+      buildTimeSec: 9,
+      sprite: WAR_FACTORY,
+    },
+    pillbox: {
+      name: 'Pillbox',
+      hp: 500,
+      cost: { ore: 200 },
+      size: { w: 16, h: 12 },
+      buildTimeSec: 3,
+      attack: { damage: 12, range: 95, rate: 0.5 },
+      sprite: PILLBOX,
+    },
+    // The Soviets' signature fortification. Enemy-only until the player captures
+    // Soviet Ordnance; it hits hard and outranges a Pillbox.
+    tesla: {
+      name: 'Tesla Coil',
+      hp: 600,
+      cost: { ore: 400 },
+      size: { w: 12, h: 24 },
+      buildTimeSec: 7,
+      requiresUpgrade: 'soviet-ordnance',
+      attack: { damage: 45, range: 120, rate: 1.4 },
+      sprite: TESLA_COIL,
     },
   },
+  upgrades: [
+    {
+      id: 'advanced-training',
+      name: 'Advanced Training',
+      cost: { ore: 300 },
+      researchTimeSec: 22,
+      researchAt: 'barracks',
+      prereqBuilding: 'barracks',
+      effects: [
+        { unitTypeId: 'rifle', dmgMult: 1.5 },
+        { unitTypeId: 'rocket', dmgMult: 1.4 },
+      ],
+      announce: 'Advanced Training complete. Allied infantry hit harder.',
+    },
+    {
+      id: 'soviet-ordnance',
+      name: 'Soviet Ordnance',
+      cost: { ore: 600 },
+      researchTimeSec: 35,
+      researchAt: 'warfactory',
+      prereqBuilding: 'warfactory',
+      unlocksUnits: ['htank'],
+      effects: [],
+      announce: 'Soviet Ordnance reverse-engineered. Heavy Tanks and Tesla Coils are now yours.',
+    },
+  ],
   startSupply: 12,
-  aggroRange: 85,
-  harvestAmount: 10,
-  harvestTime: 1.8,
+  aggroRange: 90,
+  // A single fat truckload: big cargo, long haul, so income is lumpy and every
+  // truck matters.
+  harvestAmount: 55,
+  harvestTime: 5.5,
   map: {
-    width: 620,
+    width: 640,
     height: 400,
-    playerBase: { x: 90, y: 80 },
-    enemyBase: { x: 540, y: 320 },
+    playerBase: { x: 80, y: 200 },
+    enemyBase: { x: 560, y: 200 },
+    // Two safer fields flank the Allied base; the richer ore lies out in the
+    // contested middle, dragging trucks into harm's way. Fields regrow, so the
+    // war is over holding them, not draining them.
     patches: [
-      { x: 150, y: 60, amount: 1600, resourceId: 'ore' },
-      { x: 90, y: 160, amount: 1600, resourceId: 'ore' },
-      { x: 200, y: 130, amount: 1300, resourceId: 'ore' },
-      { x: 300, y: 210, amount: 1200, resourceId: 'ore' },
+      { x: 150, y: 120, amount: 1000, resourceId: 'ore' },
+      { x: 140, y: 290, amount: 1000, resourceId: 'ore' },
+      { x: 320, y: 120, amount: 1300, resourceId: 'ore' },
+      { x: 330, y: 290, amount: 1300, resourceId: 'ore' },
+      { x: 430, y: 200, amount: 1100, resourceId: 'ore' },
+      { x: 540, y: 300, amount: 900, resourceId: 'ore' },
     ],
+    patchRegrows: true,
+    patchRegrowRate: 4,
   },
-  startUnits: [{ typeId: 'truck', count: 3 }],
-  enemyStartUnits: [{ typeId: 'rifle', count: 3 }],
+  startUnits: [{ typeId: 'truck', count: 2 }],
+  enemyStartUnits: [{ typeId: 'rifle', count: 2 }],
   ai: {
-    personality: 'swarm',
-    buildOrder: [{ atSec: 40, buildingTypeId: 'prod' }],
+    personality: 'harass',
+    // The Soviets fortify their base with Tesla Coils between the early raids.
+    buildOrder: [
+      { atSec: 12, buildingTypeId: 'power' },
+      { atSec: 28, buildingTypeId: 'tesla' },
+      { atSec: 60, buildingTypeId: 'barracks' },
+      { atSec: 95, buildingTypeId: 'tesla' },
+      { atSec: 150, buildingTypeId: 'tesla' },
+    ],
+    // Waves alternate: the raids hunt your Ore Trucks, the assaults go for the
+    // base. Armor escalates from lone rocketeers to Heavy Tank columns.
     attackWaves: [
-      { atSec: 85, comp: { rifle: 3 }, target: 'base' },
-      { atSec: 170, comp: { rifle: 4 }, target: 'base' },
-      { atSec: 255, comp: { rifle: 5 }, target: 'base' },
-      { atSec: 340, comp: { rifle: 6 }, target: 'base' },
+      { atSec: 40, comp: { rifle: 2 }, target: 'workers' },
+      { atSec: 75, comp: { rifle: 3 }, target: 'base' },
+      { atSec: 115, comp: { rifle: 2, rocket: 1 }, target: 'workers' },
+      { atSec: 160, comp: { htank: 1, rifle: 2 }, target: 'base' },
+      { atSec: 205, comp: { rifle: 3, rocket: 1 }, target: 'workers' },
+      { atSec: 255, comp: { htank: 2, rifle: 1 }, target: 'base' },
+      { atSec: 315, comp: { htank: 1, rocket: 2 }, target: 'workers' },
     ],
     rampFactor: 1.3,
   },
-  winText: 'The Soviet Command Center lies in ruins. Allied forces hold the ore fields. Well done, Commander.',
-  loseText: 'Your Construction Yard is destroyed. The Soviet advance cannot be stopped, Comrade.',
+  superweapon: { name: 'A-Bomb', cooldownSec: 150, damage: 400, radius: 72, color: '#ff7b2e' },
+  winText: 'The Soviet command bunker is rubble and the Tesla Coils are dark. The ore fields are yours, Commander.',
+  loseText: 'Your Construction Yard is slag. The Soviet banner flies over the ore fields, Comrade.',
 };
 
 export default function CommandConquer({ windowId }: AppComponentProps) {

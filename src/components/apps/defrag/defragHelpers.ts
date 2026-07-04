@@ -1,6 +1,7 @@
 import { FSNode } from '@/types/filesystem';
+import { joinPath, normalizePath } from '@/lib/fs/fsOperations';
 
-export type BlockType = 'free' | 'used' | 'unmovable' | 'directory';
+export type BlockType = 'free' | 'used' | 'unmovable' | 'directory' | 'fragmented';
 
 export interface FsWalkStats {
   fileCount: number;
@@ -35,11 +36,16 @@ const GRID_ROWS = 16;
 export const BLOCK_GRID_SIZE = GRID_COLS * GRID_ROWS;
 
 /**
- * Builds a deterministic block map from the real filesystem tree.
- * Each file/folder contributes a run of blocks sized by its content,
- * readOnly nodes become "unmovable" system blocks, and remaining space is free.
+ * Builds a deterministic block map from the real filesystem tree. Each
+ * file/folder contributes a run of blocks sized by its content; readOnly nodes
+ * become "unmovable" system blocks, files whose recorded fragment count exceeds
+ * one are painted "fragmented", and the remaining space is free.
  */
-export function buildBlockMap(root: FSNode, totalBlocks: number = BLOCK_GRID_SIZE): BlockType[] {
+export function buildBlockMap(
+  root: FSNode,
+  fragments: Record<string, number> = {},
+  totalBlocks: number = BLOCK_GRID_SIZE,
+): BlockType[] {
   const blocks: BlockType[] = [];
 
   function blocksForSize(size: number): number {
@@ -47,38 +53,29 @@ export function buildBlockMap(root: FSNode, totalBlocks: number = BLOCK_GRID_SIZ
     return Math.max(1, Math.min(6, Math.round(size / 2048) + 1));
   }
 
-  function visit(node: FSNode, isRoot: boolean) {
+  function visit(node: FSNode, path: string, isRoot: boolean) {
     if (blocks.length >= totalBlocks) return;
     if (node.type === 'directory') {
       if (!isRoot) blocks.push('directory');
       for (const child of node.children ?? []) {
         if (blocks.length >= totalBlocks) break;
-        visit(child, false);
+        visit(child, joinPath(path, child.name), false);
       }
     } else if (node.type === 'file') {
       const count = blocksForSize(node.size ?? node.content?.length ?? 0);
-      const type: BlockType = node.readOnly ? 'unmovable' : 'used';
+      const fragmented = (fragments[normalizePath(path)] ?? 1) > 1;
+      const type: BlockType = node.readOnly ? 'unmovable' : fragmented ? 'fragmented' : 'used';
       for (let i = 0; i < count && blocks.length < totalBlocks; i++) {
         blocks.push(type);
       }
     }
   }
 
-  visit(root, true);
+  visit(root, 'C:\\', true);
 
   while (blocks.length < totalBlocks) {
     blocks.push('free');
   }
 
   return blocks.slice(0, totalBlocks);
-}
-
-/**
- * Deterministic percent-fragmented figure derived from the file count,
- * so the same disk state always reports the same fragmentation.
- */
-export function percentFragmented(fileCount: number): number {
-  // Stable pseudo-random spread between 5 and 39 based on file count
-  const seed = (fileCount * 2654435761) % 100000;
-  return 5 + (seed % 35);
 }

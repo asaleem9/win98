@@ -2,6 +2,8 @@ import {
   parseArchive,
   isArchiveContent,
   serializeArchive,
+  addEntry,
+  removeEntry,
   fakeRatio,
   packedSize,
   fakeCrc,
@@ -74,6 +76,39 @@ describe('serializeArchive', () => {
 
   it('produces content recognized by isArchiveContent', () => {
     expect(isArchiveContent(serializeArchive([]))).toBe(true);
+  });
+});
+
+describe('addEntry / removeEntry', () => {
+  const base: ArchiveEntry[] = [
+    { name: 'a.txt', size: 3, content: 'aaa' },
+    { name: 'b.txt', size: 3, content: 'bbb' },
+  ];
+
+  it('appends a new entry without mutating the source', () => {
+    const next = addEntry(base, { name: 'c.txt', size: 1, content: 'c' });
+    expect(next.map((e) => e.name)).toEqual(['a.txt', 'b.txt', 'c.txt']);
+    expect(base).toHaveLength(2);
+  });
+
+  it('replaces an existing entry by case-insensitive name', () => {
+    const next = addEntry(base, { name: 'A.TXT', size: 5, content: 'AAAAA' });
+    expect(next).toHaveLength(2);
+    expect(next.find((e) => e.name === 'A.TXT')?.content).toBe('AAAAA');
+    expect(next.some((e) => e.name === 'a.txt')).toBe(false);
+  });
+
+  it('removes an entry by case-insensitive name', () => {
+    expect(removeEntry(base, 'B.TXT').map((e) => e.name)).toEqual(['a.txt']);
+    expect(removeEntry(base, 'missing.txt')).toHaveLength(2);
+  });
+
+  it('survives an add/remove round-trip through serialize/parse', () => {
+    const added = addEntry(base, { name: 'c.txt', size: 1, content: 'c' });
+    const parsed = parseArchive(serializeArchive(added))!;
+    expect(parsed.entries.map((e) => e.name)).toEqual(['a.txt', 'b.txt', 'c.txt']);
+    const removed = removeEntry(parsed.entries, 'a.txt');
+    expect(removed.map((e) => e.name)).toEqual(['b.txt', 'c.txt']);
   });
 });
 

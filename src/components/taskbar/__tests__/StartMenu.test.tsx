@@ -22,6 +22,15 @@ vi.mock('@/contexts/WindowContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: () => ({
+    settings: {},
+    setSetting: vi.fn(),
+    getAppPref: <T,>(_appId: string, _key: string, fallback: T) => fallback,
+    setAppPref: vi.fn(),
+  }),
+}));
+
 describe('StartMenu', () => {
   const onClose = vi.fn();
 

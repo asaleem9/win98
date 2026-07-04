@@ -71,6 +71,20 @@ export function packedSize(size: number): number {
   return Math.round(size * (1 - fakeRatio(size) / 100));
 }
 
+/**
+ * Adds (or replaces, by case-insensitive name) an entry in an archive listing.
+ * Returns a new array; the original is left untouched.
+ */
+export function addEntry(entries: ArchiveEntry[], entry: ArchiveEntry): ArchiveEntry[] {
+  const rest = entries.filter((e) => e.name.toLowerCase() !== entry.name.toLowerCase());
+  return [...rest, entry];
+}
+
+/** Removes the entry with the given name (case-insensitive). Returns a new array. */
+export function removeEntry(entries: ArchiveEntry[], name: string): ArchiveEntry[] {
+  return entries.filter((e) => e.name.toLowerCase() !== name.toLowerCase());
+}
+
 /** CRC32-ish hex stamp derived from name+content, for display only. */
 export function fakeCrc(entry: ArchiveEntry): string {
   const src = `${entry.name}:${entry.content}`;

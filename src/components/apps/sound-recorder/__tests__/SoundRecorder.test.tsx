@@ -16,13 +16,28 @@ describe('SoundRecorder', () => {
     expect(screen.getByText(/No recording device detected/)).toBeInTheDocument();
   });
 
-  it('opens the File menu and saves to the filesystem', () => {
+  it('opens the File menu and launches the Save As picker', () => {
     renderWithProviders(<SoundRecorder windowId="w1" />);
     // The menu label renders as <u>F</u>ile, so match on the span's full text.
     const fileMenu = screen.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'File');
     fireEvent.click(fileMenu);
+    fireEvent.click(screen.getByText('Save As...'));
+    // The Save As file picker is now mounted with a default filename.
+    expect(screen.getByDisplayValue('recording.wav')).toBeInTheDocument();
+  });
+
+  it('writes a real WAV data URL to the filesystem on save', () => {
+    let confirmed = '';
+    renderWithProviders(<SoundRecorder windowId="w1" />);
+    const fileMenu = screen.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === 'File');
+    fireEvent.click(fileMenu);
+    fireEvent.click(screen.getByText('Save As...'));
+    const input = screen.getByDisplayValue('recording.wav');
+    fireEvent.change(input, { target: { value: 'memo.wav' } });
+    // Confirm via the Save button in the picker.
     fireEvent.click(screen.getByText('Save'));
-    expect(screen.getByText(/Saved to/)).toBeInTheDocument();
+    confirmed = screen.getByText(/Saved to/).textContent ?? '';
+    expect(confirmed).toMatch(/memo\.wav/);
   });
 
   it('shows a launched .wav filename', () => {

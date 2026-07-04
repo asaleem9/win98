@@ -6,6 +6,7 @@ import {
   basename,
   resolveTrackFromContent,
   playlistForLaunch,
+  trackFromFile,
 } from '@/lib/audio/playlist';
 import { musicTracks } from '@/lib/audio/tracks';
 
@@ -120,5 +121,30 @@ describe('playlistForLaunch', () => {
     expect(index).toBe(0);
     expect(list[0].title).toBe('mystery.mp3');
     expect(list.length).toBe(musicTracks.length + 1);
+  });
+});
+
+describe('trackFromFile', () => {
+  it('resolves a track: reference to the bundled track', () => {
+    const t = trackFromFile('C:\\Downloads\\whatever.mp3', 'track:pentium-power');
+    expect(t.id).toBe('pentium-power');
+  });
+
+  it('plays an inline data: URL directly', () => {
+    const t = trackFromFile('C:\\Downloads\\clip.mp3', 'data:audio/mpeg;base64,AAAA');
+    expect(t.src).toBe('data:audio/mpeg;base64,AAAA');
+    expect(t.title).toBe('clip.mp3');
+  });
+
+  it('matches a known bundled filename', () => {
+    const y2k = musicTracks.find((t) => t.id === 'y2k-panic')!;
+    const t = trackFromFile(`C:\\Downloads\\${y2k.fileName}`, '[MP3 Audio]');
+    expect(t.id).toBe('y2k-panic');
+  });
+
+  it('falls back to a named stand-in for unknown opaque content', () => {
+    const t = trackFromFile('C:\\Downloads\\mystery.mp3', '[MP3 Audio]');
+    expect(t.title).toBe('mystery.mp3');
+    expect(t.src).toBe(musicTracks[0].src);
   });
 });

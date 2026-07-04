@@ -11,6 +11,8 @@ import { DESKTOP_GRID, WINDOW_DEFAULTS } from '@/lib/constants';
 import { getWallpaper, isImageWallpaper, imageWallpaperStyle } from '@/lib/wallpapers';
 import { requestOpenFile } from '@/lib/recentDocs';
 import { playSound } from '@/lib/sounds';
+import { InstallerHost } from '@/components/apps/add-remove-programs/InstallerHost';
+import { PointerTrails } from '@/components/system/PointerTrails';
 
 const DESKTOP_FS_PATH = 'C:\\Windows\\Desktop';
 
@@ -79,14 +81,19 @@ export function Desktop() {
     return () => window.removeEventListener('resize', compute);
   }, []);
 
+  // Apps removed via Add/Remove Programs drop off the desktop.
+  const uninstalledApps = getAppPref<Record<string, boolean>>('system', 'uninstalledApps', {});
+
   const desktopFiles = listDir(DESKTOP_FS_PATH) ?? [];
   const icons = useMemo<IconEntry[]>(() => {
-    const appIcons: IconEntry[] = getDesktopApps().map((app) => ({
-      id: app.id,
-      name: app.name,
-      icon: app.icon,
-      appId: app.id,
-    }));
+    const appIcons: IconEntry[] = getDesktopApps()
+      .filter((app) => !uninstalledApps[app.id])
+      .map((app) => ({
+        id: app.id,
+        name: app.name,
+        icon: app.icon,
+        appId: app.id,
+      }));
     const fsIcons: IconEntry[] = desktopFiles.map((node) => ({
       id: `fs:${node.name}`,
       name: node.name,
@@ -96,7 +103,7 @@ export function Desktop() {
     }));
     return [...appIcons, ...fsIcons];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(desktopFiles.map((n) => [n.name, n.type, n.icon]))]);
+  }, [JSON.stringify(desktopFiles.map((n) => [n.name, n.type, n.icon])), JSON.stringify(uninstalledApps)]);
 
   const iconPosition = useCallback(
     (entry: IconEntry, index: number): Point => positions[entry.id] ?? defaultPosition(index, rowsPerColumn),
@@ -393,6 +400,12 @@ export function Desktop() {
       {contextMenu && (
         <ContextMenu items={contextMenu.items} position={contextMenu.position} onClose={() => setContextMenu(null)} />
       )}
+
+      {/* InstallShield wizard for running downloaded setup files */}
+      <InstallerHost />
+
+      {/* Fading cursor ghosts, driven by the Mouse applet's Motion tab */}
+      <PointerTrails />
     </div>
   );
 }

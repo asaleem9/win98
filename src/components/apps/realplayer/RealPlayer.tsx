@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { AppComponentProps } from '@/types/app';
+import { useWindows } from '@/contexts/WindowContext';
+import { useFileSystem } from '@/contexts/FileSystemContext';
+import { useSettings } from '@/contexts/SettingsContext';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { standardHelpMenu } from '@/lib/menus';
+import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
 import { MusicPlayer } from '@/lib/audio/player';
-import { musicTracks } from '@/lib/audio/tracks';
-import { formatTime } from '@/lib/audio/playlist';
+import { MusicTrack, musicTracks } from '@/lib/audio/tracks';
+import { formatTime, trackFromFile } from '@/lib/audio/playlist';
 import { showSystemError } from '@/hooks/useFileOpener';
 
 type Phase = 'buffering' | 'playing' | 'rebuffering';
@@ -13,8 +20,11 @@ type Phase = 'buffering' | 'playing' | 'rebuffering';
 const CLIP = musicTracks[2]; // Midnight MIDI — sounds suitably lo-fi
 const CONNECT_AFTER_CYCLES = 3;
 
-export default function RealPlayer() {
+export default function RealPlayer({ windowId }: AppComponentProps) {
   const playerRef = useRef<MusicPlayer | null>(null);
+  const { closeWindow } = useWindows();
+  const { readFile } = useFileSystem();
+  const { getAppPref, setAppPref } = useSettings();
   const [phase, setPhase] = useState<Phase>('buffering');
   const [bufferPercent, setBufferPercent] = useState(0);
   const [status, setStatus] = useState('Connecting to media.real.com...');
@@ -22,6 +32,10 @@ export default function RealPlayer() {
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(70);
+  const [track, setTrack] = useState<MusicTrack>(CLIP);
+  const [picker, setPicker] = useState(false);
+
+  const favorites = getAppPref<MusicTrack[]>('realplayer', 'favorites', []);
 
   const cyclesRef = useRef(0);
   const phaseRef = useRef<Phase>('buffering');
@@ -89,6 +103,40 @@ export default function RealPlayer() {
     return () => clearInterval(id);
   }, [phase]);
 
+  // Load a clip and run it through the connect/buffer theater so anything the
+  // user opens gets the same "welcome to 1999" experience.
+  const startBuffering = useCallback((t: MusicTrack) => {
+    const p = playerRef.current;
+    if (!p) return;
+    p.load(t);
+    setTrack(t);
+    cyclesRef.current = 0;
+    setBufferPercent(0);
+    setPlaying(false);
+    setElapsed(0);
+    setDuration(0);
+    setStatus('Connecting to media.real.com...');
+    setPhase('buffering');
+  }, []);
+
+  const openFile = useCallback((path: string) => {
+    setPicker(false);
+    startBuffering(trackFromFile(path, readFile(path)));
+  }, [readFile, startBuffering]);
+
+  const addFavorite = useCallback(() => {
+    if (favorites.some((f) => f.id === track.id || f.src === track.src)) return;
+    setAppPref('realplayer', 'favorites', [...favorites, track]);
+  }, [favorites, track, setAppPref]);
+
+  const playFavorite = useCallback((fav: MusicTrack) => { startBuffering(fav); }, [startBuffering]);
+
+  // Recording clips to disk was the flagship "RealPlayer Plus" upsell.
+  const showPlusUpsell = useCallback(
+    () => showSystemError('RealPlayer', 'This feature is only available in RealPlayer Plus. Upgrade today at www.real.com!'),
+    [],
+  );
+
   const togglePlay = useCallback(() => {
     const p = playerRef.current;
     if (!p || phaseRef.current === 'rebuffering') return;
@@ -103,13 +151,36 @@ export default function RealPlayer() {
     p.seek(Math.max(0, Math.min((p.duration || 0), p.currentTime + sec)));
   }, []);
   const applyVolume = useCallback((v: number) => { setVolume(v); playerRef.current?.setVolume(v / 100); }, []);
-  const menuDialog = () => showSystemError('RealPlayer', 'This feature is only available in RealPlayer Plus. Upgrade today at www.real.com!');
+
+  const menus: MenuDefinition[] = useMemo(() => [
+    {
+      label: '&File',
+      items: [
+        { label: '&Open...', shortcut: 'Ctrl+O', onClick: () => setPicker(true) },
+        // "Save clip" is gated behind Plus — keep the upsell alive.
+        { label: 'Save &Clip As...', onClick: showPlusUpsell },
+        { label: '', separator: true },
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: 'Fa&vorites',
+      items: [
+        { label: '&Add Current to Favorites', onClick: addFavorite },
+        { label: '', separator: true },
+        ...(favorites.length
+          ? favorites.map((f) => ({ label: f.title, onClick: () => playFavorite(f) }))
+          : [{ label: '(Empty)', disabled: true }]),
+      ],
+    },
+    standardHelpMenu('RealPlayer'),
+  ], [windowId, closeWindow, addFavorite, playFavorite, favorites, showPlusUpsell]);
 
   const connected = phase !== 'buffering';
   const progress = duration ? (elapsed / duration) * 100 : bufferPercent;
 
   return (
-    <div className="flex flex-col h-full bg-[#3a3a3a] text-white font-[family-name:var(--win98-font)] text-[11px] overflow-hidden">
+    <div className="relative flex flex-col h-full bg-[#3a3a3a] text-white font-[family-name:var(--win98-font)] text-[11px] overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#1a1a4a] to-[#2a2a6a] px-3 py-1 flex items-center gap-2">
         <span className="font-bold text-[12px]">RealPlayer</span>
@@ -117,11 +188,7 @@ export default function RealPlayer() {
       </div>
 
       {/* Menu bar */}
-      <div className="flex gap-4 px-3 py-[2px] bg-[#4a4a4a] border-b border-[#333] text-[11px] text-[#ccc]">
-        {['File', 'View', 'Play', 'Favorites', 'Help'].map((m) => (
-          <span key={m} className="cursor-default hover:text-white" onClick={menuDialog}>{m}</span>
-        ))}
-      </div>
+      <MenuBar menus={menus} windowId={windowId} />
 
       {/* Video area */}
       <div className="flex-1 bg-black flex items-center justify-center relative mx-1 my-1">
@@ -145,7 +212,7 @@ export default function RealPlayer() {
               />
             </div>
           ) : (
-            <div className="text-[10px] text-[#66cc66] mt-3">● LIVE · {CLIP.title}</div>
+            <div className="text-[10px] text-[#66cc66] mt-3">● LIVE · {track.title}</div>
           )}
           <div className="text-[10px] text-[#555] mt-2">RealAudio 28.8 · mono</div>
         </div>
@@ -153,7 +220,7 @@ export default function RealPlayer() {
 
       {/* Now playing */}
       <div className="px-3 py-1 bg-[#333] text-[10px] text-[#aaa] truncate">
-        clip: {CLIP.fileName} | Server: rtsp://media.real.com/welcome
+        clip: {track.fileName} | Server: rtsp://media.real.com/welcome
       </div>
 
       {/* Progress bar */}
@@ -182,6 +249,20 @@ export default function RealPlayer() {
         <span>{formatTime(elapsed)} / {connected && duration ? formatTime(duration) : '??:??'}</span>
         <span className="ml-auto">28.8 Kbps</span>
       </div>
+
+      {picker && (
+        <FilePickerDialog
+          mode="open"
+          title="Open"
+          filters={[
+            { label: 'RealMedia (*.ra;*.ram;*.rm)', extensions: ['ra', 'ram', 'rm'] },
+            { label: 'Audio (*.mp3;*.wav;*.mid)', extensions: ['mp3', 'wav', 'mid'] },
+            { label: 'All Files (*.*)', extensions: [] },
+          ]}
+          onCancel={() => setPicker(false)}
+          onConfirm={openFile}
+        />
+      )}
     </div>
   );
 }

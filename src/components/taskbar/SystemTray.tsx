@@ -61,7 +61,7 @@ function VolumePopup({ onClose }: { onClose: () => void }) {
   );
 }
 
-function DateTimeDialog({ onClose }: { onClose: () => void }) {
+function DateTimeDialog({ onClose, clock24h }: { onClose: () => void; clock24h: boolean }) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -93,7 +93,7 @@ function DateTimeDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="p-4 flex flex-col items-center gap-2">
           <div className="text-[24px] font-bold tabular-nums">
-            {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}
+            {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: !clock24h })}
           </div>
           <div>{now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
           <div className="text-[var(--win98-disabled-text)] select-none mt-2">
@@ -112,6 +112,10 @@ export function SystemTray() {
   const [trayIcons, setTrayIcons] = useState<TrayIcon[]>([]);
   const [networkActive, setNetworkActive] = useState(false);
   const { openWindow } = useWindows();
+  const { getAppPref } = useSettings();
+
+  // The Regional Settings applet flips the clock between 12- and 24-hour.
+  const clock24h = getAppPref('regional', 'clock24h', false);
 
   useEffect(() => {
     const updateTime = () => {
@@ -120,14 +124,14 @@ export function SystemTray() {
         now.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
-          hour12: true,
+          hour12: !clock24h,
         }),
       );
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [clock24h]);
 
   // Apps register/unregister their own tray icons over the event bus. Icons are
   // deduped by id (a re-register updates the existing icon in place).
@@ -228,7 +232,7 @@ export function SystemTray() {
       </span>
 
       {volumeOpen && <VolumePopup onClose={() => setVolumeOpen(false)} />}
-      {dateTimeOpen && <DateTimeDialog onClose={() => setDateTimeOpen(false)} />}
+      {dateTimeOpen && <DateTimeDialog onClose={() => setDateTimeOpen(false)} clock24h={clock24h} />}
     </div>
   );
 }

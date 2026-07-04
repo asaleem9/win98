@@ -13,6 +13,15 @@ export interface AboutDialogProps {
 const DEFAULT_ICON = '/icons/windows-logo-32.svg';
 const WINDOWS_VERSION = '4.10.1998';
 
+// Third-party products keep their own branding; everything else reads as a
+// Microsoft app, shell32-style ("Microsoft Notepad").
+const THIRD_PARTY_BRANDS =
+  /^(adobe|macromedia|nero|norton|real|quicktime|winamp|aol|america|lime|napster|winzip|winrar|bonzi|netscape|icq|kazaa|corel)/i;
+
+export function aboutDisplayName(appName: string): string {
+  return THIRD_PARTY_BRANDS.test(appName) ? appName : `Microsoft ${appName}`;
+}
+
 export function AboutDialog({ appName, icon, version, onClose }: AboutDialogProps) {
   const { getAppPref } = useSettings();
   const userName = getAppPref('system', 'userName', 'User');
@@ -43,7 +52,7 @@ export function AboutDialog({ appName, icon, version, onClose }: AboutDialogProp
             style={{ imageRendering: 'pixelated' }}
           />
           <div className="leading-tight">
-            <div className="font-bold">Microsoft {appName}</div>
+            <div className="font-bold">{aboutDisplayName(appName)}</div>
             <div>Windows 98</div>
             <div>Version {version || WINDOWS_VERSION}</div>
           </div>

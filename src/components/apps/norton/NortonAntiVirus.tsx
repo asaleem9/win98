@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { Dialog98 } from '@/components/ui/Dialog98';
 import { ProgressBar98 } from '@/components/ui/ProgressBar98';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { standardHelpMenu } from '@/lib/menus';
 import {
   Threat,
   quarantineThreats,
@@ -12,8 +14,11 @@ import {
   incrementScanCount,
   resetScanCount,
   isDefinitionsExpired,
+  removeFromQuarantine,
+  unclearThreat,
 } from './nortonLogic';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useWindows } from '@/contexts/WindowContext';
 import { emit } from '@/lib/eventBus';
 
 const allThreats: Threat[] = [
@@ -44,12 +49,16 @@ const scanPaths = [
 const buttonClass =
   'px-4 h-[24px] text-[11px] cursor-default font-bold bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] disabled:text-[var(--win98-button-shadow)]';
 
+const smallButtonClass =
+  'px-2 h-[18px] text-[10px] cursor-default bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]';
+
 // Norton's real-time protection dropped a shield in the tray once the app had
 // been launched, and left it there for the rest of the session.
 let shieldRegistered = false;
 
 export default function NortonAntiVirus({ windowId }: AppComponentProps) {
   const { getAppPref, setAppPref } = useSettings();
+  const { closeWindow } = useWindows();
 
   useEffect(() => {
     if (shieldRegistered) return;
@@ -173,8 +182,57 @@ export default function NortonAntiVirus({ windowId }: AppComponentProps) {
     }, 300);
   }, [setAppPref]);
 
+  // Restore hands the file back: drop it from quarantine and un-clear the name
+  // so a future scan can turn it up again.
+  const handleRestore = useCallback(
+    (threat: Threat) => {
+      const nextQuarantine = removeFromQuarantine(quarantine, threat.name);
+      const nextCleared = unclearThreat(clearedNames, threat.name);
+      setQuarantine(nextQuarantine);
+      setClearedNames(nextCleared);
+      setAppPref('norton', 'quarantine', nextQuarantine);
+      setAppPref('norton', 'clearedNames', nextCleared);
+    },
+    [quarantine, clearedNames, setAppPref],
+  );
+
+  // Delete permanently removes the quarantined entry; the name stays cleared.
+  const handleDeleteQuarantined = useCallback(
+    (threat: Threat) => {
+      const nextQuarantine = removeFromQuarantine(quarantine, threat.name);
+      setQuarantine(nextQuarantine);
+      setAppPref('norton', 'quarantine', nextQuarantine);
+    },
+    [quarantine, setAppPref],
+  );
+
+  const menus = useMemo<MenuDefinition[]>(
+    () => [
+      {
+        label: '&File',
+        items: [
+          { label: '&Scan Now', onClick: startScan, disabled: scanning },
+          { label: '&LiveUpdate...', onClick: runLiveUpdate, disabled: liveUpdating },
+          { label: '', separator: true },
+          { label: 'E&xit', onClick: () => closeWindow(windowId) },
+        ],
+      },
+      {
+        label: '&View',
+        items: [
+          { label: '&Scanner', onClick: () => setActiveTab('scanner') },
+          { label: '&Quarantine', onClick: () => setActiveTab('quarantine') },
+        ],
+      },
+      standardHelpMenu('Norton AntiVirus'),
+    ],
+    [startScan, runLiveUpdate, scanning, liveUpdating, closeWindow, windowId],
+  );
+
   return (
     <div className="flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] relative">
+      <MenuBar menus={menus} windowId={windowId} />
+
       {/* Header */}
       <div className="bg-[#FFFF99] px-3 py-2 border-b-2 border-[#CC9900] flex items-center gap-2">
         <div className="text-2xl">🛡️</div>
@@ -329,7 +387,8 @@ export default function NortonAntiVirus({ windowId }: AppComponentProps) {
                 <thead className="sticky top-0 bg-[var(--win98-button-face)]">
                   <tr>
                     <th className="text-left px-2 py-[2px] font-normal border-b border-r border-[var(--win98-button-shadow)]">Threat</th>
-                    <th className="text-left px-2 py-[2px] font-normal border-b border-[var(--win98-button-shadow)]">Type</th>
+                    <th className="text-left px-2 py-[2px] font-normal border-b border-r border-[var(--win98-button-shadow)]">Type</th>
+                    <th className="text-center px-2 py-[2px] font-normal border-b border-[var(--win98-button-shadow)]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -337,6 +396,14 @@ export default function NortonAntiVirus({ windowId }: AppComponentProps) {
                     <tr key={threat.name}>
                       <td className="px-2 py-[2px]">🔒 {threat.name}</td>
                       <td className="px-2 py-[2px]">{threat.type}</td>
+                      <td className="px-2 py-[2px] text-center whitespace-nowrap">
+                        <button onClick={() => handleRestore(threat)} className={smallButtonClass}>
+                          Restore
+                        </button>
+                        <button onClick={() => handleDeleteQuarantined(threat)} className={`${smallButtonClass} ml-1`}>
+                          Delete
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

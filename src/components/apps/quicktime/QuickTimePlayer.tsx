@@ -1,32 +1,56 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { AppComponentProps } from '@/types/app';
+import { useWindows } from '@/contexts/WindowContext';
+import { useFileSystem } from '@/contexts/FileSystemContext';
 import { Dialog98 } from '@/components/ui/Dialog98';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { standardHelpMenu } from '@/lib/menus';
+import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
 import { MusicPlayer } from '@/lib/audio/player';
 import { musicTracks } from '@/lib/audio/tracks';
-import { formatTime } from '@/lib/audio/playlist';
+import { formatTime, trackFromFile } from '@/lib/audio/playlist';
 
 const SAMPLE = musicTracks[4]; // Screensaver Groove — the free "sample movie"
 const SAMPLE_LEN = 15; // seconds of the free reel before it loops back
 
-export default function QuickTimePlayer() {
+// The movie canvas plays at 260×150; Half/Normal/Double scale off that.
+const BASE_W = 260;
+const BASE_H = 150;
+type SizeKey = 'half' | 'normal' | 'double';
+const SIZE_SCALE: Record<SizeKey, number> = { half: 0.5, normal: 1, double: 2 };
+
+export default function QuickTimePlayer({ windowId }: AppComponentProps) {
   const playerRef = useRef<MusicPlayer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { closeWindow, resizeWindow } = useWindows();
+  const { readFile } = useFileSystem();
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [started, setStarted] = useState(false);
+  const [loop, setLoop] = useState(true);
+  const [size, setSize] = useState<SizeKey>('normal');
+  const [picker, setPicker] = useState(false);
   const playCountRef = useRef(0);
   const elapsedRef = useRef(0);
+  const loopRef = useRef(loop);
   useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
+  useEffect(() => { loopRef.current = loop; }, [loop]);
+
+  const movieW = Math.round(BASE_W * SIZE_SCALE[size]);
+  const movieH = Math.round(BASE_H * SIZE_SCALE[size]);
 
   useEffect(() => {
     const p = new MusicPlayer();
     playerRef.current = p;
     p.setVolume(0.6);
     p.onTimeUpdate = (cur) => {
-      if (cur >= SAMPLE_LEN) { p.seek(0); setElapsed(0); }
-      else setElapsed(cur);
+      if (cur >= SAMPLE_LEN) {
+        if (loopRef.current) { p.seek(0); setElapsed(0); }
+        else { p.pause(); setPlaying(false); setElapsed(SAMPLE_LEN); }
+      } else setElapsed(cur);
     };
     p.load(SAMPLE);
     return () => { p.destroy(); playerRef.current = null; };
@@ -105,8 +129,48 @@ export default function QuickTimePlayer() {
     if (!started) setStarted(true);
   }, [started]);
 
+  // Open flow reuses the sample player: load the chosen file and start it
+  // directly so the Pro nag stays wired to the transport button, not Open.
+  const openFile = useCallback((path: string) => {
+    setPicker(false);
+    playerRef.current?.load(trackFromFile(path, readFile(path)));
+    setElapsed(0);
+    playerRef.current?.play();
+    setPlaying(true);
+    setStarted(true);
+  }, [readFile]);
+
+  const applySize = useCallback((s: SizeKey) => {
+    setSize(s);
+    const scale = SIZE_SCALE[s];
+    // Grow the window frame so the resized movie fits (min-size clamps apply).
+    resizeWindow(windowId, Math.round(BASE_W * scale) + 16, Math.round(BASE_H * scale) + 110);
+  }, [windowId, resizeWindow]);
+
+  const menus: MenuDefinition[] = useMemo(() => [
+    {
+      label: '&File',
+      items: [
+        { label: '&Open...', shortcut: 'Ctrl+O', onClick: () => setPicker(true) },
+        { label: '', separator: true },
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: '&Movie',
+      items: [
+        { label: '&Loop', checked: loop, onClick: () => setLoop((l) => !l) },
+        { label: '', separator: true },
+        { label: '&Half Size', radio: true, checked: size === 'half', onClick: () => applySize('half') },
+        { label: '&Normal Size', radio: true, checked: size === 'normal', onClick: () => applySize('normal') },
+        { label: '&Double Size', radio: true, checked: size === 'double', onClick: () => applySize('double') },
+      ],
+    },
+    standardHelpMenu('QuickTime'),
+  ], [windowId, closeWindow, loop, size, applySize]);
+
   return (
-    <div className="flex flex-col h-full bg-[#d0d0d0] font-[family-name:var(--win98-font)] text-[11px] overflow-hidden">
+    <div className="relative flex flex-col h-full bg-[#d0d0d0] font-[family-name:var(--win98-font)] text-[11px] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-[3px]" style={{ background: 'linear-gradient(to bottom, #b8c8e0, #8898b0)' }}>
         <div className="flex items-center gap-2">
@@ -117,16 +181,12 @@ export default function QuickTimePlayer() {
         </div>
       </div>
 
-      {/* Menu — Pro upsell */}
-      <div className="flex gap-4 px-3 py-[2px] bg-[#c8c8c8] border-b border-[#aaa] text-[11px] text-[#333]">
-        {['File', 'Edit', 'Movie', 'Help'].map((m) => (
-          <span key={m} className="cursor-default hover:underline" onClick={() => setShowUpgrade(true)}>{m}</span>
-        ))}
-      </div>
+      {/* Menu bar */}
+      <MenuBar menus={menus} windowId={windowId} />
 
       {/* Movie area */}
-      <div className="flex-1 bg-black flex items-center justify-center relative m-[2px]">
-        <canvas ref={canvasRef} width={260} height={150} className="w-full h-full" />
+      <div className="flex-1 bg-black flex items-center justify-center relative m-[2px] overflow-hidden">
+        <canvas ref={canvasRef} width={movieW} height={movieH} style={{ width: movieW, height: movieH }} />
       </div>
 
       {/* Transport */}
@@ -157,6 +217,19 @@ export default function QuickTimePlayer() {
           </div>
         </div>
       </div>
+
+      {picker && (
+        <FilePickerDialog
+          mode="open"
+          title="Open"
+          filters={[
+            { label: 'Movies (*.mov;*.avi;*.mpg)', extensions: ['mov', 'avi', 'mpg', 'mpeg', 'qt'] },
+            { label: 'All Files (*.*)', extensions: [] },
+          ]}
+          onCancel={() => setPicker(false)}
+          onConfirm={openFile}
+        />
+      )}
 
       {showUpgrade && (
         <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/20">

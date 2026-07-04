@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { renderWithProviders } from '@/__tests__/helpers/renderWithProviders';
 import AIM from '../AIM';
 
 function captureDetails(eventName: string) {
@@ -16,7 +16,7 @@ describe('AIM system-tray presence', () => {
     const reg = captureDetails('win98-tray-register');
     const unreg = captureDetails('win98-tray-unregister');
 
-    const { unmount } = render(<AIM windowId="w1" />);
+    const { unmount } = renderWithProviders(<AIM windowId="w1" />);
     expect(reg.details).toContainEqual({
       id: 'aim',
       icon: '/icons/aim-16.svg',

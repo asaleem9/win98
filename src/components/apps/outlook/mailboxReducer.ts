@@ -5,6 +5,21 @@ export type FolderName = 'Inbox' | 'Outbox' | 'Sent Items' | 'Deleted Items' | '
 
 export const FOLDER_ORDER: FolderName[] = ['Inbox', 'Outbox', 'Sent Items', 'Deleted Items', 'Drafts'];
 
+/** The e-mail address the user sends mail from. Shared so generated mail (the
+ * virus outbreak, the compose form) all agree on the sender. */
+export const SELF_ADDRESS = 'SurfDude98 <surfdude98@hotmail.com>';
+
+/** The filename of the era ILOVEYOU worm; opening it triggers the virus flow. */
+export const LOVE_LETTER_ATTACHMENT = 'LOVE-LETTER-FOR-YOU.TXT.vbs';
+
+export interface Attachment {
+  name: string;
+  /** Absolute VFS path when the attachment points at a real file. */
+  path?: string;
+  /** Inline text when the attachment is synthesized (era mail, no real file). */
+  content?: string;
+}
+
 export interface Email {
   id: string;
   from: string;
@@ -13,6 +28,9 @@ export interface Email {
   date: string;
   unread: boolean;
   body: string;
+  attachments?: Attachment[];
+  /** Set once the antivirus has stripped a malicious attachment. */
+  quarantined?: boolean;
 }
 
 export type Mailbox = Record<FolderName, Email[]>;
@@ -22,6 +40,9 @@ export type MailAction =
   | { type: 'SEND'; email: Email }
   | { type: 'MARK_READ'; folder: FolderName; id: string }
   | { type: 'DELETE'; folder: FolderName; id: string }
+  // Strip the infected mail's attachment, bin it, and file the worm's outgoing
+  // copies under Sent Items — the whole ILOVEYOU outbreak as one atomic step.
+  | { type: 'QUARANTINE'; folder: FolderName; id: string; jokeEmails: Email[] }
   | { type: 'LOAD'; mailbox: Mailbox };
 
 export function emptyMailbox(): Mailbox {
@@ -55,6 +76,26 @@ export function mailboxReducer(state: Mailbox, action: MailAction): Mailbox {
         ...state,
         [action.folder]: state[action.folder].filter((e) => e.id !== action.id),
         'Deleted Items': [{ ...email, unread: false }, ...state['Deleted Items']],
+      };
+    }
+
+    case 'QUARANTINE': {
+      const source = state[action.folder].find((e) => e.id === action.id);
+      const cleaned = source
+        ? { ...source, attachments: undefined, quarantined: true, unread: false }
+        : null;
+      // Base state with the infected message pulled out of its folder; using it
+      // as the base keeps things correct even if that folder is Sent/Deleted.
+      const withoutInfected: Mailbox = {
+        ...state,
+        [action.folder]: state[action.folder].filter((e) => e.id !== action.id),
+      };
+      return {
+        ...withoutInfected,
+        'Deleted Items': cleaned
+          ? [cleaned, ...withoutInfected['Deleted Items']]
+          : withoutInfected['Deleted Items'],
+        'Sent Items': [...action.jokeEmails, ...withoutInfected['Sent Items']],
       };
     }
 
@@ -171,6 +212,45 @@ THIS IS NOT A JOKE. IT REALLY WORKS.
 
 ~*~*~*~*~ Pass it on ~*~*~*~*~`,
   },
+  {
+    id: 'seed-goodluck',
+    from: 'Jenny <jenny_luvs_horses@aol.com>',
+    subject: 'FW: FW: FW: GOOD LUCK',
+    date: '3/15/99',
+    unread: true,
+    body: `>>>> FW: FW: GOOD LUCK
+>>>>
+>>>> This is the GOOD LUCK Totem. Do NOT delete this email!!
+>>>>
+>>>>            _____
+>>>>           /     \\
+>>>>          | () () |    GOOD LUCK TOTEM
+>>>>           \\  ^  /     (do not break the chain!)
+>>>>            |||||
+>>>>            |||||
+>>>>
+>>>> This totem has been sent to you for GOOD LUCK. It has been
+>>>> around the world NINE times.
+>>>>
+>>>> Send this to 5 people = good news
+>>>> Send this to 10 people = money comes your way
+>>>> Send this to 15 people = the one you love calls you
+>>>> DELETE this email = 7 years bad luck!!!
+>>>>
+>>>> A boy named Timmy deleted this and dropped his Gameboy in
+>>>> the toilet the very next day. DON'T RISK IT!!!
+>>>>
+>>>> ~*~ Forward within the hour for it to work ~*~`,
+  },
+  {
+    id: 'seed-loveletter',
+    from: 'A Secret Admirer <admirer@aol.com>',
+    subject: 'ILOVEYOU',
+    date: '3/16/99',
+    unread: true,
+    body: `kindly check the attached LOVELETTER coming from me :-)`,
+    attachments: [{ name: LOVE_LETTER_ATTACHMENT }],
+  },
 ];
 
 const SPAM_POOL: Omit<Email, 'id' | 'date' | 'unread'>[] = [
@@ -215,4 +295,54 @@ The following recipient(s) could not be reached:
 ----- Original Message -----
 ${sent.body}`,
   };
+}
+
+/**
+ * The ILOVEYOU worm's payload: three copies it mails to "everyone in your
+ * address book". Harmless here — just three joke messages filed under Sent.
+ */
+export function makeVirusOutbreak(recipients: string[], makeId: () => string): Email[] {
+  const to = recipients.length ? recipients.slice(0, 12).join('; ') : 'everyone in your address book';
+  return [1, 2, 3].map((n) => ({
+    id: makeId(),
+    from: SELF_ADDRESS,
+    to,
+    subject: 'ILOVEYOU',
+    date: '3/16/99',
+    unread: false,
+    body: `kindly check the attached LOVELETTER coming from me :-)
+
+(This message was sent automatically to your entire address book. You did not
+send it. Congratulations, you have been hit by the Love Bug! Copy ${n} of 3.)`,
+  }));
+}
+
+/** Render an email as a plain-text .eml file (era-simple headers + body). */
+export function formatEml(email: Email): string {
+  const lines = [
+    `From: ${email.from}`,
+    `To: ${email.to ?? ''}`,
+    `Subject: ${email.subject}`,
+    `Date: ${email.date}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="us-ascii"',
+    '',
+    email.body,
+  ];
+  if (email.attachments?.length) {
+    lines.push('', '----- Attachments -----', ...email.attachments.map((a) => a.name));
+  }
+  return lines.join('\r\n');
+}
+
+/** Flatten an email to readable text for printing. */
+export function emailToText(email: Email): string {
+  const header = [
+    `From:    ${email.from}`,
+    email.to ? `To:      ${email.to}` : null,
+    `Date:    ${email.date}`,
+    `Subject: ${email.subject || '(no subject)'}`,
+    email.attachments?.length ? `Attach:  ${email.attachments.map((a) => a.name).join(', ')}` : null,
+  ].filter(Boolean).join('\n');
+  return `${header}\n\n${email.body}`;
 }

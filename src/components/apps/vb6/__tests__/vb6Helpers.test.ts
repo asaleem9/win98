@@ -6,7 +6,13 @@ import {
   addControl,
   removeControl,
   updateControl,
+  alignControls,
+  serializeFrm,
+  deserializeFrm,
+  encodeControlsClipboard,
+  decodeControlsClipboard,
   type VbControl,
+  type FormFile,
 } from '../vb6Helpers';
 
 describe('snapToGrid', () => {
@@ -95,5 +101,60 @@ describe('array ops', () => {
   it('updateControl leaves the array unchanged if the id is not found', () => {
     const result = updateControl([base], 'missing', { caption: 'x' });
     expect(result).toEqual([base]);
+  });
+});
+
+describe('alignControls', () => {
+  const a: VbControl = { id: 'a', type: 'CommandButton', x: 10, y: 20, width: 100, height: 30, caption: 'A', name: 'A' };
+  const b: VbControl = { id: 'b', type: 'CommandButton', x: 50, y: 80, width: 60, height: 40, caption: 'B', name: 'B' };
+
+  it('aligns lefts to the minimum x among the selection', () => {
+    const out = alignControls([a, b], ['a', 'b'], 'lefts');
+    expect(out.map((c) => c.x)).toEqual([10, 10]);
+  });
+
+  it('aligns tops to the minimum y among the selection', () => {
+    const out = alignControls([a, b], ['a', 'b'], 'tops');
+    expect(out.map((c) => c.y)).toEqual([20, 20]);
+  });
+
+  it('aligns rights so right edges match the maximum', () => {
+    const out = alignControls([a, b], ['a', 'b'], 'rights');
+    // a right = 110, b right = 110 → both edges at 110
+    expect(out.map((c) => c.x + c.width)).toEqual([110, 110]);
+  });
+
+  it('leaves a single-control selection untouched', () => {
+    expect(alignControls([a, b], ['a'], 'lefts')).toEqual([a, b]);
+  });
+});
+
+describe('.frm serialization', () => {
+  const form: FormFile = {
+    app: 'vb6',
+    version: 1,
+    formName: 'frmMain',
+    formCaption: 'My App',
+    controls: [defaultControl('CommandButton', [], 8, 8)],
+  };
+
+  it('round-trips a form through serialize/deserialize', () => {
+    expect(deserializeFrm(serializeFrm(form))).toEqual(form);
+  });
+
+  it('rejects payloads that are not forms', () => {
+    expect(deserializeFrm('nope')).toBeNull();
+    expect(deserializeFrm('{"app":"flash"}')).toBeNull();
+  });
+});
+
+describe('control clipboard', () => {
+  it('round-trips control seeds', () => {
+    const seeds = [{ type: 'Label' as const, x: 8, y: 8, width: 72, height: 16, caption: 'Hi' }];
+    expect(decodeControlsClipboard(encodeControlsClipboard(seeds))).toEqual(seeds);
+  });
+
+  it('rejects non-control clipboard text', () => {
+    expect(decodeControlsClipboard('random copied text')).toBeNull();
   });
 });

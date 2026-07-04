@@ -13,6 +13,18 @@ import { playSound } from '@/lib/sounds';
 import { normalizePath } from '@/lib/fs/fsOperations';
 import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
 import { usePrint } from '@/components/dialogs/PrintDialog';
+import { setClipboard, getClipboard, subscribe } from '@/lib/clipboard';
+import { useSettings } from '@/contexts/SettingsContext';
+import { Select98 } from '@/components/ui/Select98';
+import { Button98 } from '@/components/ui/Button98';
+
+// Monospace stacks in the flavor of the fonts Notepad shipped with on Win98.
+const NOTEPAD_FONTS = [
+  { label: 'Fixedsys', value: 'var(--win98-font-mono)' },
+  { label: 'Courier New', value: '"Courier New", monospace' },
+  { label: 'Lucida Console', value: '"Lucida Console", monospace' },
+];
+const NOTEPAD_FONT_SIZES = [8, 10, 12, 13, 14, 16, 18, 20, 24];
 
 function baseName(path: string): string {
   const parts = normalizePath(path).split('\\');
@@ -23,6 +35,7 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
   const { updateTitle, closeWindow } = useWindows();
   const { readFile, writeFile, getNode } = useFileSystem();
   const { openPrint, printDialog } = usePrint(windowId, 'Notepad');
+  const { getAppPref, setAppPref } = useSettings();
 
   const [content, setContent] = useState('');
   const [wordWrap, setWordWrap] = useState(true);
@@ -36,6 +49,10 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
   const [picker, setPicker] = useState<null | 'open' | 'save'>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState<null | 'new' | 'open' | 'exit'>(null);
+  const [canPaste, setCanPaste] = useState(false);
+  const [showFont, setShowFont] = useState(false);
+  const [fontFamily, setFontFamily] = useState<string>(() => getAppPref('notepad', 'fontFamily', NOTEPAD_FONTS[0].value));
+  const [fontSize, setFontSize] = useState<number>(() => getAppPref('notepad', 'fontSize', 13));
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const undoStack = useRef<string[]>([]);
@@ -48,6 +65,13 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
   useEffect(() => {
     updateTitle(windowId, `${dirty ? '*' : ''}${fileName} - Notepad`);
   }, [fileName, dirty, windowId, updateTitle]);
+
+  // Keep Paste enabled state in sync with the shared clipboard.
+  useEffect(() => {
+    const update = () => setCanPaste(getClipboard()?.kind === 'text');
+    update();
+    return subscribe(update);
+  }, []);
 
   const loadPath = useCallback(
     (rawPath: string) => {
@@ -176,8 +200,7 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
   const handleCut = useCallback(() => {
     withSelection((ta, start, end) => {
       if (start === end) return;
-      const selected = ta.value.slice(start, end);
-      if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(selected).catch(() => {});
+      setClipboard({ kind: 'text', text: ta.value.slice(start, end) });
       applyContentChange(ta.value.slice(0, start) + ta.value.slice(end));
       requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(start, start); });
     });
@@ -186,26 +209,19 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
   const handleCopy = useCallback(() => {
     withSelection((ta, start, end) => {
       if (start === end) return;
-      const selected = ta.value.slice(start, end);
-      if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(selected).catch(() => {});
+      setClipboard({ kind: 'text', text: ta.value.slice(start, end) });
     });
   }, [withSelection]);
 
-  const handlePaste = useCallback(async () => {
-    if (!navigator.clipboard?.readText) {
-      showSystemError('Notepad', 'Clipboard access is not available.');
-      return;
-    }
-    try {
-      const text = await navigator.clipboard.readText();
-      withSelection((ta, start, end) => {
-        applyContentChange(ta.value.slice(0, start) + text + ta.value.slice(end));
-        const caretPos = start + text.length;
-        requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(caretPos, caretPos); });
-      });
-    } catch {
-      showSystemError('Notepad', 'Clipboard access is not available.');
-    }
+  const handlePaste = useCallback(() => {
+    const clip = getClipboard();
+    if (!clip || clip.kind !== 'text') return;
+    const text = clip.text;
+    withSelection((ta, start, end) => {
+      applyContentChange(ta.value.slice(0, start) + text + ta.value.slice(end));
+      const caretPos = start + text.length;
+      requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(caretPos, caretPos); });
+    });
   }, [withSelection, applyContentChange]);
 
   const handleDelete = useCallback(() => {
@@ -295,7 +311,7 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
         { label: '', separator: true },
         { label: 'Cut', shortcut: 'Ctrl+X', onClick: handleCut },
         { label: 'Copy', shortcut: 'Ctrl+C', onClick: handleCopy },
-        { label: 'Paste', shortcut: 'Ctrl+V', onClick: () => void handlePaste() },
+        { label: 'Paste', shortcut: 'Ctrl+V', onClick: handlePaste, disabled: !canPaste },
         { label: 'Delete', shortcut: 'Del', onClick: handleDelete },
         { label: '', separator: true },
         { label: 'Select All', shortcut: 'Ctrl+A', onClick: handleSelectAll },
@@ -314,7 +330,7 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
       label: 'Format',
       items: [
         { label: 'Word Wrap', checked: wordWrap, onClick: () => setWordWrap((w) => !w) },
-        { label: 'Font...', disabled: true },
+        { label: 'Font...', onClick: () => setShowFont(true) },
       ],
     },
     {
@@ -354,7 +370,7 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
           onClick={updateCaret}
           onKeyUp={updateCaret}
           className="w-full h-full resize-none p-1 bg-white text-black font-[family-name:var(--win98-font-mono)] text-[13px] leading-[16px] border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] outline-none focus:outline-none"
-          style={{ whiteSpace: wordWrap ? 'pre-wrap' : 'pre', overflowWrap: wordWrap ? 'break-word' : 'normal' }}
+          style={{ whiteSpace: wordWrap ? 'pre-wrap' : 'pre', overflowWrap: wordWrap ? 'break-word' : 'normal', fontFamily, fontSize }}
           spellCheck={false}
         />
       </div>
@@ -431,7 +447,88 @@ export default function Notepad({ windowId, launchParams, launchCount }: AppComp
         </div>
       )}
 
+      {showFont && (
+        <FontDialog
+          family={fontFamily}
+          size={fontSize}
+          onCancel={() => setShowFont(false)}
+          onConfirm={(family, size) => {
+            setFontFamily(family);
+            setFontSize(size);
+            setAppPref('notepad', 'fontFamily', family);
+            setAppPref('notepad', 'fontSize', size);
+            setShowFont(false);
+          }}
+        />
+      )}
+
       {printDialog}
+    </div>
+  );
+}
+
+function FontDialog({
+  family,
+  size,
+  onCancel,
+  onConfirm,
+}: {
+  family: string;
+  size: number;
+  onCancel: () => void;
+  onConfirm: (family: string, size: number) => void;
+}) {
+  const [draftFamily, setDraftFamily] = useState(family);
+  const [draftSize, setDraftSize] = useState(size);
+
+  return (
+    <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/20 font-[family-name:var(--win98-font)] text-[11px]">
+      <div className="w-[300px] bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)]">
+        {/* Title bar */}
+        <div className="flex items-center justify-between h-[18px] px-[3px] bg-gradient-to-r from-[var(--win98-titlebar-active-start)] to-[var(--win98-titlebar-active-end)] text-white font-bold select-none">
+          <span>Font</span>
+          <button
+            className="w-[16px] h-[14px] flex items-center justify-center bg-[var(--win98-button-face)] text-black border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] text-[9px] leading-none"
+            onClick={onCancel}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="p-3 flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="np-font-family" className="select-none">Font:</label>
+            <Select98 id="np-font-family" aria-label="Font" value={draftFamily} onChange={(e) => setDraftFamily(e.target.value)}>
+              {NOTEPAD_FONTS.map((f) => (
+                <option key={f.label} value={f.value}>{f.label}</option>
+              ))}
+            </Select98>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="np-font-size" className="select-none">Size:</label>
+            <Select98 id="np-font-size" aria-label="Size" value={draftSize} onChange={(e) => setDraftSize(Number(e.target.value))}>
+              {NOTEPAD_FONT_SIZES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </Select98>
+          </div>
+
+          {/* Sample */}
+          <div
+            className="h-[44px] flex items-center justify-center bg-white text-black border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] overflow-hidden"
+            style={{ fontFamily: draftFamily, fontSize: draftSize }}
+          >
+            AaBbYyZz
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button98 className="min-w-[64px] h-[22px]" onClick={() => onConfirm(draftFamily, draftSize)}>OK</Button98>
+            <Button98 className="min-w-[64px] h-[22px]" onClick={onCancel}>Cancel</Button98>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

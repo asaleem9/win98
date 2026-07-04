@@ -5,7 +5,10 @@ import {
   formatDirWide,
   matchCompletions,
   splitForCompletion,
+  isAffirmative,
+  planXcopyDir,
 } from '../dosUtils';
+import { FSNode } from '@/types/filesystem';
 
 test('tokenize splits on whitespace and drops empties', () => {
   expect(tokenize('  dir   /w  ')).toEqual(['dir', '/w']);
@@ -77,4 +80,46 @@ test('matchCompletions filters case-insensitively by prefix', () => {
 test('splitForCompletion separates the trailing token from the rest', () => {
   expect(splitForCompletion('cd WIN')).toEqual({ prefix: 'cd ', partial: 'WIN' });
   expect(splitForCompletion('dir')).toEqual({ prefix: '', partial: 'dir' });
+});
+
+test('isAffirmative recognizes y/yes only', () => {
+  expect(isAffirmative('y')).toBe(true);
+  expect(isAffirmative('Y')).toBe(true);
+  expect(isAffirmative(' yes ')).toBe(true);
+  expect(isAffirmative('n')).toBe(false);
+  expect(isAffirmative('')).toBe(false);
+  expect(isAffirmative('yeah')).toBe(false);
+});
+
+describe('planXcopyDir', () => {
+  const src: FSNode = {
+    name: 'SRC',
+    type: 'directory',
+    created: '',
+    modified: '',
+    children: [
+      { name: 'a.txt', type: 'file', created: '', modified: '', size: 1, content: 'A' },
+      {
+        name: 'nested',
+        type: 'directory',
+        created: '',
+        modified: '',
+        children: [{ name: 'b.txt', type: 'file', created: '', modified: '', size: 1, content: 'B' }],
+      },
+    ],
+  };
+
+  it('copies only immediate files without recursion', () => {
+    const ops = planXcopyDir(src, 'C:\\DEST', false);
+    expect(ops).toEqual([{ kind: 'file', parent: 'C:\\DEST', name: 'a.txt', content: 'A' }]);
+  });
+
+  it('recreates the tree (parents before children) with recursion', () => {
+    const ops = planXcopyDir(src, 'C:\\DEST', true);
+    expect(ops).toEqual([
+      { kind: 'file', parent: 'C:\\DEST', name: 'a.txt', content: 'A' },
+      { kind: 'folder', parent: 'C:\\DEST', name: 'nested', content: '' },
+      { kind: 'file', parent: 'C:\\DEST\\nested', name: 'b.txt', content: 'B' },
+    ]);
+  });
 });

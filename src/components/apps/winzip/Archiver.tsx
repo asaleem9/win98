@@ -3,11 +3,15 @@
 import { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { useFileSystem } from '@/contexts/FileSystemContext';
+import { useWindows } from '@/contexts/WindowContext';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { Button98 } from '@/components/ui/Button98';
 import { Input98 } from '@/components/ui/Input98';
 import { Dialog98 } from '@/components/ui/Dialog98';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
+import { MenuBar, MenuDefinition, MenuItem } from '@/components/window/MenuBar';
+import { standardHelpMenu } from '@/lib/menus';
+import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
 import { playSound } from '@/lib/sounds';
 import { joinPath, normalizePath } from '@/lib/fs/fsOperations';
 import { getParentPath } from '@/lib/filesystem';
@@ -15,12 +19,15 @@ import {
   ArchiveEntry,
   parseArchive,
   serializeArchive,
+  addEntry,
+  removeEntry,
   fakeRatio,
   packedSize,
   fakeCrc,
 } from '@/lib/archive';
 
 export type ArchiverKind = 'zip' | 'rar';
+export type ToolbarAction = 'new' | 'open' | 'add' | 'extract' | 'delete' | 'test' | 'view';
 
 interface ArchiverConfig {
   kind: ArchiverKind;
@@ -28,12 +35,12 @@ interface ArchiverConfig {
   ext: string;
   accent: string;
   nag: ReactNode;
-  menus: string[];
-  toolbar: { label: string; icon: string; action: 'add' | 'extract' | 'test' | 'view' | 'noop' }[];
+  toolbar: { label: string; icon: string; action: ToolbarAction }[];
   columns: 'zip' | 'rar';
 }
 
 const EXTRACT_DEFAULT = 'C:\\My Documents';
+const SEP: MenuItem = { label: '', separator: true };
 
 function formatNum(n: number): string {
   return n.toLocaleString('en-US');
@@ -49,14 +56,16 @@ function demoEntries(): ArchiveEntry[] {
   ];
 }
 
-export function Archiver({ launchParams, launchCount, config }: AppComponentProps & { config: ArchiverConfig }) {
-  const { readFile, writeFile, getNode, listDir } = useFileSystem();
+export function Archiver({ windowId, launchParams, launchCount, config }: AppComponentProps & { config: ArchiverConfig }) {
+  const { readFile, writeFile, getNode } = useFileSystem();
+  const { closeWindow } = useWindows();
 
   const [archivePath, setArchivePath] = useState<string | null>(null);
   const [entries, setEntries] = useState<ArchiveEntry[]>(demoEntries);
   const [selected, setSelected] = useState<number | null>(null);
   const [showNag, setShowNag] = useState(false);
-  const [dialog, setDialog] = useState<'extract' | 'add' | null>(null);
+  const [picker, setPicker] = useState<'new' | 'open' | 'add' | null>(null);
+  const [extractOpen, setExtractOpen] = useState(false);
   const [pathInput, setPathInput] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -103,95 +112,167 @@ export function Archiver({ launchParams, launchCount, config }: AppComponentProp
     [writeFile, config.productName],
   );
 
-  const openExtract = useCallback(() => {
-    setPathInput(EXTRACT_DEFAULT);
-    setDialog('extract');
+  // ----- File menu -----
+  const doNew = useCallback(
+    (path: string) => {
+      if (!persist([], path)) return;
+      setArchivePath(path);
+      setEntries([]);
+      setShowNag(false);
+      setSelected(null);
+      playSound('ding');
+      setNotice(`Created new archive:\n${path}`);
+    },
+    [persist],
+  );
+
+  const doOpen = useCallback(
+    (path: string) => {
+      const norm = normalizePath(path);
+      const parsed = parseArchive(readFile(norm));
+      if (!parsed) {
+        showSystemError(
+          config.productName,
+          `Cannot open the file:\n\n${norm}\n\nThe archive is either in unknown format or damaged.`,
+        );
+        return;
+      }
+      setArchivePath(norm);
+      setEntries(parsed.entries);
+      setShowNag(false);
+      setSelected(null);
+    },
+    [readFile, config.productName],
+  );
+
+  const closeArchive = useCallback(() => {
+    setArchivePath(null);
+    setEntries([]);
+    setSelected(null);
   }, []);
 
-  const doExtract = useCallback(() => {
+  // ----- Actions menu -----
+  const doAddFromPath = useCallback(
+    (srcPathRaw: string) => {
+      const src = normalizePath(srcPathRaw);
+      const node = getNode(src);
+      if (!node || node.type !== 'file') {
+        showSystemError(config.productName, `Cannot find the file:\n\n${src}`);
+        return;
+      }
+      const name = src.split('\\').pop()!;
+      const content = node.content ?? '';
+      const newEntry: ArchiveEntry = { name, size: node.size ?? content.length, content };
+      const next = addEntry(entries, newEntry);
+
+      // Write to the open archive, or create a new one next to the source file.
+      let path = archivePath;
+      if (!path) path = joinPath(getParentPath(src), `Archive.${config.ext}`);
+      if (!persist(next, path)) return;
+      setEntries(next);
+      setArchivePath(path);
+      setShowNag(false);
+      setSelected(null);
+      playSound('ding');
+      setNotice(`Added ${name} to\n${path}`);
+    },
+    [entries, archivePath, getNode, persist, config.productName, config.ext],
+  );
+
+  const openExtract = useCallback(() => {
+    setPathInput(EXTRACT_DEFAULT);
+    setExtractOpen(true);
+  }, []);
+
+  const doExtract = useCallback(async () => {
     const dest = normalizePath(pathInput || EXTRACT_DEFAULT);
     const dir = getNode(dest);
     if (!dir || dir.type !== 'directory') {
       showSystemError(config.productName, `The destination folder does not exist:\n\n${dest}`);
       return;
     }
+    setExtractOpen(false);
+    // Each write replaces the whole FS root from a snapshot, so yield between
+    // files to let the store commit — otherwise only the last file lands.
     let written = 0;
     for (const entry of entries) {
-      const target = joinPath(dest, entry.name);
-      if (writeFile(target, entry.content).ok) written++;
+      if (writeFile(joinPath(dest, entry.name), entry.content).ok) written++;
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    setDialog(null);
     playSound('ding');
-    setNotice(`Extracted ${written} file(s) to ${dest}`);
+    setNotice(`Extracted ${written} file(s) to\n${dest}`);
   }, [pathInput, entries, getNode, writeFile, config.productName]);
 
-  const openAdd = useCallback(() => {
-    setPathInput('C:\\My Documents\\');
-    setDialog('add');
+  const deleteEntry = useCallback(() => {
+    if (selected === null) return;
+    const name = entries[selected]?.name;
+    if (!name) return;
+    const next = removeEntry(entries, name);
+    if (archivePath && !persist(next, archivePath)) return;
+    setEntries(next);
+    setSelected(null);
+    playSound('ding');
+    setNotice(`Deleted ${name} from the archive.`);
+  }, [selected, entries, archivePath, persist]);
+
+  const testArchive = useCallback(() => {
+    playSound('ding');
+    setNotice('Testing archive... All files OK. No errors detected.');
   }, []);
 
-  const doAdd = useCallback(() => {
-    const src = normalizePath(pathInput);
-    const node = getNode(src);
-    if (!node || node.type !== 'file') {
-      showSystemError(config.productName, `Cannot find the file:\n\n${src}`);
-      return;
-    }
-    const name = src.split('\\').pop()!;
-    const content = node.content ?? '';
-    const newEntry: ArchiveEntry = { name, size: node.size ?? content.length, content };
-    const next = [...entries.filter((e) => e.name.toLowerCase() !== name.toLowerCase()), newEntry];
-
-    // Write to the open archive, or create a new one next to the source file.
-    let path = archivePath;
-    if (!path) {
-      const dir = getParentPath(src);
-      path = joinPath(dir, `Archive.${config.ext}`);
-    }
-    if (!persist(next, path)) return;
-    setEntries(next);
-    setArchivePath(path);
-    setShowNag(false);
-    setDialog(null);
-    playSound('ding');
-    setNotice(`Added ${name} to ${path}`);
-  }, [pathInput, entries, archivePath, getNode, persist, config.productName, config.ext]);
+  const viewEntry = useCallback(() => {
+    if (selected !== null) setNotice(entries[selected].content.slice(0, 400) || '(empty file)');
+  }, [selected, entries]);
 
   const handleToolbar = useCallback(
-    (action: string) => {
+    (action: ToolbarAction) => {
       switch (action) {
-        case 'add':
-          openAdd();
-          break;
-        case 'extract':
-          openExtract();
-          break;
-        case 'test':
-          playSound('ding');
-          setNotice('Testing archive... All files OK. No errors detected.');
-          break;
-        case 'view':
-          if (selected !== null) setNotice(entries[selected].content.slice(0, 400) || '(empty file)');
-          break;
-        default:
-          break;
+        case 'new': setPicker('new'); break;
+        case 'open': setPicker('open'); break;
+        case 'add': setPicker('add'); break;
+        case 'extract': openExtract(); break;
+        case 'delete': deleteEntry(); break;
+        case 'test': testArchive(); break;
+        case 'view': viewEntry(); break;
       }
     },
-    [openAdd, openExtract, selected, entries],
+    [openExtract, deleteEntry, testArchive, viewEntry],
   );
 
-  void listDir; // reserved for future folder-tree browsing
+  const menus: MenuDefinition[] = [
+    {
+      label: '&File',
+      items: [
+        { label: '&New Archive...', onClick: () => setPicker('new') },
+        { label: '&Open Archive...', onClick: () => setPicker('open') },
+        { label: '&Close Archive', onClick: closeArchive, disabled: !archivePath && entries.length === 0 },
+        SEP,
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: config.kind === 'rar' ? '&Commands' : '&Actions',
+      items: [
+        { label: '&Add Files to Archive...', onClick: () => setPicker('add') },
+        { label: '&Extract To...', onClick: openExtract },
+        SEP,
+        { label: '&Delete Selected', onClick: deleteEntry, disabled: selected === null },
+        { label: '&Test Archive', onClick: testArchive },
+      ],
+    },
+    {
+      label: '&Options',
+      items: [{ label: '&Registration...', onClick: () => setShowNag(true) }],
+    },
+    standardHelpMenu(config.productName),
+  ];
 
   return (
     <div className="flex flex-col h-full bg-[var(--win98-button-face)] relative font-[family-name:var(--win98-font)] text-[11px]">
       {showNag && <NagDialog accent={config.accent} onContinue={() => setShowNag(false)}>{config.nag}</NagDialog>}
 
       {/* Menu bar */}
-      <div className="flex gap-4 px-2 py-[2px] border-b border-[var(--win98-button-shadow)] select-none">
-        {config.menus.map((m) => (
-          <span key={m} className="cursor-default">{m}</span>
-        ))}
-      </div>
+      <MenuBar menus={menus} windowId={windowId} />
 
       {/* Toolbar */}
       <div className="flex gap-1 px-2 py-1 border-b border-[var(--win98-button-shadow)]">
@@ -232,7 +313,7 @@ export function Archiver({ launchParams, launchCount, config }: AppComponentProp
                   key={file.name}
                   className={`cursor-default select-none ${selected === i ? 'bg-[var(--win98-highlight)] text-white' : ''}`}
                   onClick={() => setSelected(i)}
-                  onDoubleClick={() => { setSelected(i); handleToolbar('view'); }}
+                  onDoubleClick={() => { setSelected(i); setNotice(file.content.slice(0, 400) || '(empty file)'); }}
                 >
                   <td className="px-2 py-[1px]">
                     <span className="mr-1">{iconFor(file.name)}</span>
@@ -258,29 +339,54 @@ export function Archiver({ launchParams, launchCount, config }: AppComponentProp
         ]}
       />
 
-      {/* Extract / Add prompt */}
-      {dialog && (
+      {/* New / Open / Add file picker */}
+      {picker && (
+        <FilePickerDialog
+          mode={picker === 'new' ? 'save' : 'open'}
+          title={picker === 'new' ? 'New Archive' : picker === 'open' ? 'Open Archive' : 'Add Files to Archive'}
+          startDir="C:\\My Documents"
+          defaultName={picker === 'new' ? `Archive.${config.ext}` : ''}
+          defaultExtension={picker === 'new' ? config.ext : undefined}
+          filters={
+            picker === 'add'
+              ? undefined
+              : [
+                  { label: `${config.productName} archive (*.${config.ext})`, extensions: [config.ext] },
+                  { label: 'All Files (*.*)', extensions: [] },
+                ]
+          }
+          onConfirm={(p) => {
+            const which = picker;
+            setPicker(null);
+            if (which === 'new') doNew(p);
+            else if (which === 'open') doOpen(p);
+            else doAddFromPath(p);
+          }}
+          onCancel={() => setPicker(null)}
+        />
+      )}
+
+      {/* Extract destination prompt */}
+      {extractOpen && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/10">
           <Dialog98
-            title={dialog === 'extract' ? 'Extract' : `Add to ${config.ext.toUpperCase()} archive`}
-            icon={dialog === 'extract' ? 'question' : 'info'}
+            title="Extract"
+            icon="question"
             message={
               <div className="w-[300px]">
-                <p className="mb-2">
-                  {dialog === 'extract' ? 'Extract files to folder:' : 'File to add (full path):'}
-                </p>
+                <p className="mb-2">Extract files to folder:</p>
                 <Input98
                   autoFocus
                   className="w-full"
                   value={pathInput}
                   onChange={(e) => setPathInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') (dialog === 'extract' ? doExtract : doAdd)(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') doExtract(); }}
                 />
               </div>
             }
             buttons={[
-              { label: 'OK', default: true, onClick: dialog === 'extract' ? doExtract : doAdd },
-              { label: 'Cancel', onClick: () => setDialog(null) },
+              { label: 'OK', default: true, onClick: doExtract },
+              { label: 'Cancel', onClick: () => setExtractOpen(false) },
             ]}
             className="shadow-lg"
           />

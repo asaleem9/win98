@@ -17,6 +17,7 @@ import { formatSize, getParentPath } from '@/lib/filesystem';
 import { normalizePath, joinPath, uniqueName } from '@/lib/fs/fsOperations';
 import { playSound } from '@/lib/sounds';
 import { addRecentDoc } from '@/lib/recentDocs';
+import { setClipboard, getClipboard, clearClipboard, subscribe, type ClipboardData } from '@/lib/clipboard';
 import { FileList, FileRow } from './FileList';
 
 const FILE_TYPES: Record<string, string> = {
@@ -59,7 +60,6 @@ function buildTree(node: FSNode, path: string): TreeNode {
   };
 }
 
-type Clipboard = { paths: string[]; mode: 'cut' | 'copy' } | null;
 type CreateOp =
   | { kind: 'folder'; dir: string; name: string }
   | { kind: 'file'; dir: string; name: string; content: string }
@@ -79,7 +79,7 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
   const [historyIndex, setHistoryIndex] = useState(0);
   const [addressValue, setAddressValue] = useState(start);
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [clipboard, setClipboard] = useState<Clipboard>(null);
+  const [clip, setClip] = useState<ClipboardData | null>(() => getClipboard());
   const [menu, setMenu] = useState<{ x: number; y: number; targetId: string | null } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string[] | null>(null);
   const [propsFor, setPropsFor] = useState<string | null>(null);
@@ -101,6 +101,19 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
     setTitle(p);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launchCount]);
+
+  // Mirror the shared clipboard so paste availability and cut-ghosting stay
+  // live, even when another app changes the clipboard.
+  useEffect(() => {
+    setClip(getClipboard());
+    return subscribe((data) => setClip(data));
+  }, []);
+
+  const canPaste = clip?.kind === 'files';
+  const cutPaths = useMemo(
+    () => (clip?.kind === 'files' && clip.operation === 'cut' ? new Set(clip.paths) : new Set<string>()),
+    [clip],
+  );
 
   const rows = useMemo<FileRow[]>(() => {
     const children = listDir(currentPath);
@@ -217,8 +230,8 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
     if (!res.ok) showSystemError('Rename', res.error);
   }, [getNode, rename]);
 
-  const doCopy = useCallback((ids: string[]) => { if (ids.length) setClipboard({ paths: ids, mode: 'copy' }); }, []);
-  const doCut = useCallback((ids: string[]) => { if (ids.length) setClipboard({ paths: ids, mode: 'cut' }); }, []);
+  const doCopy = useCallback((ids: string[]) => { if (ids.length) setClipboard({ kind: 'files', paths: ids, operation: 'copy' }); }, []);
+  const doCut = useCallback((ids: string[]) => { if (ids.length) setClipboard({ kind: 'files', paths: ids, operation: 'cut' }); }, []);
 
   const buildCopyOps = useCallback((node: FSNode, destDir: string, forcedName?: string): CreateOp[] => {
     const dest = getNode(destDir);
@@ -233,18 +246,19 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
   }, [getNode]);
 
   const doPaste = useCallback(() => {
-    if (!clipboard) return;
+    const data = getClipboard();
+    if (!data || data.kind !== 'files') return;
     const ops: CreateOp[] = [];
-    for (const src of clipboard.paths) {
+    for (const src of data.paths) {
       const node = getNode(src);
       if (!node) continue;
-      if (clipboard.mode === 'cut') ops.push({ kind: 'move', src, destDir: currentPath });
+      if (data.operation === 'cut') ops.push({ kind: 'move', src, destDir: currentPath });
       else ops.push(...buildCopyOps(node, currentPath));
     }
     if (ops.length) setOpQueue((q) => [...q, ...ops]);
-    if (clipboard.mode === 'cut') setClipboard(null);
+    if (data.operation === 'cut') clearClipboard();
     playSound('menuClick');
-  }, [clipboard, getNode, currentPath, buildCopyOps]);
+  }, [getNode, currentPath, buildCopyOps]);
 
   const selectAll = useCallback(() => setSelected(new Set(rows.map((r) => r.id))), [rows]);
   const invertSelection = useCallback(() => setSelected((prev) => {
@@ -291,7 +305,7 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
       items: [
         { label: 'Cut', shortcut: 'Ctrl+X', disabled: selected.size === 0, onClick: () => doCut(selArr) },
         { label: 'Copy', shortcut: 'Ctrl+C', disabled: selected.size === 0, onClick: () => doCopy(selArr) },
-        { label: 'Paste', shortcut: 'Ctrl+V', disabled: !clipboard, onClick: doPaste },
+        { label: 'Paste', shortcut: 'Ctrl+V', disabled: !canPaste, onClick: doPaste },
         { label: '', separator: true },
         { label: 'Select All', shortcut: 'Ctrl+A', onClick: selectAll },
         { label: 'Invert Selection', onClick: invertSelection },
@@ -319,7 +333,7 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
     { id: 'sep1', separator: true },
     { id: 'cut', label: '✂', onClick: () => doCut(selArr), disabled: selected.size === 0 },
     { id: 'copy', label: '⧉', onClick: () => doCopy(selArr), disabled: selected.size === 0 },
-    { id: 'paste', label: '📋', onClick: doPaste, disabled: !clipboard },
+    { id: 'paste', label: '📋', onClick: doPaste, disabled: !canPaste },
     { id: 'del', label: '✖', onClick: () => requestDelete(selArr), disabled: selected.size === 0 },
     { id: 'sep2', separator: true },
     { id: 'large', label: '⊞', onClick: () => setViewMode('large-icons'), active: viewMode === 'large-icons' },
@@ -348,7 +362,7 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
         { label: 'New Folder', onClick: newFolder },
         { label: 'New Text Document', onClick: newTextDoc },
         { separator: true },
-        { label: 'Paste', onClick: doPaste, disabled: !clipboard },
+        { label: 'Paste', onClick: doPaste, disabled: !canPaste },
         { separator: true },
         { label: 'Select All', onClick: selectAll },
       ];
@@ -364,7 +378,7 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
       { separator: true },
       { label: 'Properties', disabled: ids.length !== 1, onClick: () => setPropsFor(ids[0]) },
     ];
-  }, [menu, selected, clipboard, newFolder, newTextDoc, doPaste, selectAll, handleOpen, doCut, doCopy, requestDelete, beginRename]);
+  }, [menu, selected, canPaste, newFolder, newTextDoc, doPaste, selectAll, handleOpen, doCut, doCopy, requestDelete, beginRename]);
 
   const objectCount = rows.length;
   const selectedNode = selected.size === 1 ? getNode([...selected][0]) : null;
@@ -408,6 +422,7 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
           rows={rows}
           mode={viewMode}
           selected={selected}
+          cutPaths={cutPaths}
           renamingId={renamingId}
           columns={columns}
           onSelectClick={handleSelectClick}

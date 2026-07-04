@@ -1,9 +1,38 @@
 import { FSNode } from '@/types/filesystem';
+import { joinPath } from '@/lib/fs/fsOperations';
+import { getParentPath } from '@/lib/filesystem';
+import type { RecycleBinItem } from '@/contexts/FileSystemContext';
 
 export interface FsWalkStats {
   fileCount: number;
   totalBytes: number;
   folderCount: number;
+}
+
+/** Every file path under root, in tree order — the real work list a scan walks. */
+export function walkFilePaths(root: FSNode): string[] {
+  const paths: string[] = [];
+  const visit = (node: FSNode, path: string) => {
+    if (node.type === 'directory') {
+      for (const child of node.children ?? []) visit(child, joinPath(path, child.name));
+    } else if (node.type === 'file') {
+      paths.push(path);
+    }
+  };
+  visit(root, 'C:\\');
+  return paths;
+}
+
+/**
+ * Recycle Bin entries whose original location has vanished — the folder they
+ * were deleted from no longer exists, so they can never be restored. ScanDisk
+ * treats these dangling entries as lost file fragments.
+ */
+export function detectOrphans(
+  recycleBin: RecycleBinItem[],
+  exists: (path: string) => boolean,
+): RecycleBinItem[] {
+  return recycleBin.filter((item) => !exists(getParentPath(item.originalPath)));
 }
 
 /** Walks the tree from root, tallying files, bytes and folders (root itself excluded). */
@@ -36,10 +65,12 @@ export interface ScanReportOptions {
   scanType: 'standard' | 'thorough';
   badClusters: number;
   lostFragments: number;
+  /** Whether the detected errors were repaired (true) or only reported (false). */
+  fixed?: boolean;
 }
 
 /** Builds the classic ScanDisk report lines from real filesystem stats. */
-export function buildScanReport({ stats, scanType, badClusters, lostFragments }: ScanReportOptions): string[] {
+export function buildScanReport({ stats, scanType, badClusters, lostFragments, fixed = true }: ScanReportOptions): string[] {
   const allocationUnit = 32768;
   const totalBytes = Math.max(stats.totalBytes, allocationUnit);
   const totalUnits = Math.ceil(totalBytes / allocationUnit) + 20000;
@@ -47,10 +78,13 @@ export function buildScanReport({ stats, scanType, badClusters, lostFragments }:
   const availableUnits = Math.max(0, totalUnits - usedUnits);
   const availableBytes = availableUnits * allocationUnit;
 
-  const errorsFound = lostFragments > 0 || (scanType === 'thorough' && badClusters > 0);
-  const headline = errorsFound
-    ? `ScanDisk found and fixed ${lostFragments + (scanType === 'thorough' ? badClusters : 0)} error(s) on this drive.`
-    : 'ScanDisk did not find any errors on this drive.';
+  const errorCount = lostFragments + (scanType === 'thorough' ? badClusters : 0);
+  const errorsFound = errorCount > 0;
+  const headline = !errorsFound
+    ? 'ScanDisk did not find any errors on this drive.'
+    : fixed
+      ? `ScanDisk found and fixed ${errorCount} error(s) on this drive.`
+      : `ScanDisk found ${errorCount} error(s) on this drive.`;
 
   const lines = [
     headline,

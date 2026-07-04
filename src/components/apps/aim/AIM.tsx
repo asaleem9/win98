@@ -1,10 +1,20 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, ReactNode } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { useWindows } from '@/contexts/WindowContext';
 import { playSound } from '@/lib/sounds';
 import { emit } from '@/lib/eventBus';
 import { generateReply, renderEmoticons } from './replyEngine';
+
+// The buddy who admires your freshly published GeoCities page, and how long
+// after publishing they get around to IMing you about it.
+const COMPLIMENT_BUDDY = 'sk8erboi99';
+const COMPLIMENT_DELAY_MS = 60_000;
+
+// Matches a bare or fully-qualified URL inside a chat message so it can render
+// as a clickable link (split() keeps the captured URL at odd indices).
+const MESSAGE_URL_RE = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
 
 type BuddyStatus = 'online' | 'away' | 'offline';
 
@@ -90,6 +100,10 @@ const INITIAL_GROUPS: BuddyGroup[] = [
     ],
   },
 ];
+
+/** Flat list of every buddy screen name. Outlook's Address Book imports these
+ *  as contacts (a screen name doubles as an AOL address, <name>@aol.com). */
+export const AIM_BUDDY_NAMES: string[] = INITIAL_GROUPS.flatMap((g) => g.buddies.map((b) => b.name));
 
 // Pre-loaded conversation history per buddy (shows when you open their chat)
 const PRELOADED_CONVOS: Record<string, ChatMessage[]> = {
@@ -380,8 +394,27 @@ function warningLevel(name: string): number {
 
 const TEXT_COLORS = ['#000000', '#cc0000', '#0000cc', '#009900', '#cc6600', '#9900cc', '#cc0099'];
 
+/** Render message text with emoticons applied and any URLs turned into links. */
+function renderMessageContent(text: string, onOpenUrl: (url: string) => void): ReactNode {
+  return text.split(MESSAGE_URL_RE).map((part, i) =>
+    i % 2 === 1 ? (
+      <span
+        key={i}
+        role="link"
+        onClick={() => onOpenUrl(part)}
+        className="text-[#0000cc] underline cursor-pointer"
+      >
+        {part}
+      </span>
+    ) : (
+      <span key={i}>{renderEmoticons(part)}</span>
+    ),
+  );
+}
+
 export default function AIM({ windowId }: AppComponentProps) {
   void windowId;
+  const { openWindow } = useWindows();
   const [groups, setGroups] = useState(INITIAL_GROUPS);
   const [chatWith, setChatWith] = useState<Buddy | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -405,6 +438,42 @@ export default function AIM({ windowId }: AppComponentProps) {
   const responseIndexRef = useRef<Record<string, number>>({});
   const groupsRef = useRef(groups);
   useEffect(() => { groupsRef.current = groups; }, [groups]);
+  const chatWithRef = useRef(chatWith);
+  useEffect(() => { chatWithRef.current = chatWith; }, [chatWith]);
+
+  // Open a URL from a chat message in Internet Explorer.
+  const openUrl = useCallback((url: string) => {
+    openWindow('ie5', { launchParams: { url } });
+  }, [openWindow]);
+
+  // After you publish a page in FrontPage, a buddy notices it a minute later and
+  // IMs you a link to it. Fires off the publish event so a page never has to be
+  // open for the two apps to talk.
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const onPublished = (e: Event) => {
+      const url = (e as CustomEvent<{ url?: string }>).detail?.url;
+      if (!url) return;
+      timers.push(setTimeout(() => {
+        const roster = groupsRef.current.flatMap((g) => g.buddies);
+        const buddy = roster.find((b) => b.name === COMPLIMENT_BUDDY)
+          ?? { name: COMPLIMENT_BUDDY, status: 'online' as BuddyStatus };
+        const msg: ChatMessage = { from: COMPLIMENT_BUDDY, text: `lol nice page ${url}`, timestamp: getTimeString() };
+        playSound('aimMessage');
+        if (chatWithRef.current?.name === COMPLIMENT_BUDDY) {
+          setChatMessages((prev) => [...prev, msg]);
+        } else {
+          setChatWith(buddy);
+          setChatMessages([...(PRELOADED_CONVOS[COMPLIMENT_BUDDY] ?? []), msg]);
+        }
+      }, COMPLIMENT_DELAY_MS));
+    };
+    window.addEventListener('frontpage-published', onPublished);
+    return () => {
+      window.removeEventListener('frontpage-published', onPublished);
+      timers.forEach(clearTimeout);
+    };
+  }, []);
 
   // Park the running-man presence icon in the system tray while signed on.
   useEffect(() => {
@@ -629,7 +698,7 @@ export default function AIM({ windowId }: AppComponentProps) {
                   color: msg.style?.color && msg.style.color !== '#000000' ? msg.style.color : undefined,
                 }}
               >
-                {renderEmoticons(msg.text)}
+                {renderMessageContent(msg.text, openUrl)}
               </span>
             </div>
           ))}

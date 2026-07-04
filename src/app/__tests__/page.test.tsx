@@ -63,7 +63,9 @@ describe('Home system state machine', () => {
     );
     render(<Home />);
 
-    // No BIOS memory count on the fast path
+    // The fast path jumps to the flag without counting memory (the POST frame
+    // may flash once to keep hydration consistent).
+    await screen.findByText('Click anywhere to skip');
     expect(screen.queryByText(/Memory Test:/)).not.toBeInTheDocument();
     await screen.findByText(PROMPT, {}, { timeout: 4000 });
   });

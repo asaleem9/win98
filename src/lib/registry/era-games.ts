@@ -9,6 +9,8 @@ const Diablo2App = lazy(() => import('@/components/apps/games/Diablo2'));
 const StarCraftApp = lazy(() => import('@/components/apps/games/StarCraft'));
 const CommandConquerApp = lazy(() => import('@/components/apps/games/CommandConquer'));
 const TonyHawk2App = lazy(() => import('@/components/apps/games/TonyHawk2'));
+const SkiFreeApp = lazy(() => import('@/components/apps/games/SkiFree'));
+const Bunker98App = lazy(() => import('@/components/apps/games/raycaster/Bunker98'));
 
 export const eraGamesApps: Record<string, AppDefinition> = {
   'oregon-trail': {
@@ -96,6 +98,28 @@ export const eraGamesApps: Record<string, AppDefinition> = {
     category: 'era-games',
     component: TonyHawk2App,
     defaultWindow: { title: "Tony Hawk's Pro Skater 2", width: 450, height: 450, minWidth: 300, minHeight: 350 },
+    startMenuPath: ['Programs', 'Games'],
+    singleton: true,
+  },
+  'skifree': {
+    id: 'skifree',
+    name: 'SkiFree',
+    icon: '/icons/skifree-32.svg',
+    icon16: '/icons/skifree-16.svg',
+    category: 'era-games',
+    component: SkiFreeApp,
+    defaultWindow: { title: 'SkiFree', width: 500, height: 500, minWidth: 360, minHeight: 400 },
+    startMenuPath: ['Programs', 'Games'],
+    singleton: true,
+  },
+  'bunker-98': {
+    id: 'bunker-98',
+    name: 'Bunker 98',
+    icon: '/icons/bunker98-32.svg',
+    icon16: '/icons/bunker98-16.svg',
+    category: 'era-games',
+    component: Bunker98App,
+    defaultWindow: { title: 'Bunker 98', width: 660, height: 480, minWidth: 480, minHeight: 360 },
     startMenuPath: ['Programs', 'Games'],
     singleton: true,
   },

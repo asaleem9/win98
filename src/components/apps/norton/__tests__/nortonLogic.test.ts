@@ -7,6 +7,8 @@ import {
   incrementScanCount,
   resetScanCount,
   isDefinitionsExpired,
+  removeFromQuarantine,
+  unclearThreat,
 } from '../nortonLogic';
 
 const threatA: Threat = { name: 'ILOVEYOU.VBS', location: 'C:\\Windows\\System\\', risk: 'High', type: 'VBS.LoveLetter.A' };
@@ -52,6 +54,36 @@ describe('activeThreatPool', () => {
 
   it('returns an empty list once everything is cleared', () => {
     expect(activeThreatPool([threatA, threatB], [threatA.name, threatB.name])).toEqual([]);
+  });
+});
+
+describe('removeFromQuarantine', () => {
+  it('drops the named entry and leaves the rest', () => {
+    expect(removeFromQuarantine([threatA, threatB], threatA.name)).toEqual([threatB]);
+  });
+
+  it('is a no-op when the name is absent', () => {
+    expect(removeFromQuarantine([threatB], threatA.name)).toEqual([threatB]);
+  });
+
+  it('does not mutate the original list', () => {
+    const original = [threatA, threatB];
+    removeFromQuarantine(original, threatA.name);
+    expect(original).toEqual([threatA, threatB]);
+  });
+});
+
+describe('unclearThreat', () => {
+  it('removes a name so it re-enters the active pool', () => {
+    expect(unclearThreat([threatA.name, threatB.name], threatA.name)).toEqual([threatB.name]);
+    expect(activeThreatPool([threatA, threatB], unclearThreat([threatA.name], threatA.name))).toEqual([
+      threatA,
+      threatB,
+    ]);
+  });
+
+  it('is a no-op when the name is not cleared', () => {
+    expect(unclearThreat([threatB.name], threatA.name)).toEqual([threatB.name]);
   });
 });
 

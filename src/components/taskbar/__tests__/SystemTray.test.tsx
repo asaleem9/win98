@@ -8,6 +8,13 @@ vi.mock('@/contexts/WindowContext', () => ({
   useWindows: () => ({ openWindow: mockOpenWindow }),
 }));
 
+// The tray reads the Regional clock-format pref; stub it to the 12-hour default.
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: () => ({
+    getAppPref: (_appId: string, _key: string, fallback: unknown) => fallback,
+  }),
+}));
+
 // Emitting an event synchronously updates React state via the tray's listeners,
 // so wrap dispatches in act to flush.
 function register(icon: { id: string; icon: string; tooltip?: string }) {

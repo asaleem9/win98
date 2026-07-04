@@ -1,4 +1,12 @@
-import { createEmptyFrames, isBlankFrame, nextFrame, nextLayerName } from '../flashHelpers';
+import {
+  createEmptyFrames,
+  isBlankFrame,
+  nextFrame,
+  nextLayerName,
+  serializeFla,
+  deserializeFla,
+  FlaDocument,
+} from '../flashHelpers';
 
 describe('nextFrame', () => {
   it('advances by one', () => {
@@ -52,5 +60,27 @@ describe('nextLayerName', () => {
 
   it('fills a gap left by a renamed layer', () => {
     expect(nextLayerName([{ name: 'Layer 1' }, { name: 'Background' }])).toBe('Layer 2');
+  });
+});
+
+describe('.fla serialization', () => {
+  const doc: FlaDocument = {
+    app: 'flash',
+    version: 1,
+    stage: { width: 640, height: 480, bg: '#112233', fps: 24 },
+    totalFrames: 60,
+    layers: [
+      { name: 'Layer 1', visible: true, locked: false, frames: [null, 'data:image/png;base64,abc', null] },
+      { name: 'Layer 2', visible: false, locked: true, frames: createEmptyFrames(3) },
+    ],
+  };
+
+  it('round-trips a movie through serialize/deserialize', () => {
+    expect(deserializeFla(serializeFla(doc))).toEqual(doc);
+  });
+
+  it('rejects payloads that are not Flash movies', () => {
+    expect(deserializeFla('not json')).toBeNull();
+    expect(deserializeFla('{"app":"excel"}')).toBeNull();
   });
 });

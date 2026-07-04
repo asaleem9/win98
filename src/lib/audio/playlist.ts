@@ -38,6 +38,25 @@ export function playlistForLaunch(
   return { list: [faux, ...musicTracks], index: 0 };
 }
 
+/**
+ * Build a single playlist entry from a filesystem file (path + content), used
+ * by the "Add File" flow. A 'track:<id>' reference resolves to the bundled
+ * track; an inline 'data:' URL plays that audio directly; anything else keeps
+ * its name but sounds a bundled track so playback isn't silent.
+ */
+export function trackFromFile(filePath: string, content: string | null | undefined): MusicTrack {
+  const name = basename(filePath);
+  const ref = resolveTrackFromContent(content);
+  if (ref) return ref;
+  const stand = musicTracks[0];
+  if (content && content.startsWith('data:')) {
+    return { ...stand, id: `file-${filePath}`, title: name, artist: 'Unknown Artist', fileName: name, src: content };
+  }
+  const byName = getTrackByFileName(name);
+  if (byName) return byName;
+  return { ...stand, id: `file-${filePath}`, title: name, artist: 'Unknown Artist', fileName: name };
+}
+
 /** Format seconds as mm:ss; negative/NaN render as a placeholder. */
 export function formatTime(totalSeconds: number, placeholder = '0:00'): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return placeholder;

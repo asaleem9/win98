@@ -5,6 +5,7 @@ import { AppComponentProps } from '@/types/app';
 import { useSettings } from '@/contexts/SettingsContext';
 import { Dialog98 } from '@/components/ui/Dialog98';
 import { Checkbox98 } from '@/components/ui/Checkbox98';
+import { PROGRAM_APP_IDS, withFlag } from './installerData';
 
 interface Program { id: string; name: string; size: string; used: string; }
 
@@ -40,9 +41,17 @@ const WINDOWS_COMPONENTS = [
 
 const BTN = 'px-4 h-[24px] text-[11px] cursor-default bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)] active:border-b-[var(--win98-button-highlight)] active:border-r-[var(--win98-button-highlight)] disabled:text-[var(--win98-button-shadow)]';
 
+/** The system/uninstalledApps key a program's removal flag is stored under. */
+function uninstallKey(programId: string): string {
+  return PROGRAM_APP_IDS[programId] ?? programId;
+}
+
 export default function AddRemovePrograms({}: AppComponentProps) {
   const { getAppPref, setAppPref } = useSettings();
-  const [uninstalled, setUninstalled] = useState<string[]>(() => getAppPref<string[]>('add-remove-programs', 'uninstalled', []));
+  // Uninstalled programs live in the shared system pref keyed by registry app
+  // id, so the Start menu and desktop hide them too. Reading it each render
+  // keeps the list in sync when a reinstall clears a flag elsewhere.
+  const uninstalledApps = getAppPref<Record<string, boolean>>('system', 'uninstalledApps', {});
   const [selected, setSelected] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [removeProgress, setRemoveProgress] = useState(0);
@@ -54,7 +63,10 @@ export default function AddRemovePrograms({}: AppComponentProps) {
   const [creatingDisk, setCreatingDisk] = useState(false);
   const [diskProgress, setDiskProgress] = useState(0);
 
-  const visiblePrograms = useMemo(() => initialPrograms.filter((p) => !uninstalled.includes(p.id)), [uninstalled]);
+  const visiblePrograms = useMemo(
+    () => initialPrograms.filter((p) => !uninstalledApps[uninstallKey(p.id)]),
+    [uninstalledApps],
+  );
   const selectedProgram = visiblePrograms.find((p) => p.id === selected) ?? null;
   const isBonzi = selectedProgram?.id === 'bonzi';
 
@@ -70,11 +82,8 @@ export default function AddRemovePrograms({}: AppComponentProps) {
             setRemoving(false);
             setBonziFail(true);
           } else {
-            setUninstalled((u) => {
-              const next = [...u, selectedProgram.id];
-              setAppPref('add-remove-programs', 'uninstalled', next);
-              return next;
-            });
+            const current = getAppPref<Record<string, boolean>>('system', 'uninstalledApps', {});
+            setAppPref('system', 'uninstalledApps', withFlag(current, uninstallKey(selectedProgram.id)));
             setRemoving(false);
             setRemoveComplete(true);
             setSelected(null);
@@ -85,7 +94,7 @@ export default function AddRemovePrograms({}: AppComponentProps) {
       });
     }, 80);
     return () => clearInterval(interval);
-  }, [removing, selectedProgram, isBonzi, setAppPref]);
+  }, [removing, selectedProgram, isBonzi, getAppPref, setAppPref]);
 
   // Startup disk animation
   useEffect(() => {

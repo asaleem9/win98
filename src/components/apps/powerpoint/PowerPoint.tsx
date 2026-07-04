@@ -5,23 +5,31 @@ import { AppComponentProps } from '@/types/app';
 import { useWindows } from '@/contexts/WindowContext';
 import { useFileSystem } from '@/contexts/FileSystemContext';
 import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
-import { Dialog98 } from '@/components/ui/Dialog98';
+import { standardHelpMenu } from '@/lib/menus';
+import { usePrint } from '@/components/dialogs/PrintDialog';
+import type { PrintContent } from '@/lib/print/types';
+import { setClipboard, getClipboard, subscribe, readSystemText } from '@/lib/clipboard';
 import { addRecentDoc } from '@/lib/recentDocs';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { playSound } from '@/lib/sounds';
 import { normalizePath } from '@/lib/fs/fsOperations';
-import { FilePickerDialog } from '../notepad/FilePickerDialog';
-
-interface Slide {
-  title: string;
-  bullets: string[];
-}
+import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
+import { Slide, reorderSlides, encodeSlideClipboard, decodeSlideClipboard } from './slideOps';
 
 interface PresentationFile {
   app: 'powerpoint';
   version: 1;
   slides: Slide[];
 }
+
+const BACKGROUNDS: { name: string; value: string }[] = [
+  { name: 'White', value: '#ffffff' },
+  { name: 'Light Blue', value: '#cfe2f3' },
+  { name: 'Light Yellow', value: '#fff2cc' },
+  { name: 'Light Green', value: '#d9ead3' },
+  { name: 'Rose', value: '#f4cccc' },
+  { name: 'Navy', value: '#1f3864' },
+];
 
 function initialSlides(): Slide[] {
   return [
@@ -46,22 +54,35 @@ function baseName(path: string): string {
 export default function PowerPoint({ windowId, launchParams, launchCount }: AppComponentProps) {
   const { updateTitle, closeWindow } = useWindows();
   const { getNode, writeFile } = useFileSystem();
+  const { openPrint, printDialog } = usePrint(windowId, 'Microsoft PowerPoint');
 
   const [slides, setSlides] = useState<Slide[]>(initialSlides);
   const [current, setCurrent] = useState(0);
+  const [view, setView] = useState<'normal' | 'sorter'>('normal');
   const [slideShow, setSlideShow] = useState(false);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [fileName, setFileName] = useState('Presentation1');
   const [picker, setPicker] = useState<null | 'open' | 'save'>(null);
-  const [showAbout, setShowAbout] = useState(false);
+  const [canPaste, setCanPaste] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const dragIndexRef = useRef<number | null>(null);
 
   const slide = slides[current] ?? slides[0];
 
   useEffect(() => {
     updateTitle(windowId, `${fileName} - Microsoft PowerPoint`);
   }, [fileName, windowId, updateTitle]);
+
+  // Enable Paste Slide only when the clipboard holds an encoded slide.
+  useEffect(() => {
+    const update = () => {
+      const clip = getClipboard();
+      setCanPaste(clip?.kind === 'text' && decodeSlideClipboard(clip.text) !== null);
+    };
+    update();
+    return subscribe(update);
+  }, []);
 
   const clampIndex = useCallback((i: number, len: number) => Math.max(0, Math.min(len - 1, i)), []);
 
@@ -81,7 +102,7 @@ export default function PowerPoint({ windowId, launchParams, launchCount }: AppC
   const duplicateSlide = useCallback(() => {
     setSlides((prev) => {
       const next = [...prev];
-      next.splice(current + 1, 0, { title: prev[current].title, bullets: [...prev[current].bullets] });
+      next.splice(current + 1, 0, { title: prev[current].title, bullets: [...prev[current].bullets], bg: prev[current].bg });
       return next;
     });
     setCurrent((c) => c + 1);
@@ -100,11 +121,47 @@ export default function PowerPoint({ windowId, launchParams, launchCount }: AppC
     setSlides((prev) => {
       const target = current + dir;
       if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[current], next[target]] = [next[target], next[current]];
+      const next = reorderSlides(prev, current, target);
       setCurrent(target);
       return next;
     });
+  }, [current]);
+
+  const dropReorder = useCallback((to: number) => {
+    const from = dragIndexRef.current;
+    dragIndexRef.current = null;
+    if (from === null || from === to) return;
+    setSlides((prev) => reorderSlides(prev, from, to));
+    setCurrent(to);
+  }, []);
+
+  const setBackground = useCallback((color: string) => {
+    patchSlide(current, (s) => ({ ...s, bg: color }));
+  }, [current, patchSlide]);
+
+  // --- slide clipboard -------------------------------------------------------
+
+  const copySlide = useCallback(() => {
+    setClipboard({ kind: 'text', text: encodeSlideClipboard(slides[current]) });
+  }, [slides, current]);
+
+  const cutSlide = useCallback(() => {
+    if (slides.length === 1) return;
+    setClipboard({ kind: 'text', text: encodeSlideClipboard(slides[current]) });
+    deleteSlide();
+  }, [slides, current, deleteSlide]);
+
+  const pasteSlide = useCallback(async () => {
+    const clip = getClipboard();
+    const text = clip && clip.kind === 'text' ? clip.text : (await readSystemText()) ?? '';
+    const pasted = decodeSlideClipboard(text);
+    if (!pasted) return;
+    setSlides((prev) => {
+      const next = [...prev];
+      next.splice(current + 1, 0, pasted);
+      return next;
+    });
+    setCurrent((c) => c + 1);
   }, [current]);
 
   const advance = useCallback((dir: 1 | -1) => {
@@ -188,55 +245,79 @@ export default function PowerPoint({ windowId, launchParams, launchCount }: AppC
     setFileName('Presentation1');
   }, []);
 
+  const getPrintContent = useCallback((): PrintContent => {
+    const s = slides[current];
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const bullets = s.bullets.filter((b) => b.trim()).map((b) => `<li>${esc(b)}</li>`).join('');
+    const html = `<div style="font-family:sans-serif"><h1 style="color:#000080">${esc(s.title)}</h1><ul style="font-size:16px">${bullets}</ul></div>`;
+    return { kind: 'html', html };
+  }, [slides, current]);
+
   const menus: MenuDefinition[] = [
     {
-      label: 'File',
+      label: '&File',
       items: [
-        { label: 'New', onClick: handleNew },
-        { label: 'Open...', shortcut: 'Ctrl+O', onClick: () => setPicker('open') },
-        { label: 'Save', shortcut: 'Ctrl+S', onClick: handleSave },
-        { label: 'Save As...', onClick: () => setPicker('save') },
+        { label: '&New', onClick: handleNew },
+        { label: '&Open...', shortcut: 'Ctrl+O', onClick: () => setPicker('open') },
+        { label: '&Save', shortcut: 'Ctrl+S', onClick: handleSave },
+        { label: 'Save &As...', onClick: () => setPicker('save') },
         { label: '', separator: true },
-        { label: 'Print...', shortcut: 'Ctrl+P', onClick: () => showSystemError('Microsoft PowerPoint', 'There are no printers installed. To install a printer, use the Add Printer wizard in the Printers folder.') },
+        { label: '&Print...', shortcut: 'Ctrl+P', onClick: () => openPrint(getPrintContent, fileName) },
         { label: '', separator: true },
-        { label: 'Exit', onClick: () => closeWindow(windowId) },
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
       ],
     },
     {
-      label: 'Edit',
+      label: '&Edit',
       items: [
-        { label: 'New Slide', onClick: addSlide },
-        { label: 'Duplicate Slide', onClick: duplicateSlide },
-        { label: 'Delete Slide', onClick: deleteSlide },
-      ],
-    },
-    {
-      label: 'View',
-      items: [
-        { label: 'Normal', checked: true, disabled: true },
-        { label: 'Slide Sorter', disabled: true },
+        { label: 'Cu&t Slide', shortcut: 'Ctrl+X', onClick: cutSlide, disabled: slides.length === 1 },
+        { label: '&Copy Slide', shortcut: 'Ctrl+C', onClick: copySlide },
+        { label: '&Paste Slide', shortcut: 'Ctrl+V', onClick: () => void pasteSlide(), disabled: !canPaste },
         { label: '', separator: true },
-        { label: 'Slide Show', shortcut: 'F5', onClick: startSlideShow },
+        { label: '&New Slide', onClick: addSlide },
+        { label: '&Duplicate Slide', onClick: duplicateSlide },
+        { label: 'De&lete Slide', onClick: deleteSlide, disabled: slides.length === 1 },
       ],
     },
     {
-      label: 'Insert',
+      label: '&View',
       items: [
-        { label: 'New Slide', onClick: addSlide },
-        { label: 'Picture', onClick: () => showSystemError('Microsoft PowerPoint', 'The Clip Gallery is not available. Please insert the Office 97 CD-ROM.') },
+        { label: '&Normal', radio: true, checked: view === 'normal', onClick: () => setView('normal') },
+        { label: 'Slide &Sorter', radio: true, checked: view === 'sorter', onClick: () => setView('sorter') },
+        { label: '', separator: true },
+        { label: 'Slide Sho&w', shortcut: 'F5', onClick: startSlideShow },
       ],
     },
     {
-      label: 'Slide Show',
+      label: '&Insert',
       items: [
-        { label: 'View Show', shortcut: 'F5', onClick: startSlideShow },
-        { label: 'Rehearse Timings', disabled: true },
+        { label: '&New Slide', onClick: addSlide },
+        { label: '&Duplicate Slide', onClick: duplicateSlide },
+        { label: '&Picture', onClick: () => showSystemError('Microsoft PowerPoint', 'The Clip Gallery is not available. Please insert the Office 97 CD-ROM.') },
       ],
     },
     {
-      label: 'Help',
-      items: [{ label: 'About Microsoft PowerPoint', onClick: () => setShowAbout(true) }],
+      label: 'F&ormat',
+      items: [
+        {
+          label: '&Background...',
+          submenu: BACKGROUNDS.map((b) => ({
+            label: b.name,
+            radio: true,
+            checked: (slide.bg ?? '#ffffff') === b.value,
+            onClick: () => setBackground(b.value),
+          })),
+        },
+      ],
     },
+    {
+      label: 'Slide Sho&w',
+      items: [
+        { label: '&View Show', shortcut: 'F5', onClick: startSlideShow },
+        { label: '&Rehearse Timings', disabled: true },
+      ],
+    },
+    standardHelpMenu('PowerPoint'),
   ];
 
   if (slideShow) {
@@ -244,7 +325,8 @@ export default function PowerPoint({ windowId, launchParams, launchCount }: AppC
       <div
         ref={rootRef}
         tabIndex={0}
-        className="relative h-full w-full bg-black flex items-center justify-center outline-none cursor-pointer select-none"
+        className="relative h-full w-full flex items-center justify-center outline-none cursor-pointer select-none"
+        style={{ backgroundColor: slide.bg && slide.bg !== '#ffffff' ? slide.bg : '#000000' }}
         data-window-id={windowId}
         onClick={() => advance(1)}
         onContextMenu={(e) => { e.preventDefault(); advance(-1); }}
@@ -269,7 +351,7 @@ export default function PowerPoint({ windowId, launchParams, launchCount }: AppC
 
   return (
     <div className="relative flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] select-none" data-window-id={windowId}>
-      <MenuBar menus={menus} />
+      <MenuBar menus={menus} windowId={windowId} />
 
       {/* Toolbar */}
       <div className="flex items-center h-[26px] px-1 gap-[1px] border-b border-[var(--win98-button-shadow)]">
@@ -281,59 +363,93 @@ export default function PowerPoint({ windowId, launchParams, launchCount }: AppC
         <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="Duplicate Slide" onClick={duplicateSlide}>⧉</button>
         <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="Delete Slide" onClick={deleteSlide}>🗑️</button>
         <div className="w-px h-[18px] mx-[2px] border-l border-[var(--win98-button-shadow)] border-r border-r-[var(--win98-button-highlight)]" />
+        <button className={`w-[23px] h-[22px] flex items-center justify-center border text-[11px] ${view === 'normal' ? 'win98-flat-sunken' : 'border-transparent hover:win98-flat-raised'}`} title="Normal View" onClick={() => setView('normal')}>▦</button>
+        <button className={`w-[23px] h-[22px] flex items-center justify-center border text-[11px] ${view === 'sorter' ? 'win98-flat-sunken' : 'border-transparent hover:win98-flat-raised'}`} title="Slide Sorter View" onClick={() => setView('sorter')}>▤</button>
+        <div className="w-px h-[18px] mx-[2px] border-l border-[var(--win98-button-shadow)] border-r border-r-[var(--win98-button-highlight)]" />
         <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="Slide Show (F5)" onClick={startSlideShow}>▶</button>
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Slide thumbnail sidebar */}
-        <div className="w-[130px] bg-[var(--win98-button-face)] border-r-2 border-r-[var(--win98-button-shadow)] overflow-y-auto p-2 flex flex-col gap-2">
-          <div className="flex gap-1 mb-1">
-            <button className="win98-raised px-1 h-[16px] text-[9px] flex-1" title="Move up" onClick={() => moveSlide(-1)} disabled={current === 0}>▲</button>
-            <button className="win98-raised px-1 h-[16px] text-[9px] flex-1" title="Move down" onClick={() => moveSlide(1)} disabled={current === slides.length - 1}>▼</button>
-          </div>
-          {slides.map((s, i) => (
-            <div
-              key={i}
-              className={`border-2 cursor-pointer ${i === current ? 'border-[#000080]' : 'border-[var(--win98-button-shadow)]'}`}
-              onClick={() => setCurrent(i)}
-            >
-              <div className="bg-white aspect-[4/3] p-1 flex flex-col">
-                <div className="text-[6px] font-bold text-[#000080] text-center mb-[2px] truncate">{s.title}</div>
-                {s.bullets.slice(0, 3).map((b, j) => (
-                  <div key={j} className="text-[4px] text-black pl-1 truncate">• {b}</div>
-                ))}
+      {view === 'sorter' ? (
+        /* Slide Sorter */
+        <div className="flex-1 overflow-auto bg-[#808080] p-4">
+          <div className="flex flex-wrap gap-4 content-start">
+            {slides.map((s, i) => (
+              <div
+                key={i}
+                data-sorter-thumb
+                draggable
+                onDragStart={() => { dragIndexRef.current = i; }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); dropReorder(i); }}
+                onClick={() => setCurrent(i)}
+                onDoubleClick={() => { setCurrent(i); setView('normal'); }}
+                className={`w-[160px] cursor-move ${i === current ? 'outline outline-2 outline-[#000080]' : ''}`}
+              >
+                <div className="flex items-start gap-1">
+                  <span className="text-[10px] w-[16px] text-right pt-1">{i + 1}</span>
+                  <div className="flex-1 border border-[var(--win98-button-shadow)] aspect-[4/3] p-2 flex flex-col shadow-md" style={{ backgroundColor: s.bg || '#ffffff' }}>
+                    <div className="text-[9px] font-bold text-[#000080] text-center mb-1 truncate">{s.title}</div>
+                    {s.bullets.slice(0, 4).map((b, j) => (
+                      <div key={j} className="text-[6px] text-black pl-1 truncate">• {b}</div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="text-center text-[9px] py-[1px] bg-[var(--win98-button-face)]">{i + 1}</div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+      ) : (
+        /* Normal view: thumbnail rail + editor */
+        <div className="flex-1 flex overflow-hidden">
+          {/* Slide thumbnail sidebar */}
+          <div className="w-[130px] bg-[var(--win98-button-face)] border-r-2 border-r-[var(--win98-button-shadow)] overflow-y-auto p-2 flex flex-col gap-2">
+            <div className="flex gap-1 mb-1">
+              <button className="win98-raised px-1 h-[16px] text-[9px] flex-1" title="Move up" onClick={() => moveSlide(-1)} disabled={current === 0}>▲</button>
+              <button className="win98-raised px-1 h-[16px] text-[9px] flex-1" title="Move down" onClick={() => moveSlide(1)} disabled={current === slides.length - 1}>▼</button>
+            </div>
+            {slides.map((s, i) => (
+              <div
+                key={i}
+                className={`border-2 cursor-pointer ${i === current ? 'border-[#000080]' : 'border-[var(--win98-button-shadow)]'}`}
+                onClick={() => setCurrent(i)}
+              >
+                <div className="aspect-[4/3] p-1 flex flex-col" style={{ backgroundColor: s.bg || '#ffffff' }}>
+                  <div className="text-[6px] font-bold text-[#000080] text-center mb-[2px] truncate">{s.title}</div>
+                  {s.bullets.slice(0, 3).map((b, j) => (
+                    <div key={j} className="text-[4px] text-black pl-1 truncate">• {b}</div>
+                  ))}
+                </div>
+                <div className="text-center text-[9px] py-[1px] bg-[var(--win98-button-face)]">{i + 1}</div>
+              </div>
+            ))}
+          </div>
 
-        {/* Slide editing area */}
-        <div className="flex-1 bg-[#808080] flex items-center justify-center overflow-auto p-4">
-          <div className="bg-white shadow-lg border border-[var(--win98-button-shadow)]" style={{ width: '480px', minHeight: '360px', position: 'relative' }}>
-            <div className="absolute inset-0 flex flex-col p-6">
-              <input
-                className="text-[24px] font-bold text-[#000080] text-center mb-4 border border-dashed border-transparent hover:border-[#808080] focus:border-[#808080] px-2 py-1 outline-none bg-transparent"
-                value={slide.title}
-                onChange={(e) => patchSlide(current, (s) => ({ ...s, title: e.target.value }))}
-              />
-              <div className="h-[2px] bg-[#000080] mb-4 mx-4" />
-              <textarea
-                className="flex-1 text-[14px] text-black border border-dashed border-transparent hover:border-[#808080] focus:border-[#808080] px-2 outline-none resize-none bg-transparent font-[family-name:var(--win98-font)]"
-                value={slide.bullets.join('\n')}
-                onChange={(e) => patchSlide(current, (s) => ({ ...s, bullets: e.target.value.split('\n') }))}
-                placeholder="One bullet per line"
-              />
+          {/* Slide editing area */}
+          <div className="flex-1 bg-[#808080] flex items-center justify-center overflow-auto p-4">
+            <div className="shadow-lg border border-[var(--win98-button-shadow)]" style={{ width: '480px', minHeight: '360px', position: 'relative', backgroundColor: slide.bg || '#ffffff' }}>
+              <div className="absolute inset-0 flex flex-col p-6">
+                <input
+                  className="text-[24px] font-bold text-[#000080] text-center mb-4 border border-dashed border-transparent hover:border-[#808080] focus:border-[#808080] px-2 py-1 outline-none bg-transparent"
+                  value={slide.title}
+                  onChange={(e) => patchSlide(current, (s) => ({ ...s, title: e.target.value }))}
+                />
+                <div className="h-[2px] bg-[#000080] mb-4 mx-4" />
+                <textarea
+                  className="flex-1 text-[14px] text-black border border-dashed border-transparent hover:border-[#808080] focus:border-[#808080] px-2 outline-none resize-none bg-transparent font-[family-name:var(--win98-font)]"
+                  value={slide.bullets.join('\n')}
+                  onChange={(e) => patchSlide(current, (s) => ({ ...s, bullets: e.target.value.split('\n') }))}
+                  placeholder="One bullet per line"
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Status Bar */}
       <div className="flex items-center h-[20px] px-1 border-t border-[var(--win98-button-highlight)]">
         <span className="win98-sunken px-2 py-0 flex-1">Slide {current + 1} of {slides.length}</span>
-        <span className="win98-sunken px-2 py-0 w-[120px]">Default Design</span>
+        <span className="win98-sunken px-2 py-0 w-[120px]">{view === 'sorter' ? 'Slide Sorter' : 'Default Design'}</span>
       </div>
 
       {picker && (
@@ -351,21 +467,7 @@ export default function PowerPoint({ windowId, launchParams, launchCount }: AppC
         />
       )}
 
-      {showAbout && (
-        <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/20">
-          <Dialog98
-            title="About Microsoft PowerPoint"
-            icon="info"
-            message={
-              <div className="space-y-1">
-                <p className="font-bold">Microsoft PowerPoint 97</p>
-                <p>Copyright (C) 1987-1997 Microsoft Corp.</p>
-              </div>
-            }
-            buttons={[{ label: 'OK', default: true, onClick: () => setShowAbout(false) }]}
-          />
-        </div>
-      )}
+      {printDialog}
     </div>
   );
 }

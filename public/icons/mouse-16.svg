@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" shape-rendering="crispEdges">
+  <!-- Mouse body -->
+  <rect x="4" y="2" width="8" height="12" fill="#C0C0C0"/>
+  <rect x="5" y="1" width="6" height="1" fill="#C0C0C0"/>
+  <rect x="3" y="4" width="1" height="8" fill="#C0C0C0"/>
+  <rect x="12" y="4" width="1" height="8" fill="#C0C0C0"/>
+  <!-- Highlight -->
+  <rect x="4" y="2" width="8" height="1" fill="#FFFFFF"/>
+  <rect x="4" y="2" width="1" height="11" fill="#FFFFFF"/>
+  <!-- Shadow -->
+  <rect x="11" y="2" width="1" height="12" fill="#808080"/>
+  <rect x="4" y="13" width="8" height="1" fill="#808080"/>
+  <!-- Button split -->
+  <rect x="8" y="2" width="1" height="5" fill="#808080"/>
+  <!-- Scroll wheel -->
+  <rect x="7" y="3" width="2" height="3" fill="#404040"/>
+  <rect x="7" y="3" width="1" height="1" fill="#808080"/>
+  <!-- Cable -->
+  <rect x="7" y="0" width="2" height="1" fill="#404040"/>
+</svg>

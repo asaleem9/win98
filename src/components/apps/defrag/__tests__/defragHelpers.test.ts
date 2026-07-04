@@ -1,5 +1,5 @@
 import { FSNode } from '@/types/filesystem';
-import { walkFsStats, buildBlockMap, percentFragmented, BLOCK_GRID_SIZE } from '../defragHelpers';
+import { walkFsStats, buildBlockMap, BLOCK_GRID_SIZE } from '../defragHelpers';
 
 function makeRoot(children: FSNode[]): FSNode {
   return {
@@ -52,7 +52,7 @@ describe('walkFsStats', () => {
 describe('buildBlockMap', () => {
   it('returns exactly totalBlocks entries', () => {
     const root = makeRoot([{ name: 'a.txt', type: 'file', created: '', modified: '', size: 4096 }]);
-    const blocks = buildBlockMap(root, 50);
+    const blocks = buildBlockMap(root, {}, 50);
     expect(blocks).toHaveLength(50);
   });
 
@@ -63,7 +63,7 @@ describe('buildBlockMap', () => {
 
   it('marks readOnly files as unmovable', () => {
     const root = makeRoot([{ name: 'io.sys', type: 'file', created: '', modified: '', size: 2048, readOnly: true }]);
-    const blocks = buildBlockMap(root, 20);
+    const blocks = buildBlockMap(root, {}, 20);
     expect(blocks).toContain('unmovable');
     expect(blocks).not.toContain('used');
   });
@@ -78,14 +78,32 @@ describe('buildBlockMap', () => {
         children: [{ name: 'a.txt', type: 'file', created: '', modified: '', size: 2048 }],
       },
     ]);
-    const blocks = buildBlockMap(root, 20);
+    const blocks = buildBlockMap(root, {}, 20);
     expect(blocks).toContain('directory');
     expect(blocks).toContain('used');
   });
 
+  it('paints blocks of files with more than one fragment as fragmented', () => {
+    const root = makeRoot([{ name: 'a.txt', type: 'file', created: '', modified: '', size: 2048 }]);
+    const clean = buildBlockMap(root, {}, 20);
+    expect(clean).toContain('used');
+    expect(clean).not.toContain('fragmented');
+
+    const frag = buildBlockMap(root, { 'C:\\a.txt': 4 }, 20);
+    expect(frag).toContain('fragmented');
+    expect(frag).not.toContain('used');
+  });
+
+  it('keeps readOnly files unmovable even when fragmented', () => {
+    const root = makeRoot([{ name: 'io.sys', type: 'file', created: '', modified: '', size: 2048, readOnly: true }]);
+    const blocks = buildBlockMap(root, { 'C:\\io.sys': 9 }, 20);
+    expect(blocks).toContain('unmovable');
+    expect(blocks).not.toContain('fragmented');
+  });
+
   it('fills remaining space with free blocks', () => {
     const root = makeRoot([]);
-    const blocks = buildBlockMap(root, 10);
+    const blocks = buildBlockMap(root, {}, 10);
     expect(blocks.every((b) => b === 'free')).toBe(true);
   });
 
@@ -98,26 +116,7 @@ describe('buildBlockMap', () => {
       size: 20000,
     }));
     const root = makeRoot(children);
-    const blocks = buildBlockMap(root, 30);
+    const blocks = buildBlockMap(root, {}, 30);
     expect(blocks).toHaveLength(30);
-  });
-});
-
-describe('percentFragmented', () => {
-  it('is deterministic for the same file count', () => {
-    expect(percentFragmented(42)).toBe(percentFragmented(42));
-  });
-
-  it('stays within the 5-39 range', () => {
-    for (const count of [0, 1, 5, 100, 3842, 999999]) {
-      const pct = percentFragmented(count);
-      expect(pct).toBeGreaterThanOrEqual(5);
-      expect(pct).toBeLessThanOrEqual(39);
-    }
-  });
-
-  it('can differ across different counts', () => {
-    const values = new Set([0, 1, 2, 3, 4, 5, 6, 7].map(percentFragmented));
-    expect(values.size).toBeGreaterThan(1);
   });
 });

@@ -10,9 +10,12 @@ import {
   removeNode,
   normalizePath,
   uniqueName,
+  joinPath,
 } from '@/lib/fs/fsOperations';
 
 const STORAGE_KEY = 'win98-fs-v1';
+// Kept at 1 so existing saved filesystems still load; the fragments map is an
+// additive, optional field (absent in legacy payloads, defaulted to {}).
 const STORAGE_VERSION = 1;
 
 export type FSResult = { ok: true } | { ok: false; error: string };
@@ -24,13 +27,68 @@ export interface RecycleBinItem {
   node: FSNode;
 }
 
+// --- fragmentation model ----------------------------------------------------
+// Each written/created file accumulates a fragment count, keyed by its
+// normalized path. The counts are only ever surfaced by ScanDisk / Defrag; the
+// map is cleared wholesale when the drive is defragmented.
+
+export interface FragmentationStats {
+  files: number;
+  fragmented: number;
+  fragPercent: number;
+}
+
+/** Stable non-negative FNV-1a hash of a path, case-insensitive. */
+export function hashPath(path: string): number {
+  const p = normalizePath(path).toLowerCase();
+  let h = 2166136261;
+  for (let i = 0; i < p.length; i++) {
+    h ^= p.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Initial fragment count when a file is first written: 1-4, seeded by path. */
+export function seedFragments(path: string): number {
+  return 1 + (hashPath(path) % 4);
+}
+
+/** Next fragment count on a subsequent write: grows by 1-3, seeded by path. */
+export function nextFragments(path: string, current: number): number {
+  return current + 1 + ((hashPath(path) + current) % 3);
+}
+
+/**
+ * Real fragmentation figures for a filesystem tree. A file with no recorded
+ * fragment count is treated as a single (contiguous) fragment.
+ */
+export function computeFragStats(root: FSNode, fragments: Record<string, number>): FragmentationStats {
+  let files = 0;
+  let fragmented = 0;
+  const walk = (node: FSNode, path: string) => {
+    if (node.type === 'directory') {
+      for (const child of node.children ?? []) walk(child, joinPath(path, child.name));
+    } else if (node.type === 'file') {
+      files++;
+      if ((fragments[normalizePath(path)] ?? 1) > 1) fragmented++;
+    }
+  };
+  walk(root, 'C:\\');
+  const fragPercent = files ? Math.round((fragmented / files) * 100) : 0;
+  return { files, fragmented, fragPercent };
+}
+
 interface FSState {
   root: FSNode;
   recycleBin: RecycleBinItem[];
+  fragments: Record<string, number>;
 }
 
 type FSAction =
   | { type: 'SET_ROOT'; payload: { root: FSNode } }
+  | { type: 'SET_FRAGMENTS'; payload: { path: string; value: number } }
+  | { type: 'CLEAR_FRAGMENTS' }
   | { type: 'DELETE_TO_BIN'; payload: { path: string; id: string; deletedAt: string } }
   | { type: 'RESTORE_FROM_BIN'; payload: { id: string } }
   | { type: 'EMPTY_BIN' }
@@ -45,10 +103,20 @@ function fsReducer(state: FSState, action: FSAction): FSState {
     case 'SET_ROOT':
       return { ...state, root: action.payload.root };
 
+    case 'SET_FRAGMENTS':
+      return {
+        ...state,
+        fragments: { ...state.fragments, [action.payload.path]: action.payload.value },
+      };
+
+    case 'CLEAR_FRAGMENTS':
+      return { ...state, fragments: {} };
+
     case 'DELETE_TO_BIN': {
       const result = removeNode(state.root, action.payload.path);
       if (!result) return state;
       return {
+        ...state,
         root: result.root,
         recycleBin: [
           ...state.recycleBin,
@@ -72,6 +140,7 @@ function fsReducer(state: FSState, action: FSAction): FSState {
       const newRoot = insertNode(state.root, dirPath, restored);
       if (!newRoot) return state;
       return {
+        ...state,
         root: newRoot,
         recycleBin: state.recycleBin.filter((i) => i.id !== action.payload.id),
       };
@@ -81,7 +150,7 @@ function fsReducer(state: FSState, action: FSAction): FSState {
       return { ...state, recycleBin: [] };
 
     case 'RESET':
-      return { root: virtualFileSystem, recycleBin: [] };
+      return { root: virtualFileSystem, recycleBin: [], fragments: {} };
 
     default:
       return state;
@@ -89,14 +158,19 @@ function fsReducer(state: FSState, action: FSAction): FSState {
 }
 
 function loadInitialState(): FSState {
-  const fallback: FSState = { root: virtualFileSystem, recycleBin: [] };
+  const fallback: FSState = { root: virtualFileSystem, recycleBin: [], fragments: {} };
   if (typeof window === 'undefined') return fallback;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     if (parsed?.version !== STORAGE_VERSION || !parsed?.root?.children) return fallback;
-    return { root: parsed.root, recycleBin: parsed.recycleBin ?? [] };
+    // `fragments` is absent in legacy payloads — default it so old saves still load.
+    return {
+      root: parsed.root,
+      recycleBin: parsed.recycleBin ?? [],
+      fragments: parsed.fragments ?? {},
+    };
   } catch {
     return fallback;
   }
@@ -105,6 +179,8 @@ function loadInitialState(): FSState {
 export interface FileSystemContextType {
   root: FSNode;
   recycleBin: RecycleBinItem[];
+  /** Per-file fragment counts keyed by normalized path (see the fragmentation model). */
+  fragments: Record<string, number>;
   getNode: (path: string) => FSNode | null;
   listDir: (path: string) => FSNode[] | null;
   readFile: (path: string) => string | null;
@@ -118,6 +194,8 @@ export interface FileSystemContextType {
   emptyRecycleBin: () => void;
   deletePermanently: (path: string) => FSResult;
   reset: () => void;
+  getFragmentationStats: () => FragmentationStats;
+  clearFragmentation: () => void;
 }
 
 const FileSystemContext = createContext<FileSystemContextType | null>(null);
@@ -135,7 +213,12 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ version: STORAGE_VERSION, root: state.root, recycleBin: state.recycleBin }),
+          JSON.stringify({
+            version: STORAGE_VERSION,
+            root: state.root,
+            recycleBin: state.recycleBin,
+            fragments: state.fragments,
+          }),
         );
       } catch {
         // quota exceeded or storage unavailable — non-fatal
@@ -165,6 +248,7 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
     return {
       root: state.root,
       recycleBin: state.recycleBin,
+      fragments: state.fragments,
       getNode,
       listDir: (path) => {
         const node = getNode(path);
@@ -176,12 +260,13 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
       },
       writeFile: (path, content) => {
         const root = stateRef.current.root;
+        const norm = normalizePath(path);
         const existing = resolvePathIn(root, path);
         if (existing) {
           if (existing.type !== 'file') return { ok: false, error: 'Access is denied.' };
           const err = guardWritable(existing);
           if (err) return { ok: false, error: err };
-          return setRoot(
+          const res = setRoot(
             updateNodeAt(root, path, (n) => ({
               ...n,
               content,
@@ -189,14 +274,19 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
               modified: today(),
             })),
           );
+          if (res.ok) {
+            const current = stateRef.current.fragments[norm] ?? 1;
+            dispatch({ type: 'SET_FRAGMENTS', payload: { path: norm, value: nextFragments(norm, current) } });
+          }
+          return res;
         }
         // Create new file at path
         const dirPath = getParentPath(path);
-        const name = normalizePath(path).split('\\').pop()!;
+        const name = norm.split('\\').pop()!;
         const dir = resolvePathIn(root, dirPath);
         if (!dir || dir.type !== 'directory') return { ok: false, error: 'The system cannot find the path specified.' };
         if (dir.readOnly) return { ok: false, error: 'Access is denied.' };
-        return setRoot(
+        const res = setRoot(
           insertNode(root, dirPath, {
             name,
             type: 'file',
@@ -207,14 +297,17 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
             content,
           }),
         );
+        if (res.ok) dispatch({ type: 'SET_FRAGMENTS', payload: { path: norm, value: seedFragments(norm) } });
+        return res;
       },
       createFile: (dirPath, name, content = '') => {
         const root = stateRef.current.root;
         const dir = resolvePathIn(root, dirPath);
         if (!dir || dir.type !== 'directory') return { ok: false, error: 'The system cannot find the path specified.' };
-        return setRoot(
+        const finalName = uniqueName(dir, name);
+        const res = setRoot(
           insertNode(root, dirPath, {
-            name: uniqueName(dir, name),
+            name: finalName,
             type: 'file',
             icon: '/icons/txt-16.svg',
             created: today(),
@@ -223,6 +316,11 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
             content,
           }),
         );
+        if (res.ok) {
+          const norm = normalizePath(joinPath(dirPath, finalName));
+          dispatch({ type: 'SET_FRAGMENTS', payload: { path: norm, value: seedFragments(norm) } });
+        }
+        return res;
       },
       createFolder: (dirPath, name) => {
         const root = stateRef.current.root;
@@ -308,6 +406,8 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
         return setRoot(removed.root);
       },
       reset: () => dispatch({ type: 'RESET' }),
+      getFragmentationStats: () => computeFragStats(stateRef.current.root, stateRef.current.fragments),
+      clearFragmentation: () => dispatch({ type: 'CLEAR_FRAGMENTS' }),
     };
   }, [state]);
 

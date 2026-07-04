@@ -1,18 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { useFileSystem } from '@/contexts/FileSystemContext';
 import { useFileOpener } from '@/hooks/useFileOpener';
 import { Button98 } from '@/components/ui/Button98';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
 import { cn } from '@/lib/cn';
-import { FSNode } from '@/types/filesystem';
 import { formatSize } from '@/lib/filesystem';
+import {
+  searchFiles,
+  sortResults,
+  SearchCriteria,
+  SearchHit,
+  SortKey,
+  SortDir,
+} from './findUtils';
 
-interface SearchResult {
-  path: string;
-  node: FSNode;
+const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'folder', label: 'In Folder' },
+  { key: 'size', label: 'Size' },
+  { key: 'type', label: 'Type' },
+  { key: 'modified', label: 'Modified' },
+];
+
+const INPUT_CLASS =
+  'h-[20px] px-1 bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] outline-none text-[11px]';
+
+function folderOf(path: string): string {
+  const cut = path.lastIndexOf('\\');
+  return cut > 0 ? path.slice(0, cut) : 'C:\\';
+}
+
+function formatModified(date: string): string {
+  const t = Date.parse(date);
+  return Number.isNaN(t) ? date : new Date(t).toLocaleDateString('en-US');
 }
 
 export default function FindFiles({}: AppComponentProps) {
@@ -20,30 +43,60 @@ export default function FindFiles({}: AppComponentProps) {
   const { openFile } = useFileOpener();
   const [namePattern, setNamePattern] = useState('');
   const [containingText, setContainingText] = useState('');
-  const [results, setResults] = useState<SearchResult[] | null>(null);
+  const [afterDate, setAfterDate] = useState('');
+  const [beforeDate, setBeforeDate] = useState('');
+  const [minKB, setMinKB] = useState('');
+  const [maxKB, setMaxKB] = useState('');
+  const [results, setResults] = useState<SearchHit[] | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const search = () => {
-    const name = namePattern.trim().toLowerCase();
-    const text = containingText.trim().toLowerCase();
-    if (!name && !text) return;
-
-    const found: SearchResult[] = [];
-    const walk = (node: FSNode, path: string) => {
-      for (const child of node.children ?? []) {
-        const childPath = `${path}\\${child.name}`;
-        const nameMatch = !name || child.name.toLowerCase().includes(name);
-        const textMatch = !text || (child.content ?? '').toLowerCase().includes(text);
-        if (nameMatch && textMatch && (child.type === 'file' || !text)) {
-          found.push({ path: childPath, node: child });
-        }
-        if (child.type === 'directory') walk(child, childPath);
-      }
+    const criteria: SearchCriteria = {
+      name: namePattern.trim(),
+      text: containingText.trim(),
+      minKB: minKB.trim() ? Number(minKB) : undefined,
+      maxKB: maxKB.trim() ? Number(maxKB) : undefined,
+      after: afterDate || undefined,
+      before: beforeDate || undefined,
     };
-    walk(root, 'C:');
-    setResults(found);
+    const hasCriteria =
+      !!criteria.name ||
+      !!criteria.text ||
+      criteria.minKB != null ||
+      criteria.maxKB != null ||
+      !!criteria.after ||
+      !!criteria.before;
+    if (!hasCriteria) return;
+    setResults(searchFiles(root, criteria));
     setSelectedPath(null);
   };
+
+  const newSearch = () => {
+    setNamePattern('');
+    setContainingText('');
+    setAfterDate('');
+    setBeforeDate('');
+    setMinKB('');
+    setMaxKB('');
+    setResults(null);
+    setSelectedPath(null);
+  };
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sorted = useMemo(
+    () => (results ? sortResults(results, sortKey, sortDir) : null),
+    [results, sortKey, sortDir],
+  );
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px]">
@@ -56,7 +109,8 @@ export default function FindFiles({}: AppComponentProps) {
             value={namePattern}
             onChange={(e) => setNamePattern(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && search()}
-            className="flex-1 h-[20px] px-1 bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] outline-none text-[11px]"
+            placeholder="e.g. *.txt or report*"
+            className={cn('flex-1', INPUT_CLASS)}
           />
           <Button98 onClick={search} className="min-w-[80px]">Find Now</Button98>
         </div>
@@ -67,49 +121,83 @@ export default function FindFiles({}: AppComponentProps) {
             value={containingText}
             onChange={(e) => setContainingText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && search()}
-            className="flex-1 h-[20px] px-1 bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] outline-none text-[11px]"
+            className={cn('flex-1', INPUT_CLASS)}
           />
-          <Button98
-            className="min-w-[80px]"
-            onClick={() => {
-              setNamePattern('');
-              setContainingText('');
-              setResults(null);
-            }}
-          >
-            New Search
-          </Button98>
+          <Button98 className="min-w-[80px]" onClick={newSearch}>New Search</Button98>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-[90px] select-none">Look in:</span>
-          <span className="select-none">Local hard drives (C:)</span>
+          <label htmlFor="find-after" className="w-[90px] select-none">Modified:</label>
+          <input
+            id="find-after"
+            type="date"
+            aria-label="Modified after"
+            value={afterDate}
+            onChange={(e) => setAfterDate(e.target.value)}
+            className={INPUT_CLASS}
+          />
+          <span className="select-none">to</span>
+          <input
+            type="date"
+            aria-label="Modified before"
+            value={beforeDate}
+            onChange={(e) => setBeforeDate(e.target.value)}
+            className={INPUT_CLASS}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="find-min" className="w-[90px] select-none">Size (KB):</label>
+          <input
+            id="find-min"
+            type="number"
+            min={0}
+            aria-label="Minimum size in KB"
+            placeholder="min"
+            value={minKB}
+            onChange={(e) => setMinKB(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && search()}
+            className={cn('w-[80px]', INPUT_CLASS)}
+          />
+          <span className="select-none">to</span>
+          <input
+            type="number"
+            min={0}
+            aria-label="Maximum size in KB"
+            placeholder="max"
+            value={maxKB}
+            onChange={(e) => setMaxKB(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && search()}
+            className={cn('w-[80px]', INPUT_CLASS)}
+          />
+          <span className="ml-auto select-none text-[var(--win98-disabled-text)]">Look in: Local hard drives (C:)</span>
         </div>
       </div>
 
       {/* Results */}
       <div className="flex-1 bg-white overflow-auto border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] m-1">
-        {results === null ? (
+        {sorted === null ? (
           <div className="p-4 text-[var(--win98-disabled-text)] select-none">
             Enter search criteria and click Find Now.
           </div>
-        ) : results.length === 0 ? (
+        ) : sorted.length === 0 ? (
           <div className="p-4 select-none">There are no items to show in this view.</div>
         ) : (
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                {['Name', 'In Folder', 'Size', 'Type'].map((h) => (
+                {COLUMNS.map((col) => (
                   <th
-                    key={h}
-                    className="text-left px-2 py-[1px] bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-shadow)] border-r-[var(--win98-button-shadow)] font-normal select-none"
+                    key={col.key}
+                    onClick={() => toggleSort(col.key)}
+                    className="text-left px-2 py-[1px] bg-[var(--win98-button-face)] border border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-shadow)] border-r-[var(--win98-button-shadow)] font-normal select-none cursor-default"
                   >
-                    {h}
+                    {col.label}
+                    {sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {results.map(({ path, node }) => (
+              {sorted.map(({ path, node }) => (
                 <tr
                   key={path}
                   className={cn('cursor-default select-none', selectedPath === path && 'bg-[var(--win98-highlight)] text-white')}
@@ -123,9 +211,10 @@ export default function FindFiles({}: AppComponentProps) {
                       {node.name}
                     </span>
                   </td>
-                  <td className="px-2 py-[1px]">{path.slice(0, path.lastIndexOf('\\')) || 'C:\\'}</td>
+                  <td className="px-2 py-[1px]">{folderOf(path)}</td>
                   <td className="px-2 py-[1px]">{node.size !== undefined ? formatSize(node.size) : ''}</td>
                   <td className="px-2 py-[1px]">{node.type === 'directory' ? 'File Folder' : 'File'}</td>
+                  <td className="px-2 py-[1px]">{formatModified(node.modified)}</td>
                 </tr>
               ))}
             </tbody>
@@ -133,7 +222,7 @@ export default function FindFiles({}: AppComponentProps) {
         )}
       </div>
 
-      <StatusBar98 panels={[{ content: results ? `${results.length} file(s) found` : 'Ready' }]} />
+      <StatusBar98 panels={[{ content: sorted ? `${sorted.length} file(s) found` : 'Ready' }]} />
     </div>
   );
 }

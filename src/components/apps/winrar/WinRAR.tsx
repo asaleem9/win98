@@ -13,13 +13,12 @@ export default function WinRAR(props: AppComponentProps) {
         ext: 'rar',
         accent: '#7a2e8a',
         columns: 'rar',
-        menus: ['File', 'Commands', 'Tools', 'Favorites', 'Options', 'Help'],
         toolbar: [
           { label: 'Add', icon: '➕', action: 'add' },
           { label: 'Extract To', icon: '📤', action: 'extract' },
           { label: 'Test', icon: '🧪', action: 'test' },
           { label: 'View', icon: '👁️', action: 'view' },
-          { label: 'Info', icon: 'ℹ️', action: 'test' },
+          { label: 'Delete', icon: '❌', action: 'delete' },
         ],
         nag: (
           <>

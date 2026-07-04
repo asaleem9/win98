@@ -9,7 +9,14 @@ import { Radio98 } from '@/components/ui/Radio98';
 import { Checkbox98 } from '@/components/ui/Checkbox98';
 import { ProgressBar98 } from '@/components/ui/ProgressBar98';
 import { Dialog98 } from '@/components/ui/Dialog98';
-import { walkFsStats, buildScanReport, badClusterIndices, SURFACE_GRID_SIZE } from './scandiskHelpers';
+import {
+  walkFsStats,
+  walkFilePaths,
+  detectOrphans,
+  buildScanReport,
+  badClusterIndices,
+  SURFACE_GRID_SIZE,
+} from './scandiskHelpers';
 
 type ScanPhase = 'idle' | 'scanning' | 'done';
 
@@ -23,9 +30,12 @@ const SCAN_STEPS = [
   'Checking lost clusters...',
   'Checking surface integrity...',
 ];
+// The "Checking files..." phase walks the real file list; this is its index.
+const FILE_STEP = 4;
 
 export default function ScanDisk({ windowId }: AppComponentProps) {
-  const { root, createFile } = useFileSystem();
+  void windowId;
+  const { root, recycleBin, getNode, createFile } = useFileSystem();
   const [drive, setDrive] = useState('C:');
   const [scanType, setScanType] = useState<'standard' | 'thorough'>('standard');
   const [autoFix, setAutoFix] = useState(false);
@@ -36,17 +46,43 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
   const [surfaceFilled, setSurfaceFilled] = useState(0);
   const [badCells, setBadCells] = useState<number[]>([]);
   const [showFixDialog, setShowFixDialog] = useState(false);
-  const [fixSaved, setFixSaved] = useState(false);
+  const [savedChkFiles, setSavedChkFiles] = useState<string[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stats = useMemo(() => walkFsStats(root), [root]);
+  const filePaths = useMemo(() => walkFilePaths(root), [root]);
 
-  const lostFragmentCount = useMemo(() => {
-    if (!autoFix) return 0;
-    return 1 + (stats.fileCount % 2);
-  }, [autoFix, stats.fileCount]);
+  // Real dangling Recycle Bin entries are the drive's lost file fragments.
+  const orphans = useMemo(
+    () => detectOrphans(recycleBin, (p) => getNode(p)?.type === 'directory'),
+    [recycleBin, getNode],
+  );
 
   const allBadClusters = useMemo(() => badClusterIndices(stats.fileCount, 6), [stats.fileCount]);
+
+  const makeReport = useCallback(
+    (fixed: boolean) =>
+      buildScanReport({
+        stats,
+        scanType,
+        badClusters: scanType === 'thorough' ? allBadClusters.length : 0,
+        lostFragments: orphans.length,
+        fixed,
+      }),
+    [stats, scanType, allBadClusters.length, orphans.length],
+  );
+
+  const applyFix = useCallback(() => {
+    // Recover each lost fragment into the classic FILE0000.CHK, FILE0001.CHK... series.
+    const saved: string[] = [];
+    orphans.forEach((_, i) => {
+      const name = `FILE${String(i).padStart(4, '0')}.CHK`;
+      createFile('C:\\', name, 'Recovered lost cluster data.\r\n');
+      saved.push(`C:\\${name}`);
+    });
+    setSavedChkFiles(saved);
+    setResults(makeReport(true));
+  }, [orphans, createFile, makeReport]);
 
   const startScan = useCallback(() => {
     setPhase('scanning');
@@ -54,12 +90,16 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
     setResults([]);
     setSurfaceFilled(0);
     setBadCells([]);
-    setFixSaved(false);
+    setSavedChkFiles([]);
+    setShowFixDialog(false);
     setCurrentStep(SCAN_STEPS[0]);
 
     let p = 0;
     const totalSteps = scanType === 'thorough' ? SCAN_STEPS.length : SCAN_STEPS.length - 1;
-    const increment = 100 / (totalSteps * 8);
+    // Give the real file-checking phase weight proportional to the file count so
+    // bigger drives visibly take longer to walk.
+    const ticksPerStep = 8;
+    const increment = 100 / (totalSteps * ticksPerStep);
 
     timerRef.current = setInterval(() => {
       p += increment;
@@ -68,20 +108,23 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
         if (timerRef.current) clearInterval(timerRef.current);
         setPhase('done');
         setSurfaceFilled(SURFACE_GRID_SIZE);
-        const report = buildScanReport({
-          stats,
-          scanType,
-          badClusters: scanType === 'thorough' ? allBadClusters.length : 0,
-          lostFragments: lostFragmentCount,
-        });
-        setResults(report);
         setCurrentStep('Scan complete.');
-        if (autoFix && lostFragmentCount > 0) {
-          setShowFixDialog(true);
+        if (autoFix && orphans.length > 0) {
+          applyFix();
+        } else {
+          setResults(makeReport(false));
+          if (orphans.length > 0) setShowFixDialog(true);
         }
       } else {
         const stepIdx = Math.min(Math.floor(p / (100 / totalSteps)), totalSteps - 1);
-        setCurrentStep(SCAN_STEPS[stepIdx]);
+        if (stepIdx === FILE_STEP && filePaths.length > 0) {
+          // Surface a real path as each file is checked.
+          const within = (p - (100 * stepIdx) / totalSteps) / (100 / totalSteps);
+          const fileIdx = Math.min(filePaths.length - 1, Math.floor(within * filePaths.length));
+          setCurrentStep(`Checking files... ${filePaths[fileIdx]}`);
+        } else {
+          setCurrentStep(SCAN_STEPS[stepIdx]);
+        }
 
         // Once we hit the surface scan step (thorough only), animate the cluster grid
         if (scanType === 'thorough' && stepIdx === SCAN_STEPS.length - 1) {
@@ -93,7 +136,7 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
       }
       setProgress(Math.min(100, Math.round(p)));
     }, 200);
-  }, [scanType, stats, allBadClusters, autoFix, lostFragmentCount]);
+  }, [scanType, filePaths, allBadClusters, autoFix, orphans.length, applyFix, makeReport]);
 
   const closeScan = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -103,13 +146,13 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
     setCurrentStep('');
     setSurfaceFilled(0);
     setBadCells([]);
+    setSavedChkFiles([]);
   }, []);
 
-  const saveFragment = useCallback(() => {
-    createFile('C:\\', 'FILE0001.CHK', 'Recovered lost cluster data.\r\n');
-    setFixSaved(true);
+  const confirmFix = useCallback(() => {
+    applyFix();
     setShowFixDialog(false);
-  }, [createFile]);
+  }, [applyFix]);
 
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -169,7 +212,7 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
         <GroupBox98 label="Progress">
           <div className="flex flex-col gap-2 mt-1">
             <ProgressBar98 value={progress} />
-            <div className="text-[10px]">{currentStep} {progress}%</div>
+            <div className="text-[10px] truncate">{currentStep} {progress}%</div>
 
             {scanType === 'thorough' && (
               <div className="flex flex-col items-center gap-1 py-1">
@@ -200,9 +243,11 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
       {results.length > 0 && (
         <div className="flex-1 overflow-auto bg-white border-2 border-solid border-t-[var(--win98-button-shadow)] border-l-[var(--win98-button-shadow)] border-b-[var(--win98-button-highlight)] border-r-[var(--win98-button-highlight)] shadow-[inset_-1px_-1px_0_var(--win98-button-light),inset_1px_1px_0_var(--win98-button-dark-shadow)] p-2 font-[family-name:var(--win98-font-mono)] text-[11px]">
           {results.map((line, i) => (
-            <div key={i} className={i === 0 ? 'font-bold' : ''}>{line || ' '}</div>
+            <div key={i} className={i === 0 ? 'font-bold' : ''}>{line || ' '}</div>
           ))}
-          {fixSaved && <div className="mt-1">Lost fragment saved as C:\FILE0001.CHK</div>}
+          {savedChkFiles.map((path) => (
+            <div key={path} className="mt-1">Lost fragment saved as {path}</div>
+          ))}
         </div>
       )}
 
@@ -227,9 +272,9 @@ export default function ScanDisk({ windowId }: AppComponentProps) {
           <Dialog98
             title="ScanDisk"
             icon="question"
-            message={`ScanDisk found ${lostFragmentCount} lost file fragment(s). Save as C:\\FILE0001.CHK?`}
+            message={`ScanDisk found ${orphans.length} lost file fragment(s). Save them as FILE0000.CHK?`}
             buttons={[
-              { label: 'Yes', onClick: saveFragment, default: true },
+              { label: 'Yes', onClick: confirmFix, default: true },
               { label: 'No', onClick: () => setShowFixDialog(false) },
             ]}
           />

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { useWindows } from '@/contexts/WindowContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { getStartMenuApps } from '@/lib/appRegistry';
 import { AppDefinition } from '@/types/app';
 import { getRecentDocs, requestOpenFile } from '@/lib/recentDocs';
@@ -166,10 +167,15 @@ const FAVORITE_SITES: Array<{ label: string; url: string }> = [
 
 export function StartMenu({ onClose }: StartMenuProps) {
   const { openWindow } = useWindows();
+  const { getAppPref } = useSettings();
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoveredSubmenu, setHoveredSubmenu] = useState<string | null>(null);
 
-  const { programs, settingsApps } = buildStartMenuTree(getStartMenuApps());
+  // Apps removed via Add/Remove Programs drop out of the Programs tree.
+  const uninstalledApps = getAppPref<Record<string, boolean>>('system', 'uninstalledApps', {});
+  const { programs, settingsApps } = buildStartMenuTree(
+    getStartMenuApps().filter((a) => !uninstalledApps[a.id]),
+  );
   const recentDocs = getRecentDocs();
 
   useEffect(() => {

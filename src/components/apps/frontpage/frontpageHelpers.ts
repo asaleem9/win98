@@ -73,3 +73,9 @@ export function buildPath(dir: string, name: string): string {
   const cleanDir = dir.replace(/\\+$/, '');
   return `${cleanDir}\\${name}`;
 }
+
+/** The GeoCities member slug for a display name: lowercased, alphanumeric only,
+ * e.g. "Surf Dude 98" → "surfdude98". Used for the ~name in a published URL. */
+export function geocitiesSlug(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
+}

@@ -1,7 +1,9 @@
 // Pure helpers for the MS-DOS prompt: tokenizing input, resolving paths
-// against a current directory, formatting `dir /w` output, and matching
-// Tab-completion candidates. Kept free of React/context so they're testable
-// in isolation.
+// against a current directory, formatting `dir /w` output, matching
+// Tab-completion candidates, and planning an `xcopy` tree walk. Kept free of
+// React/context so they're testable in isolation.
+
+import type { FSNode } from '@/types/filesystem';
 
 /** Splits a raw command line into whitespace-separated tokens. */
 export function tokenize(rawCmd: string): string[] {
@@ -56,6 +58,42 @@ export function formatDirWide(entries: DirEntry[], columnsPerRow = 5, columnWidt
     lines.push(row.map((label) => label.padEnd(columnWidth)).join('').trimEnd());
   }
   return lines;
+}
+
+/** True for a Y/YES confirmation answer (case-insensitive). */
+export function isAffirmative(input: string): boolean {
+  return /^y(es)?$/i.test(input.trim());
+}
+
+export interface XcopyOp {
+  kind: 'folder' | 'file';
+  /** Destination directory the entry is created in. */
+  parent: string;
+  name: string;
+  content: string;
+}
+
+/**
+ * Plans the ordered create-operations to copy the children of directory `src`
+ * into `destDir`. Parents always precede their children so each op resolves
+ * against a directory that already exists. With `recursive` false only the
+ * immediate files are copied (subdirectories are skipped, like plain xcopy).
+ */
+export function planXcopyDir(src: FSNode, destDir: string, recursive: boolean): XcopyOp[] {
+  const ops: XcopyOp[] = [];
+  const join = (dir: string, name: string) => (dir === 'C:\\' ? `C:\\${name}` : `${dir}\\${name}`);
+  const walk = (node: FSNode, dir: string) => {
+    for (const child of node.children ?? []) {
+      if (child.type === 'file') {
+        ops.push({ kind: 'file', parent: dir, name: child.name, content: child.content ?? '' });
+      } else if (child.type === 'directory' && recursive) {
+        ops.push({ kind: 'folder', parent: dir, name: child.name, content: '' });
+        walk(child, join(dir, child.name));
+      }
+    }
+  };
+  walk(src, destDir);
+  return ops;
 }
 
 /** Returns candidate names in `names` that start with `partial` (case-insensitive). */

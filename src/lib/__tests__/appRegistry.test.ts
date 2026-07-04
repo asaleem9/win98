@@ -28,8 +28,15 @@ describe('getApp', () => {
 });
 
 describe('getAllApps', () => {
-  it('returns an array with 60 entries', () => {
-    expect(getAllApps()).toHaveLength(60);
+  it('returns every registered app exactly once', () => {
+    const apps = getAllApps();
+    // Derive the expected count from the registry itself so adding an app
+    // in one category file doesn't break an unrelated change's test run.
+    expect(apps.length).toBe(new Set(apps.map((a) => a.id)).size);
+    expect(apps.length).toBeGreaterThanOrEqual(63);
+    for (const app of apps) {
+      expect(getApp(app.id)).toBe(app);
+    }
   });
 });
 

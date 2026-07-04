@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Snow field -->
+  <rect x="1" y="1" width="14" height="14" fill="#FFFFFF"/>
+  <rect x="1" y="1" width="14" height="1" fill="#C0DCE8"/>
+  <rect x="14" y="1" width="1" height="14" fill="#A0B8C8"/>
+  <!-- Pine tree -->
+  <rect x="11" y="2" width="2" height="2" fill="#008000"/>
+  <rect x="10" y="4" width="4" height="2" fill="#007000"/>
+  <rect x="11" y="6" width="1" height="1" fill="#804000"/>
+  <!-- Skier: head -->
+  <rect x="5" y="3" width="2" height="2" fill="#F0C8A0"/>
+  <!-- Skier: jacket -->
+  <rect x="4" y="5" width="4" height="3" fill="#F0D000"/>
+  <!-- Skier: legs -->
+  <rect x="5" y="8" width="1" height="2" fill="#303030"/>
+  <rect x="7" y="8" width="1" height="2" fill="#303030"/>
+  <!-- Skis -->
+  <rect x="3" y="10" width="6" height="1" fill="#D00000"/>
+  <rect x="5" y="11" width="6" height="1" fill="#D00000"/>
+  <!-- Yeti peek -->
+  <rect x="11" y="11" width="3" height="4" fill="#B8C8C8"/>
+  <rect x="12" y="12" width="1" height="1" fill="#000000"/>
+</svg>

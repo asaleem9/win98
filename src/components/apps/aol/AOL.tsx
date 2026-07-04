@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { Button98 } from '@/components/ui/Button98';
 import { Input98 } from '@/components/ui/Input98';
 import { ProgressBar98 } from '@/components/ui/ProgressBar98';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { standardHelpMenu } from '@/lib/menus';
 import { useWindows } from '@/contexts/WindowContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { playSound } from '@/lib/sounds';
+
+const APP_ID = 'aol';
 
 const CONNECTION_STEPS = [
   'Finding AOL access number...',
@@ -112,6 +117,13 @@ const CHANNEL_CONTENT: Record<string, ChannelContent> = {
   },
 };
 
+// Headlines that jump out to a real page in Internet Explorer.
+const HEADLINE_LINKS: Record<string, string> = {
+  'Is your computer ready for Y2K?': 'http://www.y2k.com',
+  "Amazon.com — Earth's biggest bookstore": 'http://www.amazon.com',
+  'eBay: Bid on millions of items': 'http://www.ebay.com',
+};
+
 const SPAM_EMAILS = [
   { from: 'prince_nigeria@aol.com', subject: 'URGENT: I Need Your Help Moving $45,000,000 USD', date: '12/14/98' },
   { from: 'FREE_STUFF@juno.com', subject: '!!! FREE VACATION !!! YOU HAVE WON !!!', date: '12/14/98' },
@@ -128,14 +140,22 @@ const TOOLBAR_BUTTONS = ['Read', 'Write', 'Mail Center', 'Print', 'My Files', 'M
 type Phase = 'connecting' | 'signoff' | 'main' | 'mail' | 'channel';
 
 export default function AOL({ windowId }: AppComponentProps) {
-  void windowId;
-  const { openWindow } = useWindows();
-  const [phase, setPhase] = useState<Phase>('connecting');
+  const { openWindow, closeWindow } = useWindows();
+  const { getAppPref, setAppPref } = useSettings();
+
+  // A returning member skips the dial theater and lands straight in the lobby.
+  const [phase, setPhase] = useState<Phase>(() =>
+    getAppPref<boolean>(APP_ID, 'signedOn', false) ? 'main' : 'connecting',
+  );
   const [connectionStep, setConnectionStep] = useState(0);
   const [connectionProgress, setConnectionProgress] = useState(0);
   const [showMailNotification, setShowMailNotification] = useState(true);
   const [activeChannel, setActiveChannel] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
+  const [showKeywordPrompt, setShowKeywordPrompt] = useState(false);
+  const [readMail, setReadMail] = useState<number[]>(() => getAppPref<number[]>(APP_ID, 'readMail', []));
+
+  const unreadCount = Math.max(0, SPAM_EMAILS.length - readMail.length);
 
   // Modem handshake tone plays once at the start of the dial sequence.
   useEffect(() => {
@@ -167,6 +187,7 @@ export default function AOL({ windowId }: AppComponentProps) {
         setConnectionStep((s) => s + 1);
       } else {
         setPhase('main');
+        setAppPref(APP_ID, 'signedOn', true);
       }
     }, STEP_DURATION);
 
@@ -174,13 +195,14 @@ export default function AOL({ windowId }: AppComponentProps) {
       clearInterval(progressInterval);
       clearTimeout(stepTimer);
     };
-  }, [phase, connectionStep]);
+  }, [phase, connectionStep, setAppPref]);
 
-  const cancelConnect = () => {
+  const cancelConnect = useCallback(() => {
     setPhase('signoff');
     setConnectionStep(0);
     setConnectionProgress(0);
-  };
+    setAppPref(APP_ID, 'signedOn', false);
+  }, [setAppPref]);
 
   const reconnect = () => {
     setPhase('connecting');
@@ -188,10 +210,28 @@ export default function AOL({ windowId }: AppComponentProps) {
     setConnectionProgress(0);
   };
 
-  const openChannel = (name: string) => {
+  const openChannel = useCallback((name: string) => {
     setActiveChannel(name);
     setPhase('channel');
-  };
+  }, []);
+
+  const openHeadlineLink = useCallback((url: string) => {
+    openWindow('ie5', { launchParams: { url } });
+  }, [openWindow]);
+
+  const markRead = useCallback((index: number) => {
+    if (readMail.includes(index)) return;
+    const next = [...readMail, index];
+    setReadMail(next);
+    setAppPref(APP_ID, 'readMail', next);
+  }, [readMail, setAppPref]);
+
+  const composeMailGag = useCallback(() => {
+    showSystemError(
+      'Write Mail',
+      'Composing mail is not available in this AOL preview.\n\nTo write and send e-mail, please connect using the complete America Online 4.0 software.',
+    );
+  }, []);
 
   const handleToolbar = (btn: string) => {
     switch (btn) {
@@ -217,8 +257,9 @@ export default function AOL({ windowId }: AppComponentProps) {
     }
   };
 
-  const goKeyword = () => {
-    const kw = keyword.trim().toLowerCase();
+  const goKeyword = (value?: string) => {
+    const source = value ?? keyword;
+    const kw = source.trim().toLowerCase();
     if (!kw) return;
     if (kw === 'mail' || kw === 'mailbox') {
       setPhase('mail');
@@ -230,9 +271,36 @@ export default function AOL({ windowId }: AppComponentProps) {
       openChannel(match.name);
       setKeyword('');
     } else {
-      showSystemError('Keyword Not Found', `AOL does not recognize the keyword "${keyword.trim()}".\n\nPlease check your spelling, or click Search to look for related content.`);
+      showSystemError('Keyword Not Found', `AOL does not recognize the keyword "${source.trim()}".\n\nPlease check your spelling, or click Search to look for related content.`);
     }
   };
+
+  const menus: MenuDefinition[] = useMemo(() => [
+    {
+      label: '&File',
+      items: [
+        { label: 'Sign &Off', onClick: cancelConnect },
+        { label: '', separator: true },
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: '&Mail',
+      items: [
+        { label: '&Read New Mail', onClick: () => setPhase('mail') },
+        { label: '&Compose Mail...', onClick: composeMailGag },
+      ],
+    },
+    {
+      label: '&Go To',
+      items: [
+        { label: '&Keyword...', onClick: () => setShowKeywordPrompt(true) },
+        { label: '', separator: true },
+        ...CHANNELS.map((c) => ({ label: c.name, onClick: () => openChannel(c.name) })),
+      ],
+    },
+    standardHelpMenu('America Online'),
+  ], [cancelConnect, closeWindow, windowId, composeMailGag, openChannel]);
 
   if (phase === 'connecting') {
     return <ConnectionDialog step={connectionStep} progress={connectionProgress} onCancel={cancelConnect} />;
@@ -250,84 +318,89 @@ export default function AOL({ windowId }: AppComponentProps) {
     );
   }
 
-  if (phase === 'mail') {
-    return <MailInbox onBack={() => setPhase('main')} />;
-  }
-
-  if (phase === 'channel' && activeChannel) {
-    return (
-      <ChannelPage
-        channel={CHANNELS.find((c) => c.name === activeChannel)!}
-        content={CHANNEL_CONTENT[activeChannel]}
-        onBack={() => setPhase('main')}
-        onToolbar={handleToolbar}
-        keyword={keyword}
-        setKeyword={setKeyword}
-        goKeyword={goKeyword}
-      />
-    );
-  }
-
   return (
-    <div className="flex-1 flex flex-col bg-[#dfe8f0] font-[family-name:var(--win98-font)] text-[11px]">
-      <AOLToolbar onToolbar={handleToolbar} />
-      <KeywordBar keyword={keyword} setKeyword={setKeyword} goKeyword={goKeyword} />
+    <div className="relative flex-1 flex flex-col bg-[#dfe8f0] font-[family-name:var(--win98-font)] text-[11px]">
+      <MenuBar menus={menus} windowId={windowId} />
 
-      <div className="flex-1 overflow-auto p-4">
-        {showMailNotification && (
-          <div className="bg-[#ffffcc] border-2 border-[#cc9900] p-3 mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="text-[24px]">📬</div>
-              <div>
-                <div className="font-bold text-[14px] text-[#cc6600]">You&apos;ve Got Mail!</div>
-                <div className="text-[11px] text-[#666]">You have {SPAM_EMAILS.length} new messages</div>
+      {phase === 'mail' ? (
+        <MailInbox onBack={() => setPhase('main')} readMail={readMail} onRead={markRead} />
+      ) : phase === 'channel' && activeChannel ? (
+        <ChannelPage
+          channel={CHANNELS.find((c) => c.name === activeChannel)!}
+          content={CHANNEL_CONTENT[activeChannel]}
+          onBack={() => setPhase('main')}
+          onToolbar={handleToolbar}
+          keyword={keyword}
+          setKeyword={setKeyword}
+          goKeyword={goKeyword}
+          onHeadline={openHeadlineLink}
+        />
+      ) : (
+        <>
+          <AOLToolbar onToolbar={handleToolbar} />
+          <KeywordBar keyword={keyword} setKeyword={setKeyword} goKeyword={goKeyword} />
+
+          <div className="flex-1 overflow-auto p-4">
+            {showMailNotification && (
+              <div className="bg-[#ffffcc] border-2 border-[#cc9900] p-3 mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="text-[24px]">📬</div>
+                  <div>
+                    <div className="font-bold text-[14px] text-[#cc6600]">You&apos;ve Got Mail!</div>
+                    <div className="text-[11px] text-[#666]">You have {unreadCount} new {unreadCount === 1 ? 'message' : 'messages'}</div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button98 className="min-w-[60px]" onClick={() => setPhase('mail')}>Read Mail</Button98>
+                  <Button98 className="min-w-[40px] min-h-0" onClick={() => setShowMailNotification(false)}>OK</Button98>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white border border-[#999] p-4 mb-4 text-center">
+              <div className="text-[20px] font-bold text-[#336699] mb-1" style={{ fontFamily: 'Arial, sans-serif' }}>
+                Welcome, SurfDude98!
+              </div>
+              <div className="text-[12px] text-[#666]">
+                America Online 4.0 &mdash; So easy to use, no wonder it&apos;s #1
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button98 className="min-w-[60px]" onClick={() => setPhase('mail')}>Read Mail</Button98>
-              <Button98 className="min-w-[40px] min-h-0" onClick={() => setShowMailNotification(false)}>OK</Button98>
+
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {CHANNELS.map((channel) => (
+                <button
+                  key={channel.name}
+                  onClick={() => openChannel(channel.name)}
+                  className="bg-white border border-[#999] p-3 text-center cursor-pointer hover:bg-[#eef3f8] transition-colors"
+                >
+                  <div className="text-[20px] mb-1">{channel.icon}</div>
+                  <div className="text-[11px] font-bold" style={{ color: channel.color }}>{channel.name}</div>
+                </button>
+              ))}
+            </div>
+
+            <div className="bg-white border border-[#999] p-3">
+              <div className="font-bold text-[13px] text-[#336699] mb-2">AOL Today</div>
+              <div className="space-y-1 text-[11px]">
+                {CHANNEL_CONTENT['AOL Today'].headlines.map((h) => (
+                  <div key={h.title} className="text-[#0000cc] underline cursor-pointer" onClick={() => openChannel('AOL Today')}>
+                    {h.title}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        )}
 
-        <div className="bg-white border border-[#999] p-4 mb-4 text-center">
-          <div className="text-[20px] font-bold text-[#336699] mb-1" style={{ fontFamily: 'Arial, sans-serif' }}>
-            Welcome, SurfDude98!
+          <div className="flex items-center h-[20px] px-2 bg-[#336699] text-white text-[10px]">
+            <span>Connected at 28,800 bps</span>
+            <span className="ml-auto">Keyword: Welcome</span>
           </div>
-          <div className="text-[12px] text-[#666]">
-            America Online 4.0 &mdash; So easy to use, no wonder it&apos;s #1
-          </div>
-        </div>
+        </>
+      )}
 
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          {CHANNELS.map((channel) => (
-            <button
-              key={channel.name}
-              onClick={() => openChannel(channel.name)}
-              className="bg-white border border-[#999] p-3 text-center cursor-pointer hover:bg-[#eef3f8] transition-colors"
-            >
-              <div className="text-[20px] mb-1">{channel.icon}</div>
-              <div className="text-[11px] font-bold" style={{ color: channel.color }}>{channel.name}</div>
-            </button>
-          ))}
-        </div>
-
-        <div className="bg-white border border-[#999] p-3">
-          <div className="font-bold text-[13px] text-[#336699] mb-2">AOL Today</div>
-          <div className="space-y-1 text-[11px]">
-            {CHANNEL_CONTENT['AOL Today'].headlines.map((h) => (
-              <div key={h.title} className="text-[#0000cc] underline cursor-pointer" onClick={() => openChannel('AOL Today')}>
-                {h.title}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center h-[20px] px-2 bg-[#336699] text-white text-[10px]">
-        <span>Connected at 28,800 bps</span>
-        <span className="ml-auto">Keyword: Welcome</span>
-      </div>
+      {showKeywordPrompt && (
+        <KeywordPrompt onGo={goKeyword} onClose={() => setShowKeywordPrompt(false)} />
+      )}
     </div>
   );
 }
@@ -360,12 +433,43 @@ function KeywordBar({ keyword, setKeyword, goKeyword }: { keyword: string; setKe
         className="flex-1 h-[18px]"
         placeholder="Type a keyword (e.g. News, Sports, Weather)"
       />
-      <Button98 className="min-w-[40px] min-h-[18px] h-[18px]" onClick={goKeyword}>Go</Button98>
+      <Button98 className="min-w-[40px] min-h-[18px] h-[18px]" onClick={() => goKeyword()}>Go</Button98>
     </div>
   );
 }
 
-function ChannelPage({ channel, content, onBack, onToolbar, keyword, setKeyword, goKeyword }: {
+function KeywordPrompt({ onGo, onClose }: { onGo: (kw: string) => void; onClose: () => void }) {
+  const [value, setValue] = useState('');
+
+  const submit = () => {
+    const kw = value.trim();
+    onClose();
+    if (kw) onGo(kw);
+  };
+
+  return (
+    <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/30">
+      <div className="w-[320px] bg-[var(--win98-button-face)] border-2 border-solid border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] shadow-[inset_-1px_-1px_0_var(--win98-button-shadow),inset_1px_1px_0_var(--win98-button-light)] p-3">
+        <div className="text-[16px] font-bold text-[#336699] mb-2" style={{ fontFamily: 'Arial, sans-serif' }}>Keyword</div>
+        <div className="text-[11px] mb-2">Type a keyword to go straight to that area of America Online:</div>
+        <Input98
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }}
+          className="w-full h-[18px] mb-3"
+          placeholder="e.g. News, Sports, Weather"
+        />
+        <div className="flex justify-end gap-2">
+          <Button98 className="min-w-[70px]" onClick={submit}>Go</Button98>
+          <Button98 className="min-w-[70px]" onClick={onClose}>Cancel</Button98>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChannelPage({ channel, content, onBack, onToolbar, keyword, setKeyword, goKeyword, onHeadline }: {
   channel: Channel;
   content?: ChannelContent;
   onBack: () => void;
@@ -373,6 +477,7 @@ function ChannelPage({ channel, content, onBack, onToolbar, keyword, setKeyword,
   keyword: string;
   setKeyword: (v: string) => void;
   goKeyword: () => void;
+  onHeadline: (url: string) => void;
 }) {
   return (
     <div className="flex-1 flex flex-col bg-[#dfe8f0] font-[family-name:var(--win98-font)] text-[11px]">
@@ -392,12 +497,28 @@ function ChannelPage({ channel, content, onBack, onToolbar, keyword, setKeyword,
         </div>
 
         <div className="p-4 space-y-3">
-          {content ? content.headlines.map((h) => (
-            <div key={h.title} className="bg-white border border-[#999] p-3">
-              <div className="text-[13px] font-bold text-[#0000cc] underline cursor-pointer mb-1">{h.title}</div>
-              <div className="text-[11px] text-[#333]">{h.blurb}</div>
-            </div>
-          )) : (
+          {content ? content.headlines.map((h) => {
+            const link = HEADLINE_LINKS[h.title];
+            return (
+              <div key={h.title} className="bg-white border border-[#999] p-3">
+                <div
+                  className="text-[13px] font-bold text-[#0000cc] underline cursor-pointer mb-1"
+                  onClick={link ? () => onHeadline(link) : undefined}
+                >
+                  {h.title}
+                </div>
+                <div className="text-[11px] text-[#333]">{h.blurb}</div>
+                {link && (
+                  <button
+                    onClick={() => onHeadline(link)}
+                    className="mt-2 text-[10px] font-bold text-[#0000cc] underline cursor-pointer"
+                  >
+                    Read more »
+                  </button>
+                )}
+              </div>
+            );
+          }) : (
             <div className="bg-white border border-[#999] p-4 text-center text-[#666]">
               This channel is under construction. Check back soon!
             </div>
@@ -454,7 +575,7 @@ function ConnectionDialog({ step, progress, onCancel }: { step: number; progress
   );
 }
 
-function MailInbox({ onBack }: { onBack: () => void }) {
+function MailInbox({ onBack, readMail, onRead }: { onBack: () => void; readMail: number[]; onRead: (index: number) => void }) {
   const [selectedEmail, setSelectedEmail] = useState<number | null>(null);
 
   const bodies = [
@@ -468,11 +589,18 @@ function MailInbox({ onBack }: { onBack: () => void }) {
     'CONGRATULATIONS! You have been randomly selected as our 1,000,000th member! To claim your prize of $1,000 in AOL credits, simply reply with your full name, address, and credit card number...',
   ];
 
+  const unreadCount = Math.max(0, SPAM_EMAILS.length - readMail.length);
+
+  const selectEmail = (i: number) => {
+    setSelectedEmail(i);
+    onRead(i);
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px]">
       <div className="bg-[#336699] flex items-center px-2 py-1 gap-1">
         <button onClick={onBack} className="text-white text-[10px] px-2 py-[2px] hover:bg-[#4477aa] rounded-sm cursor-pointer">← Back</button>
-        <span className="text-white font-bold text-[12px] ml-2">New Mail ({SPAM_EMAILS.length})</span>
+        <span className="text-white font-bold text-[12px] ml-2">New Mail ({unreadCount})</span>
       </div>
 
       <div className="flex-1 overflow-auto bg-white">
@@ -486,18 +614,21 @@ function MailInbox({ onBack }: { onBack: () => void }) {
             </tr>
           </thead>
           <tbody>
-            {SPAM_EMAILS.map((email, i) => (
-              <tr
-                key={i}
-                className={`cursor-pointer ${selectedEmail === i ? 'bg-[var(--win98-highlight)] text-white' : 'hover:bg-[#e8e8e8]'}`}
-                onClick={() => setSelectedEmail(i)}
-              >
-                <td className="px-2 py-[2px]">📧</td>
-                <td className="px-2 py-[2px] truncate max-w-[150px]">{email.from}</td>
-                <td className="px-2 py-[2px] truncate font-bold">{email.subject}</td>
-                <td className="px-2 py-[2px]">{email.date}</td>
-              </tr>
-            ))}
+            {SPAM_EMAILS.map((email, i) => {
+              const isRead = readMail.includes(i);
+              return (
+                <tr
+                  key={i}
+                  className={`cursor-pointer ${selectedEmail === i ? 'bg-[var(--win98-highlight)] text-white' : 'hover:bg-[#e8e8e8]'}`}
+                  onClick={() => selectEmail(i)}
+                >
+                  <td className="px-2 py-[2px]">{isRead ? '📭' : '📧'}</td>
+                  <td className="px-2 py-[2px] truncate max-w-[150px]">{email.from}</td>
+                  <td className={`px-2 py-[2px] truncate ${isRead ? '' : 'font-bold'}`}>{email.subject}</td>
+                  <td className="px-2 py-[2px]">{email.date}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

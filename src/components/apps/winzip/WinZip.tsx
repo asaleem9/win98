@@ -13,10 +13,9 @@ export default function WinZip(props: AppComponentProps) {
         ext: 'zip',
         accent: '#c8a415',
         columns: 'zip',
-        menus: ['File', 'Actions', 'Options', 'Help'],
         toolbar: [
-          { label: 'New', icon: '📄', action: 'noop' },
-          { label: 'Open', icon: '📂', action: 'noop' },
+          { label: 'New', icon: '📄', action: 'new' },
+          { label: 'Open', icon: '📂', action: 'open' },
           { label: 'Add', icon: '➕', action: 'add' },
           { label: 'Extract', icon: '📤', action: 'extract' },
           { label: 'View', icon: '👁️', action: 'view' },

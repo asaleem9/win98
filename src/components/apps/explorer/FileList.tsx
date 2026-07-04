@@ -19,6 +19,7 @@ interface FileListProps {
   rows: FileRow[];
   mode: ListViewMode;
   selected: Set<string>;
+  cutPaths: Set<string>;
   renamingId: string | null;
   columns: { key: string; label: string; width?: number }[];
   onSelectClick: (id: string, e: MouseEvent) => void;
@@ -33,6 +34,7 @@ export function FileList({
   rows,
   mode,
   selected,
+  cutPaths,
   renamingId,
   columns,
   onSelectClick,
@@ -83,6 +85,7 @@ export function FileList({
             mode={mode}
             columns={columns}
             isSelected={selected.has(row.id)}
+            isCut={cutPaths.has(row.id)}
             isRenaming={renamingId === row.id}
             onSelectClick={onSelectClick}
             onOpen={onOpen}
@@ -101,6 +104,7 @@ function FileCell({
   mode,
   columns,
   isSelected,
+  isCut,
   isRenaming,
   onSelectClick,
   onOpen,
@@ -112,6 +116,7 @@ function FileCell({
   mode: ListViewMode;
   columns: { key: string; label: string; width?: number }[];
   isSelected: boolean;
+  isCut: boolean;
   isRenaming: boolean;
   onSelectClick: (id: string, e: MouseEvent) => void;
   onOpen: (id: string) => void;
@@ -133,7 +138,7 @@ function FileCell({
 
   if (mode === 'large-icons') {
     return (
-      <div className="flex flex-col items-center w-[70px] p-1 cursor-default select-none" onClick={handleClick} onDoubleClick={handleDouble} onContextMenu={handleContext}>
+      <div className={cn('flex flex-col items-center w-[70px] p-1 cursor-default select-none', isCut && 'opacity-50')} data-ghost={isCut || undefined} onClick={handleClick} onDoubleClick={handleDouble} onContextMenu={handleContext}>
         <div className={cn('p-[2px]', isSelected && 'bg-[var(--win98-highlight)]')}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={row.icon} alt="" className="w-8 h-8" style={{ imageRendering: 'pixelated' }} />
@@ -145,7 +150,7 @@ function FileCell({
 
   if (mode === 'details') {
     return (
-      <div className={cn('flex items-center cursor-default select-none', isSelected && 'bg-[var(--win98-highlight)] text-white')} onClick={handleClick} onDoubleClick={handleDouble} onContextMenu={handleContext}>
+      <div className={cn('flex items-center cursor-default select-none', isSelected && 'bg-[var(--win98-highlight)] text-white', isCut && 'opacity-50')} data-ghost={isCut || undefined} onClick={handleClick} onDoubleClick={handleDouble} onContextMenu={handleContext}>
         {columns.map((col) => (
           <div key={col.key} className="px-2 py-[1px] truncate flex items-center gap-1" style={{ width: col.width || 120 }}>
             {col.key === 'name' && (
@@ -165,7 +170,8 @@ function FileCell({
   // list + small-icons
   return (
     <div
-      className={cn('flex items-center gap-1 px-1 py-[1px] cursor-default select-none', mode === 'list' ? 'w-[160px]' : 'w-[200px]', isSelected && !isRenaming && 'bg-[var(--win98-highlight)] text-white')}
+      className={cn('flex items-center gap-1 px-1 py-[1px] cursor-default select-none', mode === 'list' ? 'w-[160px]' : 'w-[200px]', isSelected && !isRenaming && 'bg-[var(--win98-highlight)] text-white', isCut && 'opacity-50')}
+      data-ghost={isCut || undefined}
       onClick={handleClick}
       onDoubleClick={handleDouble}
       onContextMenu={handleContext}

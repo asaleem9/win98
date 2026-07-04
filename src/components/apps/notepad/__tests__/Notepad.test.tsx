@@ -1,9 +1,15 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/helpers/renderWithProviders';
+import { setClipboard, __resetClipboard } from '@/lib/clipboard';
 import Notepad from '../Notepad';
 
 describe('Notepad', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetClipboard();
+  });
+
   it('renders an editable text area', () => {
     renderWithProviders(<Notepad windowId="np-1" />);
     expect(screen.getByRole('textbox')).toBeInTheDocument();
@@ -53,5 +59,42 @@ describe('Notepad', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Help' }));
     await user.click(screen.getByRole('menuitem', { name: 'About Notepad' }));
     expect(await screen.findByText(/Version 4\.10\.1998/)).toBeInTheDocument();
+  });
+
+  it('applies a chosen font and persists it across remounts', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderWithProviders(<Notepad windowId="w1" />);
+
+    await user.click(screen.getByRole('menuitem', { name: 'Format' }));
+    await user.click(screen.getByRole('menuitem', { name: /Font/ }));
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Font' }), 'Courier New');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Size' }), '16');
+    await user.click(screen.getByRole('button', { name: 'OK' }));
+
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(ta.style.fontFamily).toContain('Courier New');
+    expect(ta.style.fontSize).toBe('16px');
+
+    // Remount from a clean tree — the pref should be restored from localStorage.
+    unmount();
+    renderWithProviders(<Notepad windowId="w1" />);
+    const restored = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(restored.style.fontFamily).toContain('Courier New');
+    expect(restored.style.fontSize).toBe('16px');
+  });
+
+  it('enables Edit > Paste only while the shared clipboard holds text', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Notepad windowId="w1" />);
+
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }));
+    expect(screen.getByRole('menuitem', { name: /Paste/ })).toBeDisabled();
+
+    act(() => setClipboard({ kind: 'text', text: 'clip' }));
+    expect(screen.getByRole('menuitem', { name: /Paste/ })).not.toBeDisabled();
+
+    act(() => setClipboard({ kind: 'image', dataUrl: 'data:image/png;base64,x' }));
+    expect(screen.getByRole('menuitem', { name: /Paste/ })).toBeDisabled();
   });
 });

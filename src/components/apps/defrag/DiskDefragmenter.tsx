@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { useFileSystem } from '@/contexts/FileSystemContext';
 import { Button98 } from '@/components/ui/Button98';
@@ -10,47 +10,64 @@ import { ProgressBar98 } from '@/components/ui/ProgressBar98';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
 import { Dialog98 } from '@/components/ui/Dialog98';
 import { cn } from '@/lib/cn';
-import { walkFsStats, buildBlockMap, percentFragmented, BlockType, BLOCK_GRID_SIZE } from './defragHelpers';
+import { buildBlockMap, BlockType, BLOCK_GRID_SIZE } from './defragHelpers';
 
 const BLOCK_COLORS: Record<BlockType, string> = {
   free: '#FFFFFF',
   used: '#0000CC',
   unmovable: '#00CC00',
   directory: '#CCCC00',
+  fragmented: '#CC0000',
 };
 
 const LEGEND: { type: BlockType | 'reading' | 'writing'; label: string; color: string }[] = [
-  { type: 'used', label: 'Data', color: BLOCK_COLORS.used },
+  { type: 'used', label: 'Contiguous', color: BLOCK_COLORS.used },
+  { type: 'fragmented', label: 'Fragmented', color: BLOCK_COLORS.fragmented },
   { type: 'unmovable', label: 'Unmovable', color: BLOCK_COLORS.unmovable },
   { type: 'reading', label: 'Reading', color: '#00FFFF' },
   { type: 'writing', label: 'Writing', color: '#FF00FF' },
   { type: 'free', label: 'Free', color: BLOCK_COLORS.free },
 ];
 
+// Below this percentage Windows 98 recommends against defragmenting.
+const RECOMMEND_THRESHOLD = 10;
+
 export default function DiskDefragmenter({ windowId }: AppComponentProps) {
-  const { root } = useFileSystem();
+  void windowId;
+  const { root, fragments, getFragmentationStats, clearFragmentation } = useFileSystem();
   const [drive, setDrive] = useState('C:');
   const [showDetails, setShowDetails] = useState(true);
-  const [blocks, setBlocks] = useState<BlockType[]>(() => buildBlockMap(root));
+  const [blocks, setBlocks] = useState<BlockType[]>(() => buildBlockMap(root, fragments));
   const [defragging, setDefragging] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Ready');
   const [cursorIndex, setCursorIndex] = useState<number | null>(null);
   const [cursorMode, setCursorMode] = useState<'reading' | 'writing'>('reading');
-  const [showComplete, setShowComplete] = useState(false);
+  const [dialog, setDialog] = useState<null | { title: string; message: string }>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const stats = useMemo(() => walkFsStats(root), [root]);
-  const fragPct = useMemo(() => percentFragmented(stats.fileCount), [stats.fileCount]);
+  // Recomputed on every render so it reflects the live filesystem + fragment map.
+  const frag = getFragmentationStats();
 
   const analyze = useCallback(() => {
-    setBlocks(buildBlockMap(root));
+    setBlocks(buildBlockMap(root, fragments));
     setProgress(0);
-    setStatus(`Drive ${drive} - Analysis complete. ${fragPct}% fragmented.`);
-  }, [drive, root, fragPct]);
+    const pct = getFragmentationStats().fragPercent;
+    setStatus(`Drive ${drive} - Analysis complete. ${pct}% fragmented.`);
+    setDialog({
+      title: 'Disk Defragmenter',
+      message:
+        pct < RECOMMEND_THRESHOLD
+          ? `Drive ${drive} is ${pct}% fragmented.\n\nYou do not need to defragment this drive now.`
+          : `Drive ${drive} is ${pct}% fragmented.\n\nYou should defragment this drive now.`,
+    });
+  }, [drive, root, fragments, getFragmentationStats]);
 
   const defragment = useCallback(() => {
     if (defragging) return;
+    const before = getFragmentationStats().fragPercent;
+    // The consolidated target: same files, laid out contiguously with no fragments.
+    const target = buildBlockMap(root, {});
     setDefragging(true);
     setProgress(0);
     setStatus(`Defragmenting drive ${drive}...`);
@@ -69,31 +86,32 @@ export default function DiskDefragmenter({ windowId }: AppComponentProps) {
       setCursorMode(step % 6 < 3 ? 'reading' : 'writing');
       setCursorIndex(step % 6 < 3 ? readIdx : writeIdx);
 
+      // Reveal the consolidated layout one block at a time.
       setBlocks((prev) => {
-        const next = [...prev];
-        const unmovable = next.filter((b) => b === 'unmovable');
-        const dirs = next.filter((b) => b === 'directory');
-        const used = next.filter((b) => b === 'used');
-        const free = next.filter((b) => b === 'free');
-
-        const sortedCount = Math.min(step, total);
-        const sorted = [...unmovable, ...dirs, ...used, ...free];
-        const result = [...sorted.slice(0, sortedCount), ...next.slice(sortedCount)];
-        return result.slice(0, total);
+        const settled = Math.min(step, total);
+        return [...target.slice(0, settled), ...prev.slice(settled)].slice(0, total);
       });
 
       if (step < total) {
         timerRef.current = setTimeout(tick, 15);
       } else {
+        setBlocks(target);
+        clearFragmentation();
         setDefragging(false);
         setCursorIndex(null);
         setStatus(`Defragmentation of drive ${drive} is complete.`);
-        setShowComplete(true);
+        setDialog({
+          title: 'Disk Defragmenter',
+          message:
+            `Defragmentation of drive ${drive} is complete.\n\n` +
+            `Fragmentation before: ${before}%\n` +
+            `Fragmentation after: 0%`,
+        });
       }
     }
 
     tick();
-  }, [defragging, drive]);
+  }, [defragging, drive, root, getFragmentationStats, clearFragmentation]);
 
   const stop = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -113,7 +131,7 @@ export default function DiskDefragmenter({ windowId }: AppComponentProps) {
       {/* Toolbar */}
       <div className="flex items-center gap-2 p-2 border-b border-[var(--win98-button-shadow)]">
         <span>Select drive:</span>
-        <Select98 value={drive} onChange={(e) => setDrive(e.target.value)} className="w-[180px]">
+        <Select98 value={drive} onChange={(e) => setDrive(e.target.value)} className="w-[180px]" disabled={defragging}>
           <option value="C:">C: [WINDOWS98]</option>
           <option value="D:">D: [DATA]</option>
           <option value="A:">A: [3.5 Floppy]</option>
@@ -152,7 +170,7 @@ export default function DiskDefragmenter({ windowId }: AppComponentProps) {
           </div>
 
           {/* Legend */}
-          <div className="flex gap-4 mt-3">
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-3">
             {LEGEND.map(({ type, label, color }) => (
               <div key={type} className="flex items-center gap-1">
                 <div className="w-[10px] h-[8px] border border-[#808080]" style={{ backgroundColor: color }} />
@@ -165,6 +183,12 @@ export default function DiskDefragmenter({ windowId }: AppComponentProps) {
 
       {!showDetails && <div className="flex-1" />}
 
+      {/* Fragmentation readout */}
+      <div className="px-3 pb-1 flex items-center justify-between text-[10px]">
+        <span>{frag.fragmented} of {frag.files} files fragmented</span>
+        <span>{frag.fragPercent}% fragmented</span>
+      </div>
+
       {/* Progress */}
       <div className="px-3 pb-1">
         <ProgressBar98 value={progress} />
@@ -172,13 +196,13 @@ export default function DiskDefragmenter({ windowId }: AppComponentProps) {
 
       <StatusBar98 panels={[{ content: status }]} />
 
-      {showComplete && (
+      {dialog && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <Dialog98
-            title="Disk Defragmenter"
+            title={dialog.title}
             icon="info"
-            message={`Defragmentation of drive ${drive} is complete.`}
-            buttons={[{ label: 'OK', onClick: () => setShowComplete(false), default: true }]}
+            message={<span className="whitespace-pre-line">{dialog.message}</span>}
+            buttons={[{ label: 'OK', onClick: () => setDialog(null), default: true }]}
           />
         </div>
       )}

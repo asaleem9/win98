@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { Button98 } from '@/components/ui/Button98';
 import { Input98 } from '@/components/ui/Input98';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { ContextMenu, ContextMenuItem } from '@/components/desktop/ContextMenu';
+import { standardHelpMenu } from '@/lib/menus';
 import { useFileSystem } from '@/contexts/FileSystemContext';
 import { useWindows } from '@/contexts/WindowContext';
 import { showSystemError } from '@/hooks/useFileOpener';
@@ -32,6 +35,7 @@ interface DownloadItem {
   virus: boolean;
   playable: boolean;
   trackId?: string;
+  removed?: boolean;
 }
 
 const PLAYABLE_RESULTS: SearchResult[] = musicTracks.map((t, i) => ({
@@ -72,15 +76,16 @@ const RESULTS: SearchResult[] = [
 ];
 
 export default function LimeWire({ windowId }: AppComponentProps) {
-  void windowId;
   const { createFile } = useFileSystem();
-  const { openWindow } = useWindows();
+  const { openWindow, closeWindow } = useWindows();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [activeTab, setActiveTab] = useState<'search' | 'downloads'>('search');
   const [searched, setSearched] = useState(false);
+  const [selectedDownload, setSelectedDownload] = useState<number | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; index: number } | null>(null);
   const [network, setNetwork] = useState({ hosts: 34, files: 82113 });
   const downloadTimers = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
   const persistedRef = useRef<Set<number>>(new Set());
@@ -132,7 +137,7 @@ export default function LimeWire({ windowId }: AppComponentProps) {
       setDownloads((prev) => {
         const updated = [...prev];
         const dl = { ...updated[idx] };
-        if (!dl || dl.status === 'failed' || dl.status === 'complete') {
+        if (!dl || dl.status === 'failed' || dl.status === 'complete' || dl.removed) {
           clearInterval(timer);
           return prev;
         }
@@ -186,8 +191,69 @@ export default function LimeWire({ windowId }: AppComponentProps) {
     openWindow('winamp', { launchParams: { filePath: `${DOWNLOADS_DIR}\\${filename}` } });
   }, [openWindow]);
 
+  // Cancel a transfer (stops its timer and drops it from the list) — the way to
+  // dismiss a download that's stuck on HOST UNREACHABLE.
+  const cancelDownload = useCallback((index: number) => {
+    const timer = downloadTimers.current.get(index);
+    if (timer) { clearInterval(timer); downloadTimers.current.delete(index); }
+    setDownloads((prev) => prev.map((d, i) => (i === index ? { ...d, removed: true } : d)));
+    setSelectedDownload((sel) => (sel === index ? null : sel));
+    setMenu(null);
+  }, []);
+
+  const clearFinished = useCallback(() => {
+    setDownloads((prev) => prev.map((d) => (d.status === 'complete' ? { ...d, removed: true } : d)));
+    setMenu(null);
+  }, []);
+
+  const visibleDownloads = downloads.filter((d) => !d.removed);
+  const completedCount = downloads.filter((d) => d.status === 'complete' && !d.removed).length;
+
+  // What Actions > Cancel Transfer targets: a selected transfer if it's still
+  // going, otherwise the first live/stalled one.
+  const cancellableIndex = useMemo(() => {
+    const isCancellable = (d?: DownloadItem) =>
+      !!d && !d.removed && (d.status === 'downloading' || d.status === 'stalled');
+    if (selectedDownload !== null && isCancellable(downloads[selectedDownload])) return selectedDownload;
+    return downloads.findIndex(isCancellable);
+  }, [selectedDownload, downloads]);
+
+  const menus = useMemo<MenuDefinition[]>(() => [
+    {
+      label: '&File',
+      items: [
+        {
+          label: '&Open Downloads Folder',
+          onClick: () => openWindow('explorer', { launchParams: { filePath: DOWNLOADS_DIR } }),
+        },
+        { label: '', separator: true },
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: '&Actions',
+      items: [
+        { label: '&Cancel Transfer', onClick: () => cancelDownload(cancellableIndex), disabled: cancellableIndex < 0 },
+        { label: 'Clear &Finished', onClick: clearFinished, disabled: completedCount === 0 },
+      ],
+    },
+    standardHelpMenu('LimeWire'),
+  ], [openWindow, closeWindow, windowId, cancelDownload, cancellableIndex, clearFinished, completedCount]);
+
+  const contextItems = useMemo<ContextMenuItem[]>(() => {
+    if (!menu) return [];
+    const dl = downloads[menu.index];
+    return [
+      { label: 'Cancel', onClick: () => cancelDownload(menu.index), disabled: !dl || dl.removed },
+      { separator: true },
+      { label: 'Clear Finished', onClick: clearFinished, disabled: completedCount === 0 },
+    ];
+  }, [menu, downloads, cancelDownload, clearFinished, completedCount]);
+
   return (
     <div className="flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] overflow-hidden">
+      <MenuBar menus={menus} windowId={windowId} />
+
       {/* Header - green LimeWire brand */}
       <div className="flex items-center gap-2 px-3 py-[6px] bg-gradient-to-r from-[#339933] to-[#66cc33]">
         <span className="font-bold text-white text-[13px]">LimeWire</span>
@@ -226,7 +292,7 @@ export default function LimeWire({ windowId }: AppComponentProps) {
               activeTab === tab ? 'bg-[var(--win98-button-face)] font-bold' : 'bg-[var(--win98-button-shadow)]'
             }`}
           >
-            {tab === 'search' ? `Search${results.length ? ` (${results.length})` : ''}` : `Downloads (${downloads.length})`}
+            {tab === 'search' ? `Search${results.length ? ` (${results.length})` : ''}` : `Downloads (${visibleDownloads.length})`}
           </button>
         ))}
       </div>
@@ -270,7 +336,7 @@ export default function LimeWire({ windowId }: AppComponentProps) {
           </div>
         ) : (
           <div>
-            {downloads.length === 0 ? (
+            {visibleDownloads.length === 0 ? (
               <div className="flex items-center justify-center text-[#888] py-8">No active downloads</div>
             ) : (
               <table className="w-full text-[11px]">
@@ -282,8 +348,17 @@ export default function LimeWire({ windowId }: AppComponentProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {downloads.map((dl, i) => (
-                    <tr key={i} className="border-b border-[#eee]">
+                  {downloads.map((dl, i) => dl.removed ? null : (
+                    <tr
+                      key={i}
+                      className={`border-b border-[#eee] cursor-default ${selectedDownload === i ? 'bg-[var(--win98-highlight)] text-[var(--win98-highlight-text)]' : ''}`}
+                      onClick={() => setSelectedDownload(i)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setSelectedDownload(i);
+                        setMenu({ x: e.clientX, y: e.clientY, index: i });
+                      }}
+                    >
                       <td className="px-2 py-[2px]">{dl.filename}</td>
                       <td className="px-2 py-[2px]">
                         <div className="w-full h-[10px] bg-[#ddd] border border-[#999]">
@@ -319,9 +394,13 @@ export default function LimeWire({ windowId }: AppComponentProps) {
       <StatusBar98
         panels={[
           { content: `Hosts: ${network.hosts} | Files: ${network.files.toLocaleString()}` },
-          { content: `${downloads.filter((d) => d.status === 'downloading').length} active`, width: 60 },
+          { content: `${downloads.filter((d) => d.status === 'downloading' && !d.removed).length} active`, width: 60 },
         ]}
       />
+
+      {menu && (
+        <ContextMenu items={contextItems} position={{ x: menu.x, y: menu.y }} onClose={() => setMenu(null)} />
+      )}
     </div>
   );
 }

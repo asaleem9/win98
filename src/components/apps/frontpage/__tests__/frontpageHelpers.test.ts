@@ -1,4 +1,15 @@
-import { wrapSelection, wrapBlock, ensureHtmlExtension, buildPath } from '../frontpageHelpers';
+import { wrapSelection, wrapBlock, ensureHtmlExtension, buildPath, geocitiesSlug } from '../frontpageHelpers';
+
+describe('geocitiesSlug', () => {
+  it('lowercases and strips everything but letters and digits', () => {
+    expect(geocitiesSlug('Surf Dude 98')).toBe('surfdude98');
+    expect(geocitiesSlug('Dave!!!')).toBe('dave');
+  });
+  it('falls back to "user" when nothing usable remains', () => {
+    expect(geocitiesSlug('   ')).toBe('user');
+    expect(geocitiesSlug('***')).toBe('user');
+  });
+});
 
 describe('wrapSelection', () => {
   it('wraps a selected range and reports the selection around the wrapped text', () => {

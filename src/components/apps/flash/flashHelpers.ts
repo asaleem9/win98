@@ -33,3 +33,36 @@ export function nextLayerName(layers: { name: string }[]): string {
 export function isBlankFrame(snapshot: string | null): boolean {
   return snapshot === null;
 }
+
+export interface StageConfig {
+  width: number;
+  height: number;
+  bg: string;
+  fps: number;
+}
+
+export interface FlaDocument {
+  app: 'flash';
+  version: 1;
+  stage: StageConfig;
+  totalFrames: number;
+  layers: Layer[];
+}
+
+/** Serialize a movie to the compact .fla JSON we persist to the filesystem. */
+export function serializeFla(doc: FlaDocument): string {
+  return JSON.stringify(doc);
+}
+
+/** Parse a .fla payload back into a document, or null when it isn't ours. */
+export function deserializeFla(json: string): FlaDocument | null {
+  try {
+    const parsed = JSON.parse(json) as FlaDocument;
+    if (parsed && parsed.app === 'flash' && parsed.stage && Array.isArray(parsed.layers)) {
+      return parsed;
+    }
+  } catch {
+    // not JSON / not our shape
+  }
+  return null;
+}

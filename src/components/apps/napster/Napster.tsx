@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { Input98 } from '@/components/ui/Input98';
 import { Button98 } from '@/components/ui/Button98';
 import { ProgressBar98 } from '@/components/ui/ProgressBar98';
 import { StatusBar98 } from '@/components/ui/StatusBar98';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { ContextMenu, ContextMenuItem } from '@/components/desktop/ContextMenu';
+import { standardHelpMenu } from '@/lib/menus';
 import { useFileSystem } from '@/contexts/FileSystemContext';
 import { useWindows } from '@/contexts/WindowContext';
 import { musicTracks } from '@/lib/audio/tracks';
@@ -36,6 +39,7 @@ interface Download {
   stalled: boolean;
   complete: boolean;
   speed: string;
+  removed?: boolean;
 }
 
 function sanitize(s: string): string {
@@ -86,9 +90,8 @@ const SONG_DATABASE: SearchResult[] = [
 ];
 
 export default function Napster({ windowId }: AppComponentProps) {
-  void windowId;
   const { createFile } = useFileSystem();
-  const { openWindow } = useWindows();
+  const { openWindow, closeWindow } = useWindows();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -96,6 +99,8 @@ export default function Napster({ windowId }: AppComponentProps) {
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [activeTab, setActiveTab] = useState<'search' | 'downloads' | 'library'>('search');
   const [selectedResult, setSelectedResult] = useState<number | null>(null);
+  const [selectedDownload, setSelectedDownload] = useState<number | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; index: number } | null>(null);
   const [usersOnline, setUsersOnline] = useState(147203);
   const downloadTimers = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
   const persistedRef = useRef<Set<number>>(new Set());
@@ -150,7 +155,7 @@ export default function Napster({ windowId }: AppComponentProps) {
       setDownloads((prev) => {
         const updated = [...prev];
         const dl = { ...updated[downloadIndex] };
-        if (dl.complete || dl.stalled) return prev;
+        if (dl.complete || dl.stalled || dl.removed) return prev;
 
         dl.progress += (Math.random() * 3 + 1);
         if (stallAt > 0 && dl.progress >= stallAt) {
@@ -192,10 +197,70 @@ export default function Napster({ windowId }: AppComponentProps) {
     return () => { timers.forEach((timer) => clearInterval(timer)); };
   }, []);
 
-  const completed = downloads.filter((d) => d.complete);
+  // Cancel a transfer (clears its timer and drops it from the list). Works for
+  // the download that's forever stalled at 99% — that's how you dismiss it.
+  const cancelDownload = useCallback((index: number) => {
+    const timer = downloadTimers.current.get(index);
+    if (timer) { clearInterval(timer); downloadTimers.current.delete(index); }
+    setDownloads((prev) => prev.map((d, i) => (i === index ? { ...d, removed: true } : d)));
+    setSelectedDownload((sel) => (sel === index ? null : sel));
+    setMenu(null);
+  }, []);
+
+  const clearFinished = useCallback(() => {
+    setDownloads((prev) => prev.map((d) => (d.complete ? { ...d, removed: true } : d)));
+    setMenu(null);
+  }, []);
+
+  const completed = downloads.filter((d) => d.complete && !d.removed);
+  const visibleDownloads = downloads.filter((d) => !d.removed);
+
+  // The transfer that Actions > Cancel Transfer acts on: a selected one if it's
+  // still cancellable, otherwise the first live/stalled download.
+  const cancellableIndex = useMemo(() => {
+    if (selectedDownload !== null) {
+      const d = downloads[selectedDownload];
+      if (d && !d.removed && !d.complete) return selectedDownload;
+    }
+    return downloads.findIndex((d) => !d.removed && !d.complete);
+  }, [selectedDownload, downloads]);
+
+  const menus = useMemo<MenuDefinition[]>(() => [
+    {
+      label: '&File',
+      items: [
+        {
+          label: '&Open Downloads Folder',
+          onClick: () => openWindow('explorer', { launchParams: { filePath: DOWNLOADS_DIR } }),
+        },
+        { label: '', separator: true },
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: '&Actions',
+      items: [
+        { label: '&Cancel Transfer', onClick: () => cancelDownload(cancellableIndex), disabled: cancellableIndex < 0 },
+        { label: 'Clear &Finished', onClick: clearFinished, disabled: completed.length === 0 },
+      ],
+    },
+    standardHelpMenu('Napster'),
+  ], [openWindow, closeWindow, windowId, cancelDownload, cancellableIndex, clearFinished, completed.length]);
+
+  const contextItems = useMemo<ContextMenuItem[]>(() => {
+    if (!menu) return [];
+    const dl = downloads[menu.index];
+    return [
+      { label: 'Cancel', onClick: () => cancelDownload(menu.index), disabled: !dl || dl.removed },
+      { separator: true },
+      { label: 'Clear Finished', onClick: clearFinished, disabled: completed.length === 0 },
+    ];
+  }, [menu, downloads, cancelDownload, clearFinished, completed.length]);
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px]">
+      <MenuBar menus={menus} windowId={windowId} />
+
       {/* Napster header */}
       <div className="bg-[#1a1a1a] text-white flex items-center px-3 py-1">
         <div className="flex items-center gap-2">
@@ -218,7 +283,7 @@ export default function Napster({ windowId }: AppComponentProps) {
             onClick={() => setActiveTab(tab)}
           >
             {tab === 'downloads'
-              ? `Downloads (${downloads.filter((d) => !d.complete).length})`
+              ? `Downloads (${downloads.filter((d) => !d.complete && !d.removed).length})`
               : tab === 'library'
               ? `Library (${completed.length})`
               : 'Search'}
@@ -309,14 +374,23 @@ export default function Napster({ windowId }: AppComponentProps) {
 
       {activeTab === 'downloads' && (
         <div className="flex-1 overflow-auto p-2">
-          {downloads.length === 0 ? (
+          {visibleDownloads.length === 0 ? (
             <div className="text-center py-8 text-[#999]">
               No downloads yet. Search for songs and click &quot;Get&quot; to download.
             </div>
           ) : (
             <div className="space-y-2">
-              {downloads.map((dl, i) => (
-                <div key={i} className="bg-white border border-[#ccc] p-2">
+              {downloads.map((dl, i) => dl.removed ? null : (
+                <div
+                  key={i}
+                  className={`bg-white border p-2 cursor-default ${selectedDownload === i ? 'border-[var(--win98-highlight)]' : 'border-[#ccc]'}`}
+                  onClick={() => setSelectedDownload(i)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setSelectedDownload(i);
+                    setMenu({ x: e.clientX, y: e.clientY, index: i });
+                  }}
+                >
                   <div className="flex justify-between mb-1">
                     <span className="font-bold truncate">🎵 {dl.artist} - {dl.song}.mp3</span>
                     <span className={`text-[10px] ${dl.stalled ? 'text-[#cc0000]' : dl.complete ? 'text-[#009900]' : 'text-[#0066cc]'}`}>
@@ -368,10 +442,14 @@ export default function Napster({ windowId }: AppComponentProps) {
 
       <StatusBar98
         panels={[
-          { content: `${downloads.filter((d) => !d.complete && !d.stalled).length} active downloads` },
+          { content: `${downloads.filter((d) => !d.complete && !d.stalled && !d.removed).length} active downloads` },
           { content: `${results.length} results`, width: 80 },
         ]}
       />
+
+      {menu && (
+        <ContextMenu items={contextItems} position={{ x: menu.x, y: menu.y }} onClose={() => setMenu(null)} />
+      )}
     </div>
   );
 }

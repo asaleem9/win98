@@ -91,3 +91,86 @@ export function updateControl(
 ): VbControl[] {
   return controls.map((c) => (c.id === id ? { ...c, ...patch } : c));
 }
+
+export type AlignEdge = 'lefts' | 'rights' | 'tops' | 'bottoms';
+
+/**
+ * Align the selected controls' edges to each other, the way VB6's Format > Align
+ * does. Lefts/tops snap to the minimum edge; rights/bottoms to the maximum. A
+ * selection of fewer than two controls is left untouched.
+ */
+export function alignControls(controls: VbControl[], ids: string[], edge: AlignEdge): VbControl[] {
+  const selected = controls.filter((c) => ids.includes(c.id));
+  if (selected.length < 2) return controls;
+  switch (edge) {
+    case 'lefts': {
+      const x = Math.min(...selected.map((c) => c.x));
+      return controls.map((c) => (ids.includes(c.id) ? { ...c, x } : c));
+    }
+    case 'tops': {
+      const y = Math.min(...selected.map((c) => c.y));
+      return controls.map((c) => (ids.includes(c.id) ? { ...c, y } : c));
+    }
+    case 'rights': {
+      const right = Math.max(...selected.map((c) => c.x + c.width));
+      return controls.map((c) => (ids.includes(c.id) ? { ...c, x: right - c.width } : c));
+    }
+    case 'bottoms': {
+      const bottom = Math.max(...selected.map((c) => c.y + c.height));
+      return controls.map((c) => (ids.includes(c.id) ? { ...c, y: bottom - c.height } : c));
+    }
+    default:
+      return controls;
+  }
+}
+
+export interface FormFile {
+  app: 'vb6';
+  version: 1;
+  formName: string;
+  formCaption: string;
+  controls: VbControl[];
+}
+
+/** Serialize the current form to the .frm JSON we persist to the filesystem. */
+export function serializeFrm(form: FormFile): string {
+  return JSON.stringify(form);
+}
+
+/** Parse a .frm payload back into a form, or null when it isn't ours. */
+export function deserializeFrm(json: string): FormFile | null {
+  try {
+    const parsed = JSON.parse(json) as FormFile;
+    if (parsed && parsed.app === 'vb6' && Array.isArray(parsed.controls)) return parsed;
+  } catch {
+    // not JSON / not our shape
+  }
+  return null;
+}
+
+export interface ControlSeed {
+  type: ControlType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  caption: string;
+}
+
+const CONTROL_CLIP_TAG = 'application/x-win98-vb6-controls';
+
+/** Serialize a set of controls for the shared text clipboard. */
+export function encodeControlsClipboard(seeds: ControlSeed[]): string {
+  return JSON.stringify({ tag: CONTROL_CLIP_TAG, seeds });
+}
+
+/** Parse clipboard text into control seeds, or null when it isn't ours. */
+export function decodeControlsClipboard(text: string): ControlSeed[] | null {
+  try {
+    const parsed = JSON.parse(text) as { tag?: string; seeds?: ControlSeed[] };
+    if (parsed?.tag === CONTROL_CLIP_TAG && Array.isArray(parsed.seeds)) return parsed.seeds;
+  } catch {
+    // not JSON / not our shape
+  }
+  return null;
+}

@@ -69,7 +69,11 @@ export function BootSequence({ onComplete, fast = false }: BootSequenceProps) {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    if (fast) setPhase((prev) => (prev === 'post' ? 'logo' : prev));
+    if (!fast) return;
+    const timer = setTimeout(() => {
+      setPhase((prev) => (prev === 'post' ? 'logo' : prev));
+    }, 30);
+    return () => clearTimeout(timer);
   }, [fast]);
 
   // POST screen - memory count ticks up to the installed RAM

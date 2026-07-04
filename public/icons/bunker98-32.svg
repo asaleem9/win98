@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!-- Dark corridor backdrop -->
+  <rect x="2" y="2" width="28" height="28" fill="#101018"/>
+  <!-- Receding brick walls, stepped perspective -->
+  <rect x="2" y="2" width="4" height="28" fill="#603828"/>
+  <rect x="26" y="2" width="4" height="28" fill="#502818"/>
+  <rect x="6" y="5" width="3" height="22" fill="#502818"/>
+  <rect x="23" y="5" width="3" height="22" fill="#402010"/>
+  <rect x="9" y="8" width="2" height="16" fill="#402010"/>
+  <rect x="21" y="8" width="2" height="16" fill="#301808"/>
+  <!-- Mortar lines -->
+  <rect x="2" y="9" width="4" height="1" fill="#402418"/>
+  <rect x="2" y="17" width="4" height="1" fill="#402418"/>
+  <rect x="2" y="25" width="4" height="1" fill="#402418"/>
+  <rect x="26" y="9" width="4" height="1" fill="#381808"/>
+  <rect x="26" y="17" width="4" height="1" fill="#381808"/>
+  <rect x="26" y="25" width="4" height="1" fill="#381808"/>
+  <!-- Floor -->
+  <rect x="11" y="24" width="10" height="6" fill="#282830"/>
+  <rect x="9" y="27" width="14" height="3" fill="#303038"/>
+  <!-- Robot enemy: head -->
+  <rect x="13" y="10" width="6" height="5" fill="#8890A0"/>
+  <rect x="13" y="10" width="6" height="1" fill="#B0B8C8"/>
+  <!-- Robot eyes -->
+  <rect x="14" y="12" width="2" height="1" fill="#FF2000"/>
+  <rect x="17" y="12" width="1" height="1" fill="#FF2000"/>
+  <!-- Robot body -->
+  <rect x="12" y="15" width="8" height="6" fill="#687080"/>
+  <rect x="12" y="15" width="8" height="1" fill="#98A0B0"/>
+  <rect x="14" y="17" width="4" height="2" fill="#404858"/>
+  <!-- Robot arms -->
+  <rect x="11" y="16" width="1" height="4" fill="#505868"/>
+  <rect x="20" y="16" width="1" height="4" fill="#505868"/>
+  <!-- Robot treads -->
+  <rect x="13" y="21" width="6" height="2" fill="#303030"/>
+  <!-- Player blaster, bottom center -->
+  <rect x="14" y="27" width="4" height="3" fill="#405060"/>
+  <rect x="15" y="26" width="2" height="1" fill="#607080"/>
+  <!-- Muzzle flash -->
+  <rect x="15" y="24" width="2" height="2" fill="#FFE000"/>
+  <rect x="14" y="25" width="1" height="1" fill="#FF8000"/>
+  <rect x="17" y="25" width="1" height="1" fill="#FF8000"/>
+</svg>

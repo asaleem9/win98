@@ -12,6 +12,7 @@ import { addRecentDoc } from '@/lib/recentDocs';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { playSound } from '@/lib/sounds';
 import { usePrint } from '@/components/dialogs/PrintDialog';
+import { setClipboard, getClipboard, subscribe } from '@/lib/clipboard';
 import {
   invertImageData,
   flipImageDataHorizontal,
@@ -70,6 +71,10 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
   const [textEdit, setTextEdit] = useState<{ x: number; y: number; value: string } | null>(null);
   const textCommitted = useRef(false);
   const textInputRef = useRef<HTMLInputElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [canPaste, setCanPaste] = useState(false);
+  const [pasted, setPasted] = useState<{ dataUrl: string; x: number; y: number; w: number; h: number } | null>(null);
+  const pastedImgRef = useRef<HTMLImageElement>(null);
 
   // Initialize canvas
   useEffect(() => {
@@ -117,6 +122,13 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
     const name = currentFilePath ? baseName(currentFilePath) : 'Untitled';
     updateTitle(windowId, `${dirty ? '*' : ''}${name} - Paint`);
   }, [currentFilePath, dirty, windowId, updateTitle]);
+
+  // Keep Paste enabled state in sync with the shared clipboard.
+  useEffect(() => {
+    const update = () => setCanPaste(getClipboard()?.kind === 'image');
+    update();
+    return subscribe(update);
+  }, []);
 
   const saveUndo = useCallback(() => {
     const canvas = canvasRef.current;
@@ -190,6 +202,64 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
     invertImageData(imgData.data);
     ctx.putImageData(imgData, 0, 0);
   }, [saveUndo]);
+
+  // Copy the whole picture to the shared clipboard as an image.
+  const handleCopy = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setClipboard({ kind: 'image', dataUrl: canvas.toDataURL('image/png') });
+  }, []);
+
+  // Cut copies, then clears the picture to the background color.
+  const handleCut = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    handleCopy();
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    saveUndo();
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, [handleCopy, saveUndo, bgColor]);
+
+  // Deposit the floating pasted selection onto the canvas at its current spot.
+  const commitPaste = useCallback(() => {
+    setPasted((p) => {
+      if (p) {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        const img = pastedImgRef.current;
+        if (canvas && ctx && img) {
+          saveUndo();
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(img, p.x, p.y);
+          setDirty(true);
+        }
+      }
+      return null;
+    });
+  }, [saveUndo]);
+
+  // Paste drops the clipboard image as a floating selection the user can drag.
+  const handlePaste = useCallback(() => {
+    const clip = getClipboard();
+    if (!clip || clip.kind !== 'image') return;
+    const img = new Image();
+    img.onload = () => setPasted({ dataUrl: clip.dataUrl, x: 0, y: 0, w: img.width, h: img.height });
+    img.onerror = () => {};
+    img.src = clip.dataUrl;
+  }, []);
+
+  // While a selection floats, Enter deposits it and Escape discards it.
+  useEffect(() => {
+    if (!pasted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitPaste(); }
+      else if (e.key === 'Escape') { e.preventDefault(); setPasted(null); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pasted, commitPaste]);
 
   const handleNew = useCallback(() => {
     if (dirty) {
@@ -300,7 +370,8 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    // The canvas is displayed at `zoom`x, so map the pointer back to real pixels.
+    return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
   };
 
   const floodFill = useCallback((startX: number, startY: number, fillColor: string) => {
@@ -407,6 +478,8 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
   }, [textEdit]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // A click on the canvas outside a floating paste drops it into place first.
+    if (pasted) { commitPaste(); return; }
     const pos = getCanvasPos(e);
     setMousePos(pos);
     const canvas = canvasRef.current;
@@ -442,7 +515,7 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
     }
-  }, [tool, color, bgColor, brushSize, saveUndo, floodFill]);
+  }, [tool, color, bgColor, brushSize, saveUndo, floodFill, pasted, commitPaste, zoom]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const pos = getCanvasPos(e);
@@ -459,7 +532,7 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
     } else if (tool === 'line' || tool === 'rectangle' || tool === 'ellipse') {
       drawPreview(pos);
     }
-  }, [isDrawing, tool, drawPreview]);
+  }, [isDrawing, tool, drawPreview, zoom]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (!isDrawing || !startPos) {
@@ -500,7 +573,7 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
     clearOverlay();
     setIsDrawing(false);
     setStartPos(null);
-  }, [isDrawing, startPos, tool, color, brushSize, clearOverlay]);
+  }, [isDrawing, startPos, tool, color, brushSize, clearOverlay, zoom]);
 
   const menus: MenuDefinition[] = [
     {
@@ -520,7 +593,24 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
         { label: 'Undo', shortcut: 'Ctrl+Z', onClick: handleUndo, disabled: undoStack.length === 0 },
         { label: 'Redo', shortcut: 'Ctrl+Y', onClick: handleRedo, disabled: redoStack.length === 0 },
         { label: '', separator: true },
+        { label: 'Cut', shortcut: 'Ctrl+X', onClick: handleCut },
+        { label: 'Copy', shortcut: 'Ctrl+C', onClick: handleCopy },
+        { label: 'Paste', shortcut: 'Ctrl+V', onClick: handlePaste, disabled: !canPaste },
+        { label: '', separator: true },
         { label: 'Clear Image', onClick: clearCanvas },
+      ],
+    },
+    {
+      label: 'View',
+      items: [
+        {
+          label: 'Zoom',
+          submenu: [
+            { label: '1x', radio: true, checked: zoom === 1, onClick: () => setZoom(1) },
+            { label: '2x', radio: true, checked: zoom === 2, onClick: () => setZoom(2) },
+            { label: '4x', radio: true, checked: zoom === 4, onClick: () => setZoom(4) },
+          ],
+        },
       ],
     },
     {
@@ -566,7 +656,7 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
             {TOOLS.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTool(t.id)}
+                onClick={() => { commitPaste(); setTool(t.id); }}
                 title={t.id}
                 className={`
                   w-[14px] h-[14px] flex items-center justify-center text-[10px] leading-none cursor-default select-none
@@ -585,7 +675,7 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
 
         {/* Canvas area */}
         <div ref={containerRef} className="flex-1 min-w-0 overflow-auto bg-[#808080] p-0">
-          <div className="relative" style={{ width: canvasSize.width, height: canvasSize.height }}>
+          <div className="relative" style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
             <canvas
               ref={canvasRef}
               onMouseDown={handleMouseDown}
@@ -593,13 +683,50 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
               onMouseUp={handleMouseUp}
               onMouseLeave={() => { if (isDrawing) { clearOverlay(); setIsDrawing(false); } }}
               className="block cursor-crosshair"
-              style={{ imageRendering: 'pixelated' }}
+              data-zoom={zoom}
+              style={{ imageRendering: 'pixelated', width: canvasSize.width * zoom, height: canvasSize.height * zoom }}
             />
             <canvas
               ref={overlayCanvasRef}
               className="absolute top-0 left-0 pointer-events-none"
-              style={{ imageRendering: 'pixelated' }}
+              style={{ imageRendering: 'pixelated', width: canvasSize.width * zoom, height: canvasSize.height * zoom }}
             />
+            {pasted && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                ref={pastedImgRef}
+                src={pasted.dataUrl}
+                alt=""
+                draggable={false}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const origin = pasted;
+                  const move = (ev: MouseEvent) => {
+                    const dx = (ev.clientX - startX) / zoom;
+                    const dy = (ev.clientY - startY) / zoom;
+                    setPasted((p) => (p ? { ...p, x: origin.x + dx, y: origin.y + dy } : p));
+                  };
+                  const up = () => {
+                    window.removeEventListener('mousemove', move);
+                    window.removeEventListener('mouseup', up);
+                  };
+                  window.addEventListener('mousemove', move);
+                  window.addEventListener('mouseup', up);
+                }}
+                style={{
+                  position: 'absolute',
+                  left: pasted.x * zoom,
+                  top: pasted.y * zoom,
+                  width: pasted.w * zoom,
+                  height: pasted.h * zoom,
+                  imageRendering: 'pixelated',
+                  border: '1px dotted #000',
+                  cursor: 'move',
+                }}
+              />
+            )}
             {textEdit && (
               <input
                 ref={textInputRef}
@@ -617,8 +744,8 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
                 onBlur={commitText}
                 style={{
                   position: 'absolute',
-                  left: textEdit.x,
-                  top: textEdit.y - 14,
+                  left: textEdit.x * zoom,
+                  top: textEdit.y * zoom - 14,
                   font: '14px "MS Sans Serif", Arial, sans-serif',
                   color,
                   background: 'transparent',

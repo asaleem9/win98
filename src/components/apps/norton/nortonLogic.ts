@@ -34,6 +34,16 @@ export function activeThreatPool(allThreats: Threat[], cleared: string[]): Threa
   return allThreats.filter((t) => !clearedSet.has(t.name));
 }
 
+/** Removes a quarantined entry by name — used by both Restore and Delete. */
+export function removeFromQuarantine(quarantine: Threat[], name: string): Threat[] {
+  return quarantine.filter((t) => t.name !== name);
+}
+
+/** Drops a name back out of the cleared list so a rescan can turn it up again. */
+export function unclearThreat(cleared: string[], name: string): string[] {
+  return cleared.filter((n) => n !== name);
+}
+
 export function incrementScanCount(count: number): number {
   return count + 1;
 }

@@ -16,6 +16,9 @@ const AddRemoveProgramsApp = lazy(() => import('@/components/apps/add-remove-pro
 const ScanDiskApp = lazy(() => import('@/components/apps/scandisk/ScanDisk'));
 const SystemInformationApp = lazy(() => import('@/components/apps/sysinfo/SystemInformation'));
 const DeviceManagerApp = lazy(() => import('@/components/apps/device-manager/DeviceManager'));
+const SoundsProperties = lazy(() => import('@/components/apps/control-panel/SoundsProperties'));
+const MouseProperties = lazy(() => import('@/components/apps/control-panel/MouseProperties'));
+const RegionalSettingsApp = lazy(() => import('@/components/apps/control-panel/RegionalSettings'));
 const FindFilesApp = lazy(() => import('@/components/apps/find-files/FindFiles'));
 const HelpApp = lazy(() => import('@/components/apps/help/Help'));
 const PrintersApp = lazy(() => import('@/components/apps/printers/Printers'));
@@ -182,6 +185,39 @@ export const systemApps: Record<string, AppDefinition> = {
     category: 'system',
     component: DeviceManagerApp,
     defaultWindow: { title: 'System Properties - Device Manager', width: 420, height: 480, minWidth: 350, minHeight: 350 },
+    startMenuPath: ['Settings', 'Control Panel'],
+    singleton: true,
+  },
+  'sounds-properties': {
+    id: 'sounds-properties',
+    name: 'Sounds Properties',
+    icon: '/icons/volume-32.svg',
+    icon16: '/icons/volume-16.svg',
+    category: 'system',
+    component: SoundsProperties,
+    defaultWindow: { title: 'Sounds Properties', width: 400, height: 480, minWidth: 380, minHeight: 420, resizable: false },
+    startMenuPath: ['Settings', 'Control Panel'],
+    singleton: true,
+  },
+  'mouse-properties': {
+    id: 'mouse-properties',
+    name: 'Mouse Properties',
+    icon: '/icons/mouse-32.svg',
+    icon16: '/icons/mouse-16.svg',
+    category: 'system',
+    component: MouseProperties,
+    defaultWindow: { title: 'Mouse Properties', width: 380, height: 470, minWidth: 360, minHeight: 420, resizable: false },
+    startMenuPath: ['Settings', 'Control Panel'],
+    singleton: true,
+  },
+  'regional-settings': {
+    id: 'regional-settings',
+    name: 'Regional Settings',
+    icon: '/icons/settings-32.svg',
+    icon16: '/icons/settings-16.svg',
+    category: 'system',
+    component: RegionalSettingsApp,
+    defaultWindow: { title: 'Regional Settings Properties', width: 380, height: 430, minWidth: 360, minHeight: 380, resizable: false },
     startMenuPath: ['Settings', 'Control Panel'],
     singleton: true,
   },

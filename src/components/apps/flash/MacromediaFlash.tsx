@@ -1,11 +1,26 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { useWindows } from '@/contexts/WindowContext';
+import { useFileSystem } from '@/contexts/FileSystemContext';
+import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
+import { standardHelpMenu } from '@/lib/menus';
+import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
+import { addRecentDoc } from '@/lib/recentDocs';
+import { showSystemError } from '@/hooks/useFileOpener';
+import { normalizePath } from '@/lib/fs/fsOperations';
 import { playSound } from '@/lib/sounds';
-import { createEmptyFrames, isBlankFrame, nextFrame, nextLayerName, Layer } from './flashHelpers';
-
-const MENU_ITEMS = ['File', 'Edit', 'View', 'Insert', 'Modify', 'Text', 'Control', 'Window', 'Help'];
+import {
+  createEmptyFrames,
+  isBlankFrame,
+  nextFrame,
+  nextLayerName,
+  serializeFla,
+  deserializeFla,
+  Layer,
+  StageConfig,
+} from './flashHelpers';
 
 const TOOLS = [
   { icon: '➔', label: 'Arrow' },
@@ -29,24 +44,41 @@ const PENCIL_TOOL = 8;
 const BRUSH_TOOL = 9;
 
 const TOTAL_FRAMES = 60;
-const FPS = 12;
-const STAGE_WIDTH = 550;
-const STAGE_HEIGHT = 400;
 
-export default function MacromediaFlash({ windowId }: AppComponentProps) {
+const DEFAULT_STAGE: StageConfig = { width: 550, height: 400, bg: '#ffffff', fps: 12 };
+
+function baseName(path: string): string {
+  const parts = normalizePath(path).split('\\');
+  return parts[parts.length - 1] || 'Untitled';
+}
+
+export default function MacromediaFlash({ windowId, launchParams, launchCount }: AppComponentProps) {
+  const { updateTitle, closeWindow } = useWindows();
+  const { getNode, writeFile } = useFileSystem();
+
   const [selectedTool, setSelectedTool] = useState(0);
   const [currentFrame, setCurrentFrame] = useState(1);
   const [selectedLayer, setSelectedLayer] = useState(0);
   const [currentColor, setCurrentColor] = useState('#000000');
   const [isPlaying, setIsPlaying] = useState(false);
   const [onionSkin, setOnionSkin] = useState(false);
+  const [stage, setStage] = useState<StageConfig>(DEFAULT_STAGE);
   const [layers, setLayers] = useState<Layer[]>([
     { name: 'Layer 1', visible: true, locked: false, frames: createEmptyFrames(TOTAL_FRAMES) },
   ]);
 
+  const [fileName, setFileName] = useState('Untitled');
+  const [filePath, setFilePath] = useState<string | null>(null);
+  const [picker, setPicker] = useState<null | 'open' | 'save'>(null);
+  const [docForm, setDocForm] = useState<StageConfig | null>(null);
+
   const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const onionCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawingRef = useRef(false);
+
+  useEffect(() => {
+    updateTitle(windowId, `${fileName} - Macromedia Flash`);
+  }, [fileName, windowId, updateTitle]);
 
   // Draw whatever's stored for the current frame onto every layer's canvas.
   useEffect(() => {
@@ -54,7 +86,7 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
       const canvas = canvasRefs.current[i];
       const ctx = canvas?.getContext('2d');
       if (!ctx || !canvas) return;
-      ctx.clearRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
+      ctx.clearRect(0, 0, stage.width, stage.height);
       const snapshot = layer.frames[currentFrame - 1];
       if (!isBlankFrame(snapshot)) {
         const img = new Image();
@@ -62,30 +94,30 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
         img.src = snapshot as string;
       }
     });
-  }, [currentFrame, layers.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentFrame, layers.length, stage.width, stage.height]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Onion skin: faint preview of the previous frame on the active layer.
   useEffect(() => {
     const canvas = onionCanvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
-    ctx.clearRect(0, 0, STAGE_WIDTH, STAGE_HEIGHT);
+    ctx.clearRect(0, 0, stage.width, stage.height);
     if (!onionSkin || isPlaying || currentFrame <= 1) return;
     const prevSnapshot = layers[selectedLayer]?.frames[currentFrame - 2];
     if (isBlankFrame(prevSnapshot)) return;
     const img = new Image();
     img.onload = () => ctx.drawImage(img, 0, 0);
     img.src = prevSnapshot as string;
-  }, [onionSkin, isPlaying, currentFrame, selectedLayer, layers]);
+  }, [onionSkin, isPlaying, currentFrame, selectedLayer, layers, stage.width, stage.height]);
 
   // Playback loop.
   useEffect(() => {
     if (!isPlaying) return;
     const id = setInterval(() => {
       setCurrentFrame((f) => nextFrame(f, TOTAL_FRAMES));
-    }, 1000 / FPS);
+    }, 1000 / stage.fps);
     return () => clearInterval(id);
-  }, [isPlaying]);
+  }, [isPlaying, stage.fps]);
 
   const commitStroke = () => {
     const canvas = canvasRefs.current[selectedLayer];
@@ -151,6 +183,15 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
     setIsPlaying(false);
   };
 
+  const handleRewind = () => {
+    setIsPlaying(false);
+    setCurrentFrame(1);
+  };
+
+  const step = (dir: 1 | -1) => {
+    setCurrentFrame((f) => Math.max(1, Math.min(TOTAL_FRAMES, f + dir)));
+  };
+
   const handleAddLayer = () => {
     setLayers((prev) => {
       const next = [
@@ -163,22 +204,138 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
     playSound?.('ding');
   };
 
+  const handleNew = () => {
+    setLayers([{ name: 'Layer 1', visible: true, locked: false, frames: createEmptyFrames(TOTAL_FRAMES) }]);
+    setStage(DEFAULT_STAGE);
+    setSelectedLayer(0);
+    setCurrentFrame(1);
+    setIsPlaying(false);
+    setFilePath(null);
+    setFileName('Untitled');
+  };
+
+  const loadPath = useCallback((rawPath: string) => {
+    const path = normalizePath(rawPath);
+    const node = getNode(path);
+    if (!node || node.type !== 'file') {
+      showSystemError('Macromedia Flash', `Cannot find the ${baseName(path)} file.`);
+      return;
+    }
+    const doc = deserializeFla(node.content ?? '');
+    if (!doc || doc.layers.length === 0) {
+      showSystemError('Macromedia Flash', `${baseName(path)} is not a valid Flash movie, or the file is corrupt.`);
+      return;
+    }
+    setLayers(doc.layers);
+    setStage(doc.stage);
+    setSelectedLayer(0);
+    setCurrentFrame(1);
+    setIsPlaying(false);
+    setFilePath(path);
+    setFileName(baseName(path));
+    addRecentDoc(path);
+  }, [getNode]);
+
+  useEffect(() => {
+    if (launchParams?.filePath) loadPath(launchParams.filePath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [launchCount]);
+
+  const doSave = useCallback((path: string) => {
+    const payload = serializeFla({ app: 'flash', version: 1, stage, totalFrames: TOTAL_FRAMES, layers });
+    const result = writeFile(path, payload);
+    if (!result.ok) {
+      showSystemError('Macromedia Flash', result.error);
+      return;
+    }
+    setFilePath(path);
+    setFileName(baseName(path));
+    addRecentDoc(path);
+    playSound?.('ding');
+  }, [stage, layers, writeFile]);
+
+  const handleSave = () => {
+    if (filePath) doSave(filePath);
+    else setPicker('save');
+  };
+
+  const menus: MenuDefinition[] = [
+    {
+      label: '&File',
+      items: [
+        { label: '&New', shortcut: 'Ctrl+N', onClick: handleNew },
+        { label: '&Open...', shortcut: 'Ctrl+O', onClick: () => setPicker('open') },
+        { label: '', separator: true },
+        { label: '&Save', shortcut: 'Ctrl+S', onClick: handleSave },
+        { label: 'Save &As...', onClick: () => setPicker('save') },
+        { label: '', separator: true },
+        { label: '&Print...', shortcut: 'Ctrl+P', disabled: true },
+        { label: '', separator: true },
+        { label: 'E&xit', onClick: () => closeWindow(windowId) },
+      ],
+    },
+    {
+      label: '&Edit',
+      items: [
+        { label: '&Undo', shortcut: 'Ctrl+Z', disabled: true },
+        { label: '&Redo', shortcut: 'Ctrl+Y', disabled: true },
+        { label: '', separator: true },
+        { label: 'Cu&t', shortcut: 'Ctrl+X', disabled: true },
+        { label: '&Copy', shortcut: 'Ctrl+C', disabled: true },
+        { label: '&Paste', shortcut: 'Ctrl+V', disabled: true },
+      ],
+    },
+    {
+      label: '&View',
+      items: [
+        { label: '&Onion Skin', checked: onionSkin, onClick: () => setOnionSkin((v) => !v) },
+        { label: '', separator: true },
+        { label: 'Zoom &In', disabled: true },
+        { label: 'Zoom &Out', disabled: true },
+      ],
+    },
+    {
+      label: '&Insert',
+      items: [
+        { label: 'New &Layer', onClick: handleAddLayer },
+        { label: 'New &Symbol...', disabled: true },
+        { label: 'Blank &Keyframe', disabled: true },
+      ],
+    },
+    {
+      label: '&Modify',
+      items: [
+        { label: '&Document...', onClick: () => setDocForm(stage) },
+        { label: '', separator: true },
+        { label: 'Convert to &Symbol...', disabled: true },
+        { label: '&Break Apart', disabled: true },
+      ],
+    },
+    {
+      label: '&Control',
+      items: [
+        { label: '&Play', shortcut: 'Enter', onClick: handlePlay },
+        { label: '&Stop', onClick: handleStop },
+        { label: '&Rewind', onClick: handleRewind },
+        { label: '', separator: true },
+        { label: 'Step &Forward', onClick: () => step(1) },
+        { label: 'Step &Backward', onClick: () => step(-1) },
+        { label: '', separator: true },
+        { label: '&Test Movie', disabled: true },
+      ],
+    },
+    standardHelpMenu('Macromedia Flash'),
+  ];
+
   return (
     <div className="flex flex-col h-full text-[11px] select-none" style={{ backgroundColor: '#d4d0c8', color: '#000', fontFamily: 'var(--win98-font)' }} data-window-id={windowId}>
-      {/* Menu Bar */}
-      <div className="flex items-center h-[20px] px-1 border-b border-[#808080]" style={{ backgroundColor: '#d4d0c8' }}>
-        {MENU_ITEMS.map((item) => (
-          <button key={item} className="px-2 h-[18px] hover:bg-[#000080] hover:text-white">
-            {item}
-          </button>
-        ))}
-      </div>
+      <MenuBar menus={menus} windowId={windowId} />
 
       {/* Toolbar row */}
       <div className="flex items-center h-[26px] px-1 gap-[1px] border-b border-[#808080]">
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">📄</button>
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">📂</button>
-        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]">💾</button>
+        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="New" onClick={handleNew}>📄</button>
+        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="Open" onClick={() => setPicker('open')}>📂</button>
+        <button className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]" title="Save" onClick={handleSave}>💾</button>
         <div className="w-px h-[18px] mx-[2px] border-l border-[#808080] border-r border-r-white" />
         <button
           className={`w-[23px] h-[22px] flex items-center justify-center border text-[11px] ${isPlaying ? 'border-[#808080] border-r-white border-b-white bg-[#a0a0a0]' : 'border-transparent hover:win98-flat-raised'}`}
@@ -193,6 +350,13 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
           title="Stop"
         >
           ⏹
+        </button>
+        <button
+          className="w-[23px] h-[22px] flex items-center justify-center border border-transparent hover:win98-flat-raised text-[11px]"
+          onClick={handleRewind}
+          title="Rewind"
+        >
+          ⏮
         </button>
         <div className="w-px h-[18px] mx-[2px] border-l border-[#808080] border-r border-r-white" />
         <button
@@ -320,11 +484,11 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
 
         {/* Stage (canvas) */}
         <div className="flex-1 overflow-auto flex items-center justify-center" style={{ backgroundColor: '#808080' }}>
-          <div className="relative bg-white border border-[#000]" style={{ width: STAGE_WIDTH, height: STAGE_HEIGHT }}>
+          <div className="relative border border-[#000]" style={{ width: stage.width, height: stage.height, backgroundColor: stage.bg }}>
             <canvas
               ref={onionCanvasRef}
-              width={STAGE_WIDTH}
-              height={STAGE_HEIGHT}
+              width={stage.width}
+              height={stage.height}
               className="absolute inset-0 pointer-events-none"
               style={{ opacity: 0.3 }}
             />
@@ -334,8 +498,8 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
                 ref={(el) => {
                   canvasRefs.current[i] = el;
                 }}
-                width={STAGE_WIDTH}
-                height={STAGE_HEIGHT}
+                width={stage.width}
+                height={stage.height}
                 className="absolute inset-0 pointer-events-none"
                 style={{ display: layer.visible ? 'block' : 'none' }}
               />
@@ -373,15 +537,15 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
           <div className="flex gap-4 text-[10px]">
             <div className="flex gap-1 items-center">
               <span>W:</span>
-              <div className="win98-sunken bg-white h-[14px] w-[40px] px-1">550</div>
+              <div className="win98-sunken bg-white h-[14px] w-[40px] px-1">{stage.width}</div>
             </div>
             <div className="flex gap-1 items-center">
               <span>H:</span>
-              <div className="win98-sunken bg-white h-[14px] w-[40px] px-1">400</div>
+              <div className="win98-sunken bg-white h-[14px] w-[40px] px-1">{stage.height}</div>
             </div>
             <div className="flex gap-1 items-center">
               <span>FPS:</span>
-              <div className="win98-sunken bg-white h-[14px] w-[30px] px-1">12</div>
+              <div className="win98-sunken bg-white h-[14px] w-[30px] px-1">{stage.fps}</div>
             </div>
             <div className="flex gap-1 items-center">
               <span>Frame:</span>
@@ -394,8 +558,59 @@ export default function MacromediaFlash({ windowId }: AppComponentProps) {
       {/* Status bar */}
       <div className="h-[20px] flex items-center px-1 border-t border-white">
         <span className="win98-sunken px-2 py-0 flex-1">Frame {currentFrame} / {TOTAL_FRAMES}</span>
-        <span className="win98-sunken px-2 py-0 w-[100px]">12.0 fps</span>
+        <span className="win98-sunken px-2 py-0 w-[100px]">{stage.fps.toFixed(1)} fps</span>
       </div>
+
+      {picker && (
+        <FilePickerDialog
+          mode={picker}
+          extensions={['fla']}
+          defaultName={picker === 'save' ? (fileName.includes('.') ? fileName : `${fileName}.fla`) : ''}
+          onCancel={() => setPicker(null)}
+          onConfirm={(path) => {
+            const target = picker;
+            setPicker(null);
+            if (target === 'open') loadPath(path);
+            else doSave(path);
+          }}
+        />
+      )}
+
+      {docForm && (
+        <div className="absolute inset-0 z-[10000] flex items-center justify-center bg-black/20">
+          <div className="win98-window p-0 w-[280px]">
+            <div className="win98-titlebar px-2">
+              <span className="flex-1 text-[11px] font-bold text-white">Document Properties</span>
+            </div>
+            <div className="p-3 bg-[var(--win98-button-face)] flex flex-col gap-2 text-[11px]">
+              <label className="flex items-center gap-2">
+                <span className="w-[70px]">Width:</span>
+                <input type="number" min={1} className="win98-sunken bg-white h-[18px] w-[70px] px-1" value={docForm.width}
+                  onChange={(e) => setDocForm((d) => d && { ...d, width: Math.max(1, Number(e.target.value) || 1) })} />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-[70px]">Height:</span>
+                <input type="number" min={1} className="win98-sunken bg-white h-[18px] w-[70px] px-1" value={docForm.height}
+                  onChange={(e) => setDocForm((d) => d && { ...d, height: Math.max(1, Number(e.target.value) || 1) })} />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-[70px]">Frame rate:</span>
+                <input type="number" min={1} className="win98-sunken bg-white h-[18px] w-[70px] px-1" value={docForm.fps}
+                  onChange={(e) => setDocForm((d) => d && { ...d, fps: Math.max(1, Number(e.target.value) || 1) })} />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-[70px]">Background:</span>
+                <input type="color" className="win98-sunken h-[18px] w-[40px]" value={docForm.bg}
+                  onChange={(e) => setDocForm((d) => d && { ...d, bg: e.target.value })} />
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button className="win98-raised px-4 py-[2px]" onClick={() => { setStage(docForm); setDocForm(null); }}>OK</button>
+                <button className="win98-raised px-3 py-[2px]" onClick={() => setDocForm(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

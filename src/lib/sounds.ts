@@ -65,6 +65,72 @@ let muted = false;
 let masterVolume = 0.7;
 let ctx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
+let masterPanner: StereoPannerNode | null = null;
+let masterBalance = 0; // -1 (left) .. 1 (right)
+
+// Named mixer channels sit between the sources and the master gain, so the
+// Volume Control mixer can trim/mute/pan each family of sounds independently:
+//   'wave' — MusicPlayer instances (Winamp / Media Player) + mp3/data: cue playback
+//   'midi' — the synth-recipe fallbacks in this module
+//   'cd'   — reserved for a future CD Player
+// Graph:  source → channelGain → channelPanner → masterGain → masterPanner → out
+//
+// Persistence: the Volume Control app mirrors channel + master-balance state into
+// the shared prefs store under the 'mixer' appPref, shaped:
+//   mixer: {
+//     channels: { wave|midi|cd: { volume: 0..1, muted: bool, balance: -1..1 } },
+//     masterBalance: -1..1,
+//     columns: { master|wave|midi|cd: bool },   // which mixer columns are shown
+//   }
+// This module reads that bucket once (lazily) so audio honors saved levels even
+// before the mixer window is opened; the mixer keeps it authoritative afterward.
+export type SoundChannel = 'wave' | 'midi' | 'cd';
+export const SOUND_CHANNELS: SoundChannel[] = ['wave', 'midi', 'cd'];
+
+interface ChannelState {
+  volume: number; // 0..1
+  muted: boolean;
+  balance: number; // -1..1
+}
+
+const channelStates: Record<SoundChannel, ChannelState> = {
+  wave: { volume: 1, muted: false, balance: 0 },
+  midi: { volume: 1, muted: false, balance: 0 },
+  cd: { volume: 1, muted: false, balance: 0 },
+};
+
+const channelGains: Partial<Record<SoundChannel, GainNode>> = {};
+const channelPanners: Partial<Record<SoundChannel, StereoPannerNode>> = {};
+let channelsHydrated = false;
+
+// Pull persisted channel/master-balance levels out of the prefs store exactly
+// once, so playback matches the mixer even before that window is opened.
+function hydrateChannels(): void {
+  if (channelsHydrated) return;
+  channelsHydrated = true;
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = window.localStorage.getItem('win98-prefs-v1');
+    if (!raw) return;
+    const mixer = JSON.parse(raw)?.mixer;
+    if (!mixer) return;
+    if (typeof mixer.masterBalance === 'number') masterBalance = clampPan(mixer.masterBalance);
+    const channels = mixer.channels ?? {};
+    for (const ch of SOUND_CHANNELS) {
+      const c = channels[ch];
+      if (!c) continue;
+      if (typeof c.volume === 'number') channelStates[ch].volume = Math.min(1, Math.max(0, c.volume));
+      if (typeof c.muted === 'boolean') channelStates[ch].muted = c.muted;
+      if (typeof c.balance === 'number') channelStates[ch].balance = clampPan(c.balance);
+    }
+  } catch {
+    // no prefs / malformed — defaults stand
+  }
+}
+
+function clampPan(p: number): number {
+  return Math.min(1, Math.max(-1, p));
+}
 
 /** Point a cue at a custom sound (data: URL or path); pass null to clear it. */
 export function setSoundOverride(id: SoundId, url: string | null): void {
@@ -113,17 +179,102 @@ export function getAudioContext(): AudioContext | null {
   return ctx;
 }
 
-// Shared master gain node — the last stage before the speakers for synth cues
-// and (via getMasterGain) the music engine, so system volume/mute govern both.
+// Shared master gain node — the last stage before the speakers for every
+// channel, so system volume/mute govern all of them. A master StereoPanner sits
+// between it and the destination for the mixer's master Balance control.
 export function getMasterGain(): GainNode | null {
   const audioCtx = getAudioContext();
   if (!audioCtx) return null;
   if (!masterGain) {
     masterGain = audioCtx.createGain();
     masterGain.gain.value = muted ? 0 : masterVolume;
-    masterGain.connect(audioCtx.destination);
+    if (typeof audioCtx.createStereoPanner === 'function') {
+      masterPanner = audioCtx.createStereoPanner();
+      masterPanner.pan.value = masterBalance;
+      masterGain.connect(masterPanner);
+      masterPanner.connect(audioCtx.destination);
+    } else {
+      masterGain.connect(audioCtx.destination);
+    }
   }
   return masterGain;
+}
+
+/**
+ * Input node for a mixer channel, building its `gain → panner → master` stage
+ * on first use. Sources (MusicPlayer, cue playback, synth) connect here so the
+ * channel's volume/mute/balance apply before the master stage. Null in jsdom.
+ */
+export function getChannelGain(ch: SoundChannel): GainNode | null {
+  const audioCtx = getAudioContext();
+  if (!audioCtx) return null;
+  const master = getMasterGain();
+  if (!master) return null;
+  hydrateChannels();
+  let gain = channelGains[ch];
+  if (!gain) {
+    gain = audioCtx.createGain();
+    const state = channelStates[ch];
+    gain.gain.value = state.muted ? 0 : state.volume;
+    if (typeof audioCtx.createStereoPanner === 'function') {
+      const panner = audioCtx.createStereoPanner();
+      panner.pan.value = state.balance;
+      gain.connect(panner);
+      panner.connect(master);
+      channelPanners[ch] = panner;
+    } else {
+      gain.connect(master);
+    }
+    channelGains[ch] = gain;
+  }
+  return gain;
+}
+
+function applyChannelGain(ch: SoundChannel): void {
+  const gain = channelGains[ch];
+  if (gain) {
+    const state = channelStates[ch];
+    gain.gain.value = state.muted ? 0 : state.volume;
+  }
+}
+
+export function setChannelVolume(ch: SoundChannel, v: number): void {
+  hydrateChannels();
+  channelStates[ch].volume = Math.min(1, Math.max(0, v));
+  applyChannelGain(ch);
+}
+
+export function setChannelMuted(ch: SoundChannel, m: boolean): void {
+  hydrateChannels();
+  channelStates[ch].muted = m;
+  applyChannelGain(ch);
+}
+
+export function setChannelBalance(ch: SoundChannel, pan: number): void {
+  hydrateChannels();
+  const clamped = clampPan(pan);
+  channelStates[ch].balance = clamped;
+  const panner = channelPanners[ch];
+  if (panner) panner.pan.value = clamped;
+}
+
+/** Snapshot of every channel's volume/mute/balance (safe to read/mutate). */
+export function getChannelState(): Record<SoundChannel, ChannelState> {
+  hydrateChannels();
+  return {
+    wave: { ...channelStates.wave },
+    midi: { ...channelStates.midi },
+    cd: { ...channelStates.cd },
+  };
+}
+
+export function setMasterBalance(pan: number): void {
+  masterBalance = clampPan(pan);
+  if (masterPanner) masterPanner.pan.value = masterBalance;
+}
+
+export function getMasterBalance(): number {
+  return masterBalance;
 }
 
 type Note = { freq: number; at: number; dur: number; type?: OscillatorType; gain?: number };
@@ -234,8 +385,9 @@ const synthRecipes: Record<SoundId, Note[]> = {
 function playSynth(id: SoundId): void {
   const audioCtx = getAudioContext();
   if (!audioCtx) return;
-  // Master gain applies system volume; per-note gains stay at their raw levels.
-  const dest: AudioNode = getMasterGain() ?? audioCtx.destination;
+  // Synth recipes are the 'midi' family; the channel + master gains apply
+  // volume, so per-note gains stay at their raw levels.
+  const dest: AudioNode = getChannelGain('midi') ?? getMasterGain() ?? audioCtx.destination;
   const notes = synthRecipes[id];
   const now = audioCtx.currentTime;
   for (const note of notes) {
@@ -254,26 +406,53 @@ function playSynth(id: SoundId): void {
   }
 }
 
+// Play a file/data: cue through the 'wave' channel. When Web Audio is available
+// the element is wired into the channel graph (so channel + master volume/mute/
+// balance all apply); otherwise it falls back to the element's own volume.
+function playWaveFile(url: string, onFail: () => void): boolean {
+  try {
+    const audio = new Audio(url);
+    let routed = false;
+    const audioCtx = getAudioContext();
+    const waveGain = getChannelGain('wave');
+    if (audioCtx && waveGain) {
+      try {
+        const srcNode = audioCtx.createMediaElementSource(audio);
+        srcNode.connect(waveGain);
+        audio.addEventListener('ended', () => {
+          try {
+            srcNode.disconnect();
+          } catch {
+            // already torn down
+          }
+        });
+        routed = true;
+      } catch {
+        routed = false;
+      }
+    }
+    // When routed, the channel + master gains carry the level; otherwise the
+    // element's own volume stands in for the master gain.
+    audio.volume = routed ? 1 : masterVolume;
+    audio.play().catch(onFail);
+    audio.onerror = onFail;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function playSound(id: SoundId): void {
   if (muted || typeof window === 'undefined') return;
 
   const file = soundOverrides[id] ?? soundFiles[id];
   if (file && !missingFiles.has(file)) {
-    try {
-      const audio = new Audio(file);
-      audio.volume = masterVolume;
-      audio.play().catch(() => {
-        missingFiles.add(file);
-        playSynth(id);
-      });
-      audio.onerror = () => {
-        missingFiles.add(file);
-        playSynth(id);
-      };
-      return;
-    } catch {
+    const started = playWaveFile(file, () => {
       missingFiles.add(file);
-    }
+      playSynth(id);
+    });
+    if (started) return;
+    missingFiles.add(file);
   }
   playSynth(id);
 }

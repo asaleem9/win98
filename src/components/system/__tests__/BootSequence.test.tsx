@@ -7,10 +7,12 @@ describe('BootSequence', () => {
     expect(screen.getByText(/Memory Test:/)).toBeInTheDocument();
   });
 
-  it('skips the memory count and flashes the flag on the fast path', () => {
+  it('skips the memory count and flashes the flag on the fast path', async () => {
     render(<BootSequence onComplete={() => {}} fast />);
+    // The POST frame may flash once (it keeps server and client markup in
+    // agreement); the fast path must land on the flag without counting memory.
+    await screen.findByText('Click anywhere to skip');
     expect(screen.queryByText(/Memory Test:/)).not.toBeInTheDocument();
-    expect(screen.getByText('Click anywhere to skip')).toBeInTheDocument();
   });
 
   it('completes the fast path', async () => {
@@ -19,10 +21,10 @@ describe('BootSequence', () => {
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 3000 });
   });
 
-  it('click-to-skip fires onComplete immediately', () => {
+  it('click-to-skip fires onComplete immediately', async () => {
     const onComplete = vi.fn();
     render(<BootSequence onComplete={onComplete} fast />);
-    fireEvent.click(screen.getByText('Click anywhere to skip'));
+    fireEvent.click(await screen.findByText('Click anywhere to skip'));
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });

@@ -7,6 +7,7 @@ import { getAppIdForFile } from '@/lib/fileAssociations';
 import { getApp } from '@/lib/appRegistry';
 import { normalizePath } from '@/lib/fs/fsOperations';
 import { playSound } from '@/lib/sounds';
+import { installerSlug, runInstaller } from '@/components/apps/add-remove-programs/installerData';
 
 /** Dispatched when a file has no associated app; SystemDialogs renders it. */
 export function showSystemError(title: string, message: string): void {
@@ -31,6 +32,14 @@ export function useFileOpener() {
 
       if (node.type === 'directory') {
         openWindow('explorer', { launchParams: { filePath: normalized } });
+        return true;
+      }
+
+      // Downloaded setup files carry `installer:<slug>` content — running one
+      // launches the InstallShield wizard instead of a file association.
+      const slug = installerSlug(node.content);
+      if (slug) {
+        runInstaller(slug);
         return true;
       }
 

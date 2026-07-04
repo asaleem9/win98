@@ -20,6 +20,13 @@ vi.mock('@/contexts/WindowContext', () => ({
   }),
 }));
 
+// The system tray reads the Regional clock-format pref; stub it to the default.
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: () => ({
+    getAppPref: (_appId: string, _key: string, fallback: unknown) => fallback,
+  }),
+}));
+
 describe('Taskbar', () => {
   it('renders Start button, Quick Launch, window list, and system tray areas', () => {
     render(<Taskbar />);
