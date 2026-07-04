@@ -12,17 +12,18 @@ interface LoginScreenProps {
 
 /**
  * The "Welcome to Windows" logon dialog that sits between the boot flag and the
- * desktop. Returning users have their name prefilled; the password accepts
- * anything. OK saves the typed name (defaulting to "User" when blank); Cancel
- * and Esc log straight in without touching a previously saved name — the
- * period-accurate way to skip the prompt.
+ * desktop. Both fields come prefilled — the name with the saved user (or
+ * "User") and the password with a stand-in — so a first-time visitor can just
+ * press OK; the password accepts anything. OK saves the typed name (defaulting
+ * to "User" when blank); Cancel and Esc log straight in without touching a
+ * previously saved name — the period-accurate way to skip the prompt.
  */
 export function LoginScreen({ onLogin }: LoginScreenProps) {
   const { getAppPref, setAppPref } = useSettings();
   const savedName = getAppPref('system', 'userName', '');
 
-  const [userName, setUserName] = useState(savedName);
-  const [password, setPassword] = useState('');
+  const [userName, setUserName] = useState(savedName || 'User');
+  const [password, setPassword] = useState('password');
   const userRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
 

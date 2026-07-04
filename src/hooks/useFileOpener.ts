@@ -43,6 +43,18 @@ export function useFileOpener() {
         return true;
       }
 
+      // Program shortcuts carry `app:<appId>` content — the desktop folders
+      // under C:\Windows\Desktop are built from these.
+      if (node.content?.startsWith('app:')) {
+        const shortcutId = node.content.slice(4).trim();
+        if (getApp(shortcutId)) {
+          openWindow(shortcutId);
+          return true;
+        }
+        showSystemError('Windows', `The item '${node.name}' that this shortcut refers to has been changed or moved.`);
+        return false;
+      }
+
       const appId = getAppIdForFile(node.name);
       if (!appId || !getApp(appId)) {
         showSystemError(

@@ -1,5 +1,6 @@
 import { FSNode } from '@/types/filesystem';
 import { resolvePathIn } from '@/lib/fs/fsOperations';
+import { buildDesktopAppFolders } from '@/lib/desktopShortcuts';
 
 // ---------------------------------------------------------------------------
 // First-run staged content. A fresh install lands the new owner on a desktop
@@ -252,6 +253,9 @@ export const virtualFileSystem: FSNode = {
             // Surfaces as a desktop icon (Desktop.tsx lists this dir); opens in
             // Notepad via the .txt association.
             { name: 'README - START HERE.txt', type: 'file', icon: '/icons/txt-16.svg', created: '1999-03-14', modified: '1999-03-14', size: DESKTOP_README.length, content: DESKTOP_README },
+            // One folder per program category, filled with app: shortcuts, so
+            // every installed program is reachable from the desktop too.
+            ...buildDesktopAppFolders(),
           ],
         },
         {
