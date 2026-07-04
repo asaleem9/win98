@@ -65,6 +65,44 @@ export const musicTracks: MusicTrack[] = [
     kbps: 96,
     khz: 22,
   },
+  // Kevin MacLeod chiptune/electronic sides — CC BY 4.0. Attribution lives in
+  // public/music/CREDITS.txt and Winamp's About box.
+  {
+    id: 'pixelland',
+    title: 'Pixelland',
+    artist: 'Kevin MacLeod',
+    fileName: 'kevin_macleod-pixelland.mp3',
+    src: '/music/pixelland.mp3',
+    kbps: 96,
+    khz: 22,
+  },
+  {
+    id: '8bit-dungeon-level',
+    title: '8bit Dungeon Level',
+    artist: 'Kevin MacLeod',
+    fileName: 'kevin_macleod-8bit_dungeon_level.mp3',
+    src: '/music/8bit-dungeon-level.mp3',
+    kbps: 96,
+    khz: 22,
+  },
+  {
+    id: 'space-fighter-loop',
+    title: 'Space Fighter Loop',
+    artist: 'Kevin MacLeod',
+    fileName: 'kevin_macleod-space_fighter_loop.mp3',
+    src: '/music/space-fighter-loop.mp3',
+    kbps: 96,
+    khz: 22,
+  },
+  {
+    id: 'cyborg-ninja',
+    title: 'Cyborg Ninja',
+    artist: 'Kevin MacLeod',
+    fileName: 'kevin_macleod-cyborg_ninja.mp3',
+    src: '/music/cyborg-ninja.mp3',
+    kbps: 96,
+    khz: 22,
+  },
 ];
 
 export function getTrackByFileName(fileName: string): MusicTrack | undefined {

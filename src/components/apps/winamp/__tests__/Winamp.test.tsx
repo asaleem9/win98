@@ -1,5 +1,6 @@
 import { screen, fireEvent, act } from '@testing-library/react';
 import { renderWithProviders } from '@/__tests__/helpers/renderWithProviders';
+import { musicTracks } from '@/lib/audio/tracks';
 import Winamp from '../Winamp';
 
 describe('Winamp', () => {
@@ -18,10 +19,20 @@ describe('Winamp', () => {
     expect(screen.getByTitle('Pause')).toBeInTheDocument();
   });
 
-  it('opens the playlist editor with all six tracks', () => {
+  it('opens the playlist editor with the full bundled catalog', () => {
     renderWithProviders(<Winamp windowId="w1" />);
     fireEvent.click(screen.getByText('PL'));
-    expect(screen.getByText(/6 tracks/)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`${musicTracks.length} tracks`))).toBeInTheDocument();
+    // The licensed Kevin MacLeod tracks are part of the catalog.
+    expect(screen.getAllByText(/Pixelland/i).length).toBeGreaterThan(0);
+  });
+
+  it('credits the licensed tracks in the About dialog', () => {
+    renderWithProviders(<Winamp windowId="w1" />);
+    fireEvent.click(screen.getByText('OPT'));
+    fireEvent.click(screen.getByText(/About Winamp/));
+    expect(screen.getByText(/Kevin MacLeod/)).toBeInTheDocument();
+    expect(screen.getByText(/By Attribution 4\.0/)).toBeInTheDocument();
   });
 
   it('toggles shuffle and repeat modes', () => {

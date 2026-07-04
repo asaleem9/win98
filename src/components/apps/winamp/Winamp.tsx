@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { AppComponentProps } from '@/types/app';
+import { useWindows } from '@/contexts/WindowContext';
 import { MusicPlayer, EQ_PRESETS } from '@/lib/audio/player';
 import { MusicTrack, musicTracks } from '@/lib/audio/tracks';
 import {
@@ -17,6 +18,11 @@ import { useFileSystem } from '@/contexts/FileSystemContext';
 import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
 
 const APP_ID = 'winamp';
+
+// Intrinsic skin width. The chrome was drawn to fill this exactly, so the
+// window is fitted to it rather than the reverse — that's what keeps the
+// classic fixed-size look with no grey dead space around it.
+const BASE_WIDTH = 271;
 
 const EQ_BANDS = ['60', '170', '310', '600', '1K', '3K', '6K', '12K', '14K', '16K'];
 
@@ -51,11 +57,12 @@ const SKINS: Record<SkinKey, Skin> = {
 };
 const SKIN_LABELS: Record<SkinKey, string> = { base: 'Base', winter: 'Winter', bento: 'Bento' };
 
-export default function Winamp({ launchParams, launchCount }: AppComponentProps) {
+export default function Winamp({ windowId, launchParams, launchCount }: AppComponentProps) {
   const playerRef = useRef<MusicPlayer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const { readFile } = useFileSystem();
+  const { resizeWindow } = useWindows();
 
   // Reads a launched file's FS content so playlistForLaunch can honor a
   // 'track:<id>' reference; missing files fall back to filename matching.
@@ -83,6 +90,7 @@ export default function Winamp({ launchParams, launchCount }: AppComponentProps)
   const [doubleSize, setDoubleSize] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const track = playlist[index] ?? musicTracks[0];
   const titleText = `${index + 1}. ${track.artist} - ${track.title}  ***  `;
@@ -243,6 +251,46 @@ export default function Winamp({ launchParams, launchCount }: AppComponentProps)
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Shrink the host window to the exact skin size. The skin is a fixed-width
+  // column of variable height (the EQ and playlist panes come and go), and
+  // double-size scales the whole thing 2x — so the window has to follow the
+  // content or it leaves a grey band below (or clips the doubled skin).
+  const fitWindow = useCallback(() => {
+    const el = rootRef.current;
+    const content = el?.parentElement; // window content area (flex-1, overflow-hidden)
+    const win = content?.parentElement; // window frame (title bar + borders + content)
+    if (!el || !content || !win) return;
+    const scale = doubleSize ? 2 : 1;
+    // Chrome = title bar + borders; it's the gap between the frame and its content.
+    const chromeX = win.offsetWidth - content.offsetWidth;
+    const chromeY = win.offsetHeight - content.offsetHeight;
+    const width = Math.round(BASE_WIDTH * scale + chromeX);
+    const height = Math.round(el.offsetHeight * scale + chromeY);
+    resizeWindow(windowId, width, height);
+  }, [doubleSize, windowId, resizeWindow]);
+
+  // Keep fitWindow current for the observer without re-subscribing it.
+  const fitRef = useRef(fitWindow);
+  fitRef.current = fitWindow;
+
+  // Refit whenever the skin's natural height changes (EQ/playlist toggles,
+  // playlist edits) and once on mount.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      fitRef.current();
+      return;
+    }
+    const ro = new ResizeObserver(() => fitRef.current());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Double-size is a transform, so it doesn't move the observed box — refit here.
+  useLayoutEffect(() => {
+    fitRef.current();
+  }, [doubleSize]);
+
   // Title marquee.
   useEffect(() => {
     if (!playing) return;
@@ -399,10 +447,17 @@ export default function Winamp({ launchParams, launchCount }: AppComponentProps)
   } as React.CSSProperties;
 
   return (
+    <>
     <div
       ref={rootRef}
       className="flex flex-col select-none text-[11px]"
-      style={{ fontFamily: 'Arial, sans-serif', zoom: doubleSize ? 2 : 1, ...skinVars }}
+      style={{
+        fontFamily: 'Arial, sans-serif',
+        width: BASE_WIDTH,
+        transformOrigin: 'top left',
+        transform: doubleSize ? 'scale(2)' : undefined,
+        ...skinVars,
+      }}
     >
       <div className="bg-[var(--wa-chrome)] text-[color:var(--wa-accent)] p-[3px] relative">
         {/* Display */}
@@ -509,6 +564,13 @@ export default function Winamp({ launchParams, launchCount }: AppComponentProps)
             >
               {doubleSize ? '☑' : '☐'} Double Size (Ctrl+D)
             </div>
+            <div className="my-1 border-t border-[color:var(--wa-btn-border)]" />
+            <div
+              onClick={() => { setAboutOpen(true); setOptionsOpen(false); }}
+              className="px-2 py-[1px] cursor-pointer hover:brightness-125"
+            >
+              About Winamp…
+            </div>
           </div>
         )}
       </div>
@@ -587,17 +649,56 @@ export default function Winamp({ launchParams, launchCount }: AppComponentProps)
           </div>
         </div>
       )}
-
-      {picker && (
-        <FilePickerDialog
-          mode="open"
-          title="Add File"
-          filters={[{ label: 'MP3 Files (*.mp3)', extensions: ['mp3'] }, { label: 'All Files (*.*)', extensions: [] }]}
-          onConfirm={addFromFile}
-          onCancel={() => setPicker(false)}
-        />
-      )}
     </div>
+
+    {/* Kept outside the scaled skin so these overlays sit over the whole window
+        at 1:1 instead of inheriting double-size's transform. */}
+    {picker && (
+      <FilePickerDialog
+        mode="open"
+        title="Add File"
+        filters={[{ label: 'MP3 Files (*.mp3)', extensions: ['mp3'] }, { label: 'All Files (*.*)', extensions: [] }]}
+        onConfirm={addFromFile}
+        onCancel={() => setPicker(false)}
+      />
+    )}
+
+    {aboutOpen && (
+      <div
+        className="absolute inset-0 z-[9999] flex items-center justify-center bg-black/40 text-[11px]"
+        style={{ fontFamily: 'Arial, sans-serif' }}
+        onClick={() => setAboutOpen(false)}
+      >
+        <div
+          className="m-1 max-h-full overflow-auto bg-[var(--win98-button-face)] text-black border-2 border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between bg-[#000080] text-white px-1 py-[1px] font-bold text-[10px]">
+            <span>About Winamp</span>
+            <button onClick={() => setAboutOpen(false)} className="px-1 leading-none" aria-label="Close">✕</button>
+          </div>
+          <div className="p-2 leading-snug space-y-[3px]">
+            <div className="font-bold">Winamp</div>
+            <div>It really whips the llama&rsquo;s ass.</div>
+            <div className="pt-1 font-bold">Music credits</div>
+            <div>Pixelland &middot; 8bit Dungeon Level &middot; Space Fighter Loop &middot; Cyborg Ninja</div>
+            <div>Kevin MacLeod (incompetech.com)</div>
+            <div>Licensed under Creative Commons: By Attribution 4.0</div>
+            <div>creativecommons.org/licenses/by/4.0/</div>
+            <div className="text-[10px] text-gray-700">All other tracks are original synthesized pieces.</div>
+            <div className="pt-1 text-right">
+              <button
+                onClick={() => setAboutOpen(false)}
+                className="px-3 py-[1px] bg-[var(--win98-button-face)] border-2 border-t-[var(--win98-button-highlight)] border-l-[var(--win98-button-highlight)] border-b-[var(--win98-button-dark-shadow)] border-r-[var(--win98-button-dark-shadow)] active:border-t-[var(--win98-button-dark-shadow)] active:border-l-[var(--win98-button-dark-shadow)]"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 

@@ -1,0 +1,26 @@
+MUSIC CREDITS
+=============
+
+Most tracks in this folder are procedurally synthesized originals created for
+this project (see public/sounds/CREDITS.md) and carry no external license.
+
+The following tracks are by Kevin MacLeod and are used under the Creative
+Commons Attribution 4.0 license (CC BY 4.0). They were re-encoded to 96 kbps /
+22 kHz to match the period feel of the rest of the mixtape; the music itself is
+unchanged.
+
+  Pixelland
+  8bit Dungeon Level
+  Space Fighter Loop
+  Cyborg Ninja
+
+Attribution (per incompetech.com):
+
+  "Pixelland" Kevin MacLeod (incompetech.com)
+  "8bit Dungeon Level" Kevin MacLeod (incompetech.com)
+  "Space Fighter Loop" Kevin MacLeod (incompetech.com)
+  "Cyborg Ninja" Kevin MacLeod (incompetech.com)
+  Licensed under Creative Commons: By Attribution 4.0
+  https://creativecommons.org/licenses/by/4.0/
+
+Source: https://incompetech.com/music/royalty-free/
