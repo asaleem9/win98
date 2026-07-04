@@ -22,9 +22,11 @@ vi.mock('@/contexts/WindowContext', () => ({
   }),
 }));
 
+let mockSettings: { taskbar?: { smallIcons?: boolean } };
+
 vi.mock('@/contexts/SettingsContext', () => ({
   useSettings: () => ({
-    settings: {},
+    settings: mockSettings,
     setSetting: vi.fn(),
     getAppPref: <T,>(_appId: string, _key: string, fallback: T) => fallback,
     setAppPref: vi.fn(),
@@ -35,6 +37,7 @@ describe('StartMenu', () => {
   const onClose = vi.fn();
 
   beforeEach(() => {
+    mockSettings = {};
     vi.clearAllMocks();
   });
 
@@ -87,6 +90,14 @@ describe('StartMenu', () => {
     expect(screen.getByText('Windows 98')).toBeInTheDocument();
     const sidebar = screen.getByText('Windows 98').closest('div[class*="bg-gradient"]')!;
     expect(sidebar).toBeInTheDocument();
+  });
+
+  it('drops the branded sidebar in the small-icons variant', () => {
+    mockSettings = { taskbar: { smallIcons: true } };
+    render(<StartMenu onClose={onClose} />);
+    expect(screen.queryByText('Windows 98')).not.toBeInTheDocument();
+    // The menu itself still renders its items.
+    expect(screen.getByText('Programs')).toBeInTheDocument();
   });
 
   it('click outside the menu closes it', () => {

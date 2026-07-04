@@ -4,13 +4,38 @@ import { createContext, useCallback, useContext, ReactNode } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { setSoundsMuted, setMasterVolume, setSoundOverride, SoundId } from '@/lib/sounds';
 import { WallpaperSetting } from '@/lib/wallpapers';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 // Per-app prefs bucket that stores sound-scheme overrides ({ [SoundId]: url }).
 const SOUND_OVERRIDE_APP_ID = 'system-sounds';
 
 export type ColorScheme = 'standard' | 'desert' | 'eggplant' | 'rainy-day' | 'high-contrast';
-export type ScreenSaverId = 'flying-windows' | 'starfield' | 'pipes' | 'none';
+export type ScreenSaverId =
+  | 'none'
+  | 'flying-windows'
+  | 'starfield'
+  | 'mystify'
+  | 'pipes'
+  | 'marquee'
+  | 'maze';
+
+export interface ScreenSaverSettings {
+  id: ScreenSaverId;
+  timeoutMinutes: number;
+  // Optional so saves written before the Marquee saver existed still load.
+  marqueeText?: string;
+  marqueeSpeed?: number;
+}
+
+export interface TaskbarSettings {
+  autoHide: boolean;
+  smallIcons: boolean;
+  showClock: boolean;
+}
+
+export interface EffectsSettings {
+  windowAnimation: boolean;
+}
 
 export interface Settings {
   wallpaper: WallpaperSetting;
@@ -18,7 +43,9 @@ export interface Settings {
   colorScheme: ColorScheme;
   soundsEnabled: boolean;
   volume: number; // 0..1
-  screenSaver: { id: ScreenSaverId; timeoutMinutes: number };
+  screenSaver: ScreenSaverSettings;
+  taskbar: TaskbarSettings;
+  effects: EffectsSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,7 +54,14 @@ export const DEFAULT_SETTINGS: Settings = {
   colorScheme: 'standard',
   soundsEnabled: true,
   volume: 0.7,
-  screenSaver: { id: 'flying-windows', timeoutMinutes: 10 },
+  screenSaver: {
+    id: 'flying-windows',
+    timeoutMinutes: 10,
+    marqueeText: 'Your message here.',
+    marqueeSpeed: 3,
+  },
+  taskbar: { autoHide: false, smallIcons: false, showClock: true },
+  effects: { windowAnimation: true },
 };
 
 interface SettingsContextType {
@@ -40,8 +74,22 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useLocalStorage<Settings>('win98-settings-v1', DEFAULT_SETTINGS);
+  const [storedSettings, setSettings] = useLocalStorage<Settings>('win98-settings-v1', DEFAULT_SETTINGS);
   const [prefs, setPrefs] = useLocalStorage<Record<string, Record<string, unknown>>>('win98-prefs-v1', {});
+
+  // Backfill keys added after a user's settings were first persisted, so blobs
+  // written by earlier versions keep their nested objects (taskbar/effects)
+  // fully populated instead of surfacing as undefined.
+  const settings = useMemo<Settings>(
+    () => ({
+      ...DEFAULT_SETTINGS,
+      ...storedSettings,
+      screenSaver: { ...DEFAULT_SETTINGS.screenSaver, ...storedSettings.screenSaver },
+      taskbar: { ...DEFAULT_SETTINGS.taskbar, ...storedSettings.taskbar },
+      effects: { ...DEFAULT_SETTINGS.effects, ...storedSettings.effects },
+    }),
+    [storedSettings],
+  );
 
   // Keep the audio layer in sync with persisted settings
   useEffect(() => {

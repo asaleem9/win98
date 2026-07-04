@@ -125,12 +125,14 @@ function TopRow({
   icon,
   label,
   arrow,
+  compact,
   onClick,
   flyout,
 }: {
   icon: string;
   label: string;
   arrow?: boolean;
+  compact?: boolean;
   onClick?: () => void;
   flyout?: ReactNode;
 }) {
@@ -144,13 +146,14 @@ function TopRow({
     >
       <div
         className={cn(
-          'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
+          'flex items-center gap-2 px-3 cursor-default select-none',
+          compact ? 'py-[2px]' : 'py-[4px]',
           open ? 'bg-[var(--win98-highlight)] text-white' : 'hover:bg-[var(--win98-highlight)] hover:text-white',
         )}
         onClick={onClick}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={icon} alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+        <img src={icon} alt="" className={cn(compact ? 'w-[14px] h-[14px]' : 'w-4 h-4')} style={{ imageRendering: 'pixelated' }} />
         <span className="flex-1">{label}</span>
         {arrow && <span className="ml-auto">▶</span>}
       </div>
@@ -167,9 +170,13 @@ const FAVORITE_SITES: Array<{ label: string; url: string }> = [
 
 export function StartMenu({ onClose }: StartMenuProps) {
   const { openWindow } = useWindows();
-  const { getAppPref } = useSettings();
+  const { settings, getAppPref } = useSettings();
   const menuRef = useRef<HTMLDivElement>(null);
   const [hoveredSubmenu, setHoveredSubmenu] = useState<string | null>(null);
+
+  // "Show small icons in Start menu" drops the branded sidebar and tightens the
+  // main column into the compact variant.
+  const smallIcons = settings?.taskbar?.smallIcons ?? false;
 
   // Apps removed via Add/Remove Programs drop out of the Programs tree.
   const uninstalledApps = getAppPref<Record<string, boolean>>('system', 'uninstalledApps', {});
@@ -216,15 +223,17 @@ export function StartMenu({ onClose }: StartMenuProps) {
       )}
     >
       <div className="flex">
-        {/* Blue sidebar */}
-        <div className="w-[24px] bg-gradient-to-t from-[#000080] to-[#1084d0] flex items-end p-[2px]">
-          <span
-            className="text-white text-[11px] font-bold whitespace-nowrap origin-bottom-left -rotate-90 translate-y-[2px]"
-            style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
-          >
-            Windows 98
-          </span>
-        </div>
+        {/* Blue sidebar (hidden in the small-icons variant) */}
+        {!smallIcons && (
+          <div className="w-[24px] bg-gradient-to-t from-[#000080] to-[#1084d0] flex items-end p-[2px]">
+            <span
+              className="text-white text-[11px] font-bold whitespace-nowrap origin-bottom-left -rotate-90 translate-y-[2px]"
+              style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+            >
+              Windows 98
+            </span>
+          </div>
+        )}
 
         {/* Menu items */}
         <div className="flex-1 py-[2px]">
@@ -236,12 +245,13 @@ export function StartMenu({ onClose }: StartMenuProps) {
           >
             <div
               className={cn(
-                'flex items-center gap-2 px-3 py-[4px] cursor-default select-none',
+                'flex items-center gap-2 px-3 cursor-default select-none',
+                smallIcons ? 'py-[2px]' : 'py-[4px]',
                 hoveredSubmenu === 'programs' && 'bg-[var(--win98-highlight)] text-white',
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/icons/programs-16.svg" alt="" className="w-4 h-4" style={{ imageRendering: 'pixelated' }} />
+              <img src="/icons/programs-16.svg" alt="" className={cn(smallIcons ? 'w-[14px] h-[14px]' : 'w-4 h-4')} style={{ imageRendering: 'pixelated' }} />
               <span className="flex-1 font-bold">Programs</span>
               <span>▶</span>
             </div>
@@ -266,6 +276,7 @@ export function StartMenu({ onClose }: StartMenuProps) {
             icon="/icons/ie-16.svg"
             label="Favorites"
             arrow
+            compact={smallIcons}
             flyout={
               <div className={flyoutClass}>
                 {FAVORITE_SITES.map((site) => (
@@ -292,6 +303,7 @@ export function StartMenu({ onClose }: StartMenuProps) {
             icon="/icons/my-documents-16.svg"
             label="Documents"
             arrow
+            compact={smallIcons}
             flyout={
               <div className={flyoutClass}>
                 <button
@@ -334,6 +346,7 @@ export function StartMenu({ onClose }: StartMenuProps) {
               icon="/icons/settings-16.svg"
               label="Settings"
               arrow
+              compact={smallIcons}
               flyout={
                 <div className={flyoutClass}>
                   {settingsApps.map((app) => (
@@ -349,6 +362,7 @@ export function StartMenu({ onClose }: StartMenuProps) {
             icon="/icons/find-16.svg"
             label="Find"
             arrow
+            compact={smallIcons}
             flyout={
               <div className={flyoutClass}>
                 <button
@@ -364,12 +378,13 @@ export function StartMenu({ onClose }: StartMenuProps) {
           />
 
           {/* Help */}
-          <TopRow icon="/icons/find-16.svg" label="Help" onClick={() => handleOpenApp('help')} />
+          <TopRow icon="/icons/find-16.svg" label="Help" compact={smallIcons} onClick={() => handleOpenApp('help')} />
 
           {/* Run */}
           <TopRow
             icon="/icons/run-16.svg"
             label="Run..."
+            compact={smallIcons}
             onClick={() => {
               playSound('menuClick');
               onClose();
@@ -384,6 +399,7 @@ export function StartMenu({ onClose }: StartMenuProps) {
           <TopRow
             icon="/icons/shutdown-16.svg"
             label="Shut Down..."
+            compact={smallIcons}
             onClick={() => {
               onClose();
               window.dispatchEvent(new CustomEvent('win98-shutdown-dialog'));

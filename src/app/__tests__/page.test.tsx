@@ -83,6 +83,49 @@ describe('Home system state machine', () => {
     expect(screen.queryByText('Welcome to Windows 98')).not.toBeInTheDocument();
   });
 
+  it('arms ScanDisk for the next boot when a blue screen occurs', async () => {
+    window.localStorage.setItem(
+      'win98-prefs-v1',
+      JSON.stringify({ system: { hasBooted: true, showWelcome: false } }),
+    );
+    render(<Home />);
+    await screen.findByText(PROMPT, {}, { timeout: 4000 });
+    await logIn();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('win98-bsod', { detail: { message: 'A fatal exception 0E' } }));
+    });
+
+    expect(prefs().dirtyShutdown).toBe(true);
+  });
+
+  it('runs ScanDisk once on a dirty boot, then continues to login', async () => {
+    window.localStorage.setItem(
+      'win98-prefs-v1',
+      JSON.stringify({ system: { hasBooted: true, showWelcome: false, dirtyShutdown: true } }),
+    );
+    render(<Home />);
+
+    // The improper-shutdown ScanDisk screen appears before the logon dialog.
+    await screen.findByText(/Windows was not properly shut down/, {}, { timeout: 4000 });
+    expect(screen.getByText('Microsoft ScanDisk')).toBeInTheDocument();
+
+    // Any key skips ahead to the logon dialog and clears the dirty flag.
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await screen.findByText(PROMPT, {}, { timeout: 4000 });
+    expect(prefs().dirtyShutdown).toBeFalsy();
+  });
+
+  it('skips ScanDisk on a clean boot', async () => {
+    window.localStorage.setItem(
+      'win98-prefs-v1',
+      JSON.stringify({ system: { hasBooted: true, showWelcome: false } }),
+    );
+    render(<Home />);
+    await screen.findByText(PROMPT, {}, { timeout: 4000 });
+    expect(screen.queryByText(/Windows was not properly shut down/)).toBeNull();
+  });
+
   it('shuts down when a shutdown event is dispatched from the desktop', async () => {
     window.localStorage.setItem(
       'win98-prefs-v1',

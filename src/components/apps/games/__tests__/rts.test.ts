@@ -408,6 +408,27 @@ describe('command options', () => {
     // base is never offered as a build option
     expect(opts.some((o) => o.kind === 'build' && o.id === 'base')).toBe(false);
   });
+
+  it('omits hidden unit, building, and upgrade types from the panel entirely', () => {
+    const cfg = makeConfig({
+      upgrades: [
+        { id: 'secret', name: 'Secret', cost: { min: 50 }, researchTimeSec: 5, researchAt: 'prod', effects: [], hidden: true },
+        { id: 'shown', name: 'Shown', cost: { min: 50 }, researchTimeSec: 5, researchAt: 'prod', effects: [] },
+      ],
+    });
+    cfg.unitTypes.soldier.hidden = true;
+    cfg.buildingTypes.depot.hidden = true;
+    const s = createRtsState(cfg);
+    const opts = getCommandOptions(s);
+    // Hidden entries never appear — not even greyed-out.
+    expect(opts.some((o) => o.kind === 'train' && o.id === 'soldier')).toBe(false);
+    expect(opts.some((o) => o.kind === 'build' && o.id === 'depot')).toBe(false);
+    expect(opts.some((o) => o.kind === 'research' && o.id === 'secret')).toBe(false);
+    // Non-hidden entries of every kind still show.
+    expect(opts.some((o) => o.kind === 'train' && o.id === 'worker')).toBe(true);
+    expect(opts.some((o) => o.kind === 'build' && o.id === 'prod')).toBe(true);
+    expect(opts.some((o) => o.kind === 'research' && o.id === 'shown')).toBe(true);
+  });
 });
 
 describe('unitsInRect', () => {

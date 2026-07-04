@@ -7,6 +7,7 @@ import { useWindows } from '@/contexts/WindowContext';
 import { TitleBar } from './TitleBar';
 import { WINDOW_DEFAULTS } from '@/lib/constants';
 import { playSound } from '@/lib/sounds';
+import { playZoomAnimation, rectFromElement, taskbarButtonRect, viewportRect } from '@/components/system/ZoomAnimation';
 
 interface WindowProps {
   windowState: WindowState;
@@ -263,6 +264,37 @@ export function Window({ windowState, icon16, children }: WindowProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isFocused]);
 
+  // Window state transitions dispatch synchronously first, then fire the zoom
+  // overlay from the window's live rect toward its destination. The overlay is
+  // throwaway, so nothing here waits on it.
+  const restoredRect = () => {
+    const p = windowState.restoredPosition ?? position;
+    const s = windowState.restoredSize ?? size;
+    return { x: p.x, y: p.y, width: s.width, height: s.height };
+  };
+
+  const doMinimize = () => {
+    playSound('minimize');
+    const from = rectFromElement(windowRef.current);
+    const to = taskbarButtonRect(id);
+    minimizeWindow(id);
+    playZoomAnimation({ from, to });
+  };
+
+  const doMaximize = () => {
+    playSound('maximize');
+    const from = rectFromElement(windowRef.current);
+    maximizeWindow(id);
+    playZoomAnimation({ from, to: viewportRect() });
+  };
+
+  const doRestore = () => {
+    playSound('restoreDown');
+    const from = rectFromElement(windowRef.current);
+    restoreWindow(id);
+    playZoomAnimation({ from, to: restoredRect() });
+  };
+
   if (state === 'minimized') return null;
 
   const isMaximized = state === 'maximized';
@@ -294,13 +326,13 @@ export function Window({ windowState, icon16, children }: WindowProps) {
         isFocused={isFocused}
         windowState={state}
         showMaximize={resizable}
-        onMinimize={() => { playSound('minimize'); minimizeWindow(id); }}
-        onMaximize={() => { playSound('maximize'); maximizeWindow(id); }}
-        onRestore={() => { playSound('restoreDown'); restoreWindow(id); }}
+        onMinimize={doMinimize}
+        onMaximize={doMaximize}
+        onRestore={doRestore}
         onClose={() => closeWindow(id)}
         onDoubleClick={() => {
-          if (state === 'maximized') restoreWindow(id);
-          else if (resizable) maximizeWindow(id);
+          if (state === 'maximized') doRestore();
+          else if (resizable) doMaximize();
         }}
         onPointerDown={handleTitlePointerDown}
         onIconClick={() => setSysMenuOpen((open) => !open)}
@@ -312,9 +344,9 @@ export function Window({ windowState, icon16, children }: WindowProps) {
           windowState={state}
           resizable={resizable}
           onClose={() => setSysMenuOpen(false)}
-          onRestore={() => { playSound('restoreDown'); restoreWindow(id); }}
-          onMinimize={() => { playSound('minimize'); minimizeWindow(id); }}
-          onMaximize={() => { playSound('maximize'); maximizeWindow(id); }}
+          onRestore={doRestore}
+          onMinimize={doMinimize}
+          onMaximize={doMaximize}
           onCloseWindow={() => closeWindow(id)}
         />
       )}

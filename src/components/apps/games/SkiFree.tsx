@@ -8,6 +8,7 @@ import { Button98 } from '@/components/ui/Button98';
 import { cn } from '@/lib/cn';
 import { makeRng, type Rand } from './engine/rng';
 import { useGameLoop } from './engine/loop';
+import { useWindowActive, PauseVeil } from './engine/focusPause';
 import { compileSprite, drawSprite, animFrame } from './engine/sprites';
 import type { SpriteDef } from './engine/sprites/sprite';
 import {
@@ -717,8 +718,8 @@ interface Bests {
 const NO_TIME = 0;
 
 export default function SkiFree({ windowId }: AppComponentProps) {
-  void windowId;
   const { getAppPref, setAppPref } = useSettings();
+  const windowActive = useWindowActive(windowId);
 
   const [screen, setScreen] = useState<'title' | 'play' | 'eaten' | 'finish'>('title');
   const [mode, setMode] = useState<GameMode>('freestyle');
@@ -949,8 +950,21 @@ export default function SkiFree({ windowId }: AppComponentProps) {
       },
       [finishFreestyle, finishSlalom],
     ),
-    screen === 'play',
+    screen === 'play' && windowActive,
   );
+
+  // F2 drops back onto a fresh run from anywhere in a game (Windows convention).
+  useEffect(() => {
+    if (screen === 'title' || !windowActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'F2') {
+        e.preventDefault();
+        restart();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen, windowActive, restart]);
 
   const timed = mode !== 'freestyle';
 
@@ -978,12 +992,14 @@ export default function SkiFree({ windowId }: AppComponentProps) {
             style={{ imageRendering: 'pixelated', cursor: 'none' }}
             tabIndex={0}
           />
+          <PauseVeil windowId={windowId} show={!windowActive} />
         </div>
         <div className="flex items-center justify-center gap-3 px-2 py-1 text-[9px] text-[#333] bg-[#c0c0c0] border-t-2 border-[#dfdfdf]">
           <span><b>← →</b> steer</span>
           <span><b>↓</b> point down</span>
           <span><b>F</b> fast</span>
           <span><b>↑/Space</b> flip in air</span>
+          <span><b>F2</b> new run</span>
         </div>
       </div>
     );

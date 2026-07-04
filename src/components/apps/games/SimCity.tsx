@@ -9,6 +9,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { playSound } from '@/lib/sounds';
 import { makeRng, randInt } from './engine/rng';
 import { useInterval, useGameLoop } from './engine/loop';
+import { useWindowActive, PauseVeil } from './engine/focusPause';
 import {
   CityState,
   Tool,
@@ -283,8 +284,8 @@ function drawUnit(ctx: CanvasRenderingContext2D, def: SpriteDef, fx: number, fy:
 }
 
 export default function SimCity({ windowId }: AppComponentProps) {
-  void windowId;
   const { getAppPref, setAppPref } = useSettings();
+  const windowActive = useWindowActive(windowId);
 
   const [started, setStarted] = useState(false);
   const [showCdError, setShowCdError] = useState(false);
@@ -364,7 +365,7 @@ export default function SimCity({ windowId }: AppComponentProps) {
       }
     },
     TICK_MS,
-    started && running && !news,
+    started && running && !news && windowActive,
   );
 
   // ---- Placement ----
@@ -623,7 +624,7 @@ export default function SimCity({ windowId }: AppComponentProps) {
       }
       drawScene();
     },
-    started,
+    started && windowActive,
   );
 
   // ---- Title screen (preserved SimCity 2000 skyline) ----
@@ -724,7 +725,8 @@ export default function SimCity({ windowId }: AppComponentProps) {
   const net = city.income - city.expenses;
 
   return (
-    <div className="flex h-full text-[11px] select-none bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)]">
+    <div className="relative flex h-full text-[11px] select-none bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)]">
+      <PauseVeil windowId={windowId} show={!windowActive} />
       {/* Left toolbar */}
       <div className="w-[110px] flex-shrink-0 flex flex-col gap-1 p-1 border-r-2 border-[var(--win98-button-shadow)] overflow-y-auto">
         <div className="font-bold text-center">Tools</div>

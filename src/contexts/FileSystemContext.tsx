@@ -12,6 +12,7 @@ import {
   uniqueName,
   joinPath,
 } from '@/lib/fs/fsOperations';
+import { emitFileWrite } from '@/lib/fs/writeEvents';
 
 const STORAGE_KEY = 'win98-fs-v1';
 // Kept at 1 so existing saved filesystems still load; the fragments map is an
@@ -277,6 +278,7 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
           if (res.ok) {
             const current = stateRef.current.fragments[norm] ?? 1;
             dispatch({ type: 'SET_FRAGMENTS', payload: { path: norm, value: nextFragments(norm, current) } });
+            emitFileWrite(norm, content);
           }
           return res;
         }
@@ -297,7 +299,10 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
             content,
           }),
         );
-        if (res.ok) dispatch({ type: 'SET_FRAGMENTS', payload: { path: norm, value: seedFragments(norm) } });
+        if (res.ok) {
+          dispatch({ type: 'SET_FRAGMENTS', payload: { path: norm, value: seedFragments(norm) } });
+          emitFileWrite(norm, content);
+        }
         return res;
       },
       createFile: (dirPath, name, content = '') => {
@@ -319,6 +324,7 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
         if (res.ok) {
           const norm = normalizePath(joinPath(dirPath, finalName));
           dispatch({ type: 'SET_FRAGMENTS', payload: { path: norm, value: seedFragments(norm) } });
+          emitFileWrite(norm, content);
         }
         return res;
       },

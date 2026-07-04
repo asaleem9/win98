@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Desktop } from '../Desktop';
 import { getDesktopApps } from '@/lib/appRegistry';
+import { resolvePath } from '@/lib/filesystem';
 import { SettingsProvider } from '@/contexts/SettingsContext';
 import { FileSystemProvider } from '@/contexts/FileSystemContext';
 
@@ -36,6 +37,9 @@ vi.mock('@/contexts/WindowContext', () => ({
 }));
 
 const desktopApps = getDesktopApps();
+// The desktop also surfaces whatever lives in C:\Windows\Desktop (the staged
+// first-run README, etc.), so the icon count is apps + seeded desktop files.
+const desktopFiles = resolvePath('C:\\Windows\\Desktop')?.children ?? [];
 
 describe('Desktop', () => {
   beforeEach(() => {
@@ -48,9 +52,13 @@ describe('Desktop', () => {
     for (const app of desktopApps) {
       expect(screen.getByText(app.name)).toBeInTheDocument();
     }
-    // Verify count matches
+    // Seeded desktop files show up as icons too
+    for (const file of desktopFiles) {
+      expect(screen.getByText(file.name)).toBeInTheDocument();
+    }
+    // Verify count matches: registered apps + files staged on the desktop
     const icons = screen.getAllByRole('img');
-    expect(icons.length).toBe(desktopApps.length);
+    expect(icons.length).toBe(desktopApps.length + desktopFiles.length);
   });
 
   it('double-clicking an icon calls openWindow with the correct appId', () => {

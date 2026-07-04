@@ -6,6 +6,8 @@ const MediaPlayerApp = lazy(() => import('@/components/apps/media-player/MediaPl
 const RealPlayerApp = lazy(() => import('@/components/apps/realplayer/RealPlayer'));
 const QuickTimePlayerApp = lazy(() => import('@/components/apps/quicktime/QuickTimePlayer'));
 const VolumeControlApp = lazy(() => import('@/components/apps/volume-control/VolumeControl'));
+const CDPlayerApp = lazy(() => import('@/components/apps/cd-player/CDPlayer'));
+const Encyclopedia98App = lazy(() => import('@/components/apps/encarta/Encyclopedia98'));
 
 export const multimediaApps: Record<string, AppDefinition> = {
   'winamp': {
@@ -63,6 +65,28 @@ export const multimediaApps: Record<string, AppDefinition> = {
     component: VolumeControlApp,
     defaultWindow: { title: 'Volume Control', width: 360, height: 240, minWidth: 300, minHeight: 220, resizable: false },
     startMenuPath: ['Programs', 'Accessories', 'Multimedia'],
+    singleton: true,
+  },
+  'cd-player': {
+    id: 'cd-player',
+    name: 'CD Player',
+    icon: '/icons/cd-player-32.svg',
+    icon16: '/icons/cd-player-16.svg',
+    category: 'multimedia',
+    component: CDPlayerApp,
+    defaultWindow: { title: 'CD Player', width: 360, height: 280, minWidth: 340, minHeight: 260, resizable: false },
+    startMenuPath: ['Programs', 'Accessories', 'Multimedia'],
+    singleton: true,
+  },
+  'encarta': {
+    id: 'encarta',
+    name: 'Encyclopedia 98',
+    icon: '/icons/encarta-32.svg',
+    icon16: '/icons/encarta-16.svg',
+    category: 'multimedia',
+    component: Encyclopedia98App,
+    defaultWindow: { title: 'Encyclopedia 98', width: 660, height: 520, minWidth: 480, minHeight: 380 },
+    startMenuPath: ['Programs'],
     singleton: true,
   },
 };

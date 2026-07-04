@@ -20,6 +20,7 @@ import {
 import { useSettings } from '@/contexts/SettingsContext';
 import { useWindows } from '@/contexts/WindowContext';
 import { emit } from '@/lib/eventBus';
+import { markNortonOpened } from './realtimeShield';
 
 const allThreats: Threat[] = [
   { name: 'ILOVEYOU.VBS', location: 'C:\\Windows\\System\\', risk: 'High', type: 'VBS.LoveLetter.A' },
@@ -61,6 +62,8 @@ export default function NortonAntiVirus({ windowId }: AppComponentProps) {
   const { closeWindow } = useWindows();
 
   useEffect(() => {
+    // Opening Norton arms the real-time shield for the rest of the session.
+    markNortonOpened();
     if (shieldRegistered) return;
     shieldRegistered = true;
     emit('tray-register', { id: 'norton', icon: '/icons/norton-16.svg', tooltip: 'Norton AntiVirus' });

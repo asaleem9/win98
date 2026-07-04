@@ -16,9 +16,12 @@ import { ShellShortcuts } from '@/components/system/ShellShortcuts';
 import { ShellEventHost } from '@/components/system/ShellEventHost';
 import { DialogHost } from '@/components/dialogs/DialogHost';
 import { ScreenSaverManager } from '@/components/system/ScreenSaverManager';
+import { ScanDiskDOS } from '@/components/apps/scandisk/ScanDiskDOS';
+import { FirstRunHost } from '@/components/system/FirstRunHost';
+import { useNortonRealtimeShield } from '@/components/apps/norton/realtimeShield';
 import { playSound } from '@/lib/sounds';
 
-type SystemState = 'booting' | 'login' | 'running' | 'shutdown' | 'bsod';
+type SystemState = 'booting' | 'scandisk' | 'login' | 'running' | 'shutdown' | 'bsod';
 
 function ScreenSaverHost() {
   const { settings } = useSettings();
@@ -28,6 +31,12 @@ function ScreenSaverHost() {
       timeoutMs={settings.screenSaver.timeoutMinutes * 60000}
     />
   );
+}
+
+/** Runs Norton's real-time shield over filesystem writes while the desktop is up. */
+function NortonShieldHost() {
+  useNortonRealtimeShield();
+  return null;
 }
 
 /** Applies the selected color scheme's CSS variables document-wide. */
@@ -58,6 +67,12 @@ function SystemShell() {
   const handleBootComplete = useCallback(() => {
     // First full boot done — subsequent boots take the fast path.
     setAppPref('system', 'hasBooted', true);
+    // A BSOD/crash last session leaves the drive "dirty"; run ScanDisk before login.
+    setSystemState(getAppPref('system', 'dirtyShutdown', false) ? 'scandisk' : 'login');
+  }, [setAppPref, getAppPref]);
+
+  const handleScanDiskComplete = useCallback(() => {
+    setAppPref('system', 'dirtyShutdown', false);
     setSystemState('login');
   }, [setAppPref]);
 
@@ -80,9 +95,11 @@ function SystemShell() {
   }, []);
 
   const handleBSOD = useCallback((message?: string) => {
+    // Any blue screen counts as an improper shutdown — arm ScanDisk for next boot.
+    setAppPref('system', 'dirtyShutdown', true);
     setBsodMessage(message);
     setSystemState('bsod');
-  }, []);
+  }, [setAppPref]);
 
   const handleBSODDismiss = useCallback(() => {
     setSystemState('running');
@@ -119,6 +136,10 @@ function SystemShell() {
     );
   }
 
+  if (systemState === 'scandisk') {
+    return <ScanDiskDOS onComplete={handleScanDiskComplete} />;
+  }
+
   if (systemState === 'login') {
     return <LoginScreen onLogin={handleLogin} />;
   }
@@ -151,6 +172,12 @@ function SystemShell() {
 
           {/* Idle screensaver */}
           <ScreenSaverHost />
+
+          {/* Norton real-time protection: quarantines known threats as they land */}
+          <NortonShieldHost />
+
+          {/* One-time first-session theater: AIM sign-on and You've Got Mail */}
+          <FirstRunHost />
 
           {/* Color scheme CSS variables */}
           <SchemeApplier />

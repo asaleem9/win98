@@ -8,6 +8,8 @@ const NapsterApp = lazy(() => import('@/components/apps/napster/Napster'));
 const BonziBuddyApp = lazy(() => import('@/components/apps/bonzi-buddy/BonziBuddy'));
 const LimeWireApp = lazy(() => import('@/components/apps/limewire/LimeWire'));
 const OutlookExpressApp = lazy(() => import('@/components/apps/outlook/OutlookExpress'));
+const ICQApp = lazy(() => import('@/components/apps/icq/ICQ'));
+const MIRCApp = lazy(() => import('@/components/apps/mirc/mIRC'));
 
 export const internetApps: Record<string, AppDefinition> = {
   'ie5': {
@@ -91,5 +93,27 @@ export const internetApps: Record<string, AppDefinition> = {
     startMenuPath: ['Programs'],
     singleton: true,
     desktopIcon: true,
+  },
+  'icq': {
+    id: 'icq',
+    name: 'ICQ',
+    icon: '/icons/icq-32.svg',
+    icon16: '/icons/icq-16.svg',
+    category: 'internet',
+    component: ICQApp,
+    defaultWindow: { title: 'ICQ', width: 340, height: 460, minWidth: 320, minHeight: 360 },
+    startMenuPath: ['Programs', 'Internet Tools'],
+    singleton: true,
+  },
+  'mirc': {
+    id: 'mirc',
+    name: 'mIRC',
+    icon: '/icons/mirc-32.svg',
+    icon16: '/icons/mirc-16.svg',
+    category: 'internet',
+    component: MIRCApp,
+    defaultWindow: { title: 'mIRC', width: 640, height: 440, minWidth: 480, minHeight: 360 },
+    startMenuPath: ['Programs', 'Internet Tools'],
+    singleton: true,
   },
 };

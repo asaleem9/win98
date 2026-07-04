@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo, useEffect, useRef, MouseEvent } from 'r
 import { AppComponentProps } from '@/types/app';
 import { useWindows } from '@/contexts/WindowContext';
 import { useFileSystem } from '@/contexts/FileSystemContext';
+import { useSettings } from '@/contexts/SettingsContext';
+import { imageWallpaper } from '@/lib/wallpaperActions';
 import { useFileOpener, showSystemError } from '@/hooks/useFileOpener';
 import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
 import { Toolbar98 } from '@/components/ui/Toolbar98';
@@ -67,7 +69,8 @@ type CreateOp =
 
 export default function Explorer({ windowId, launchParams, launchCount }: AppComponentProps) {
   const { updateTitle, closeWindow } = useWindows();
-  const { root, getNode, listDir, createFile, createFolder, rename, move, deleteToRecycleBin } = useFileSystem();
+  const { root, getNode, listDir, readFile, createFile, createFolder, rename, move, deleteToRecycleBin } = useFileSystem();
+  const { setSetting } = useSettings();
   const { openFile } = useFileOpener();
 
   const start = launchParams?.filePath ? normalizePath(launchParams.filePath) : 'C:\\';
@@ -367,8 +370,22 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
         { label: 'Select All', onClick: selectAll },
       ];
     }
+    const singleName = ids.length === 1 ? getNode(ids[0])?.name ?? '' : '';
+    const isImage = /\.(bmp|png)$/i.test(singleName);
     return [
       { label: 'Open', bold: true, onClick: () => handleOpen(ids[0]) },
+      ...(isImage
+        ? ([
+            {
+              label: 'Set as Wallpaper',
+              onClick: () => {
+                const content = readFile(ids[0]);
+                const source = content && content.startsWith('data:') ? content : ids[0];
+                setSetting('wallpaper', imageWallpaper(source, 'center'));
+              },
+            },
+          ] as ContextMenuItem[])
+        : []),
       { separator: true },
       { label: 'Cut', onClick: () => doCut(ids) },
       { label: 'Copy', onClick: () => doCopy(ids) },
@@ -378,7 +395,7 @@ export default function Explorer({ windowId, launchParams, launchCount }: AppCom
       { separator: true },
       { label: 'Properties', disabled: ids.length !== 1, onClick: () => setPropsFor(ids[0]) },
     ];
-  }, [menu, selected, canPaste, newFolder, newTextDoc, doPaste, selectAll, handleOpen, doCut, doCopy, requestDelete, beginRename]);
+  }, [menu, selected, canPaste, newFolder, newTextDoc, doPaste, selectAll, handleOpen, doCut, doCopy, requestDelete, beginRename, getNode, readFile, setSetting]);
 
   const objectCount = rows.length;
   const selectedNode = selected.size === 1 ? getNode([...selected][0]) : null;

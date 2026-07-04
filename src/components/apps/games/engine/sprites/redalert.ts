@@ -8,10 +8,9 @@
 // Style follows common.ts / rts-common.ts: mnemonic palette chars, one comment
 // per sprite naming its size, and a validate-all test (redalert.test.ts).
 //
-// Note: the ore cluster below is authored for the sheet, but the engine renders
-// resource patches as flat diamonds, so it is not wired into the live map — it
-// documents the ore field's intended look. Everything else is wired into
-// CNC_CONFIG in CommandConquer.tsx.
+// Note: the ore cluster below is wired to the ore resource (ResourceDef.sprite),
+// so ore fields draw as heaps of raw crystals on the live map instead of flat
+// diamonds. Everything else is wired into CNC_CONFIG in CommandConquer.tsx.
 
 import type { SpriteDef } from './sprite';
 import { OUTLINE, WHITE, SKIN, METAL, FACTION_RED } from './palettes';
@@ -431,8 +430,8 @@ export const WAR_FACTORY: SpriteDef = {
 };
 
 // ---------------------------------------------------------------------------
-// Neutral prop — the engine draws ore patches as diamonds, so this is authored
-// for the sheet but not wired into the live map (see the file header).
+// Neutral prop — wired to the ore resource, so ore patches draw this instead of
+// the fallback diamond (see the file header).
 // ---------------------------------------------------------------------------
 
 // Ore cluster — 14x12. A heap of raw ore crystals (y Y z) the trucks harvest;

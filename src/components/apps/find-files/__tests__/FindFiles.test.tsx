@@ -11,8 +11,10 @@ describe('FindFiles', () => {
 
     expect(screen.getByText('readme.txt')).toBeInTheDocument();
     expect(screen.getByText('passwords.txt')).toBeInTheDocument();
-    // The virtual C: drive only holds .txt files under My Documents.
-    expect(screen.getByText(/2 file\(s\) found/)).toBeInTheDocument();
+    expect(screen.getByText('README - START HERE.txt')).toBeInTheDocument();
+    // .txt files live under My Documents (readme, passwords) plus the tour note
+    // staged on the Desktop.
+    expect(screen.getByText(/3 file\(s\) found/)).toBeInTheDocument();
   });
 
   it('filters out non-matching files (no .doc when searching *.txt)', () => {

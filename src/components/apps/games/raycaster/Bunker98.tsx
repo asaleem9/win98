@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn';
 import { PixelSprite } from '../engine/sprites';
 import { makeRng, type Rand } from '../engine/rng';
 import { useGameLoop } from '../engine/loop';
+import { useWindowActive, PauseVeil } from '../engine/focusPause';
 import { buildWallTextures, packRGB, shade, TEX_SIZE, WALL } from './texture';
 import { castRay, hasLineOfSight, isSolidPoint, spriteTransform, type RayScene } from './raycast';
 import {
@@ -171,8 +172,8 @@ function buildWorld(level: ParsedLevel, carry: Partial<PlayerState> | null): Wor
 // ---------------------------------------------------------------------------
 
 export default function Bunker98({ windowId }: AppComponentProps) {
-  void windowId;
   const { getAppPref, setAppPref } = useSettings();
+  const windowActive = useWindowActive(windowId);
 
   const [screen, setScreen] = useState<Screen>('title');
   const [sector, setSector] = useState(0);
@@ -311,8 +312,22 @@ export default function Bunker98({ windowId }: AppComponentProps) {
       },
       [ensureBuffers, persistScore],
     ),
-    screen === 'play',
+    screen === 'play' && windowActive,
   );
+
+  // F2 restarts the current sector fresh (Windows New Game convention), but only
+  // for the focused window so a background game isn't reset by a stray keypress.
+  useEffect(() => {
+    if (screen !== 'play' || !windowActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'F2') {
+        e.preventDefault();
+        startSector(sectorRef.current, null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen, windowActive, startSector]);
 
   const carryFrom = (w: World | null): Partial<PlayerState> | null =>
     w ? { hp: Math.max(w.player.hp, 25), armor: w.player.armor, ammo: Math.max(w.player.ammo, 6), score: w.player.score } : null;
@@ -373,9 +388,10 @@ export default function Bunker98({ windowId }: AppComponentProps) {
         )}
         {!locked && (
           <div className="absolute bottom-1 right-2 text-[9px] text-white/60 pointer-events-none" style={{ textShadow: '1px 1px 0 #000' }}>
-            click to lock mouse · Tab map
+            click to lock mouse · Tab map · F2 restart
           </div>
         )}
+        <PauseVeil windowId={windowId} show={!windowActive} />
       </div>
       <StatusBar hud={hud} />
     </div>

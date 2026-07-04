@@ -9,6 +9,7 @@ import { DesktopIcon } from './DesktopIcon';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { DESKTOP_GRID, WINDOW_DEFAULTS } from '@/lib/constants';
 import { getWallpaper, isImageWallpaper, imageWallpaperStyle } from '@/lib/wallpapers';
+import { imageWallpaper } from '@/lib/wallpaperActions';
 import { requestOpenFile } from '@/lib/recentDocs';
 import { playSound } from '@/lib/sounds';
 import { InstallerHost } from '@/components/apps/add-remove-programs/InstallerHost';
@@ -55,7 +56,7 @@ function rectsIntersect(a: { left: number; top: number; right: number; bottom: n
 export function Desktop() {
   const { openWindow } = useWindows();
   const { listDir, createFolder, createFile, deleteToRecycleBin, rename, readFile } = useFileSystem();
-  const { settings, getAppPref, setAppPref } = useSettings();
+  const { settings, setSetting, getAppPref, setAppPref } = useSettings();
 
   const [selectedIcons, setSelectedIcons] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ items: ContextMenuItem[]; position: Point } | null>(null);
@@ -266,10 +267,23 @@ export function Desktop() {
       e.stopPropagation();
       setSelectedIcons(new Set([entry.id]));
       const isFs = !!entry.fsPath;
+      const isImage = isFs && /\.(bmp|png)$/i.test(entry.name);
       setContextMenu({
         position: { x: e.clientX, y: e.clientY },
         items: [
           { label: 'Open', bold: true, onClick: () => openEntry(entry) },
+          ...(isImage
+            ? ([
+                {
+                  label: 'Set as Wallpaper',
+                  onClick: () => {
+                    const content = readFile(entry.fsPath!);
+                    const source = content && content.startsWith('data:') ? content : entry.fsPath!;
+                    setSetting('wallpaper', imageWallpaper(source, 'center'));
+                  },
+                },
+              ] as ContextMenuItem[])
+            : []),
           { separator: true },
           {
             label: 'Delete',
@@ -304,7 +318,7 @@ export function Desktop() {
         ],
       });
     },
-    [openEntry, deleteToRecycleBin],
+    [openEntry, deleteToRecycleBin, readFile, setSetting],
   );
 
   const handleRename = useCallback(

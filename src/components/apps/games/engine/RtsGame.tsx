@@ -5,6 +5,7 @@ import { Button98 } from '@/components/ui/Button98';
 import { playSound } from '@/lib/sounds';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useGameLoop } from './loop';
+import { useWindowActive, PauseVeil } from './focusPause';
 import {
   compileSprite,
   drawSprite,
@@ -49,6 +50,7 @@ import {
 
 interface Props {
   config: RtsConfig;
+  windowId: string;
   onExit: () => void;
 }
 
@@ -69,7 +71,7 @@ function factionFor(config: RtsConfig, owner: 'player' | 'enemy'): FactionName {
   return config.factions?.[owner] ?? (owner === 'player' ? 'blue' : 'red');
 }
 
-export default function RtsGame({ config, onExit }: Props) {
+export default function RtsGame({ config, windowId, onExit }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<RtsState>(createRtsState(config));
   const selectedRef = useRef<Set<number>>(new Set());
@@ -81,6 +83,14 @@ export default function RtsGame({ config, onExit }: Props) {
   const bestRef = useRef(0);
   const savedRef = useRef(false);
   const { getAppPref, setAppPref } = useSettings();
+
+  // Pause the sim when another window covers this one or the tab is hidden.
+  const active = useWindowActive(windowId);
+  const activeRef = useRef(active);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+  const restartRef = useRef<() => void>(() => {});
 
   const [mode, setMode] = useState<{ build: string | null; sup: boolean }>({ build: null, sup: false });
   const [hud, setHud] = useState<Hud>(() => ({
@@ -159,21 +169,28 @@ export default function RtsGame({ config, onExit }: Props) {
       ctx.stroke();
     }
 
-    // resource patches
+    // resource patches — the resource's prop sprite when it has one (crystals,
+    // ore heaps, berry bushes), scaled a little by how much is left so a drained
+    // field visibly shrinks; otherwise the classic flat diamond.
     for (const p of s.patches) {
       if (p.amount <= 0) continue;
       const def = config.resources.find((r) => r.id === p.resourceId);
-      const r = 8 + Math.min(10, p.amount / 120);
-      ctx.fillStyle = def?.color ?? '#4fd6e0';
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y - r);
-      ctx.lineTo(p.x + r, p.y);
-      ctx.lineTo(p.x, p.y + r);
-      ctx.lineTo(p.x - r, p.y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-      ctx.stroke();
+      if (def?.sprite) {
+        const frac = p.maxAmount > 0 ? p.amount / p.maxAmount : 1;
+        drawSprite(ctx, compileSprite(def.sprite), p.x, p.y, { anchor: 'center', scale: 1 + 0.4 * frac });
+      } else {
+        const r = 8 + Math.min(10, p.amount / 120);
+        ctx.fillStyle = def?.color ?? '#4fd6e0';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - r);
+        ctx.lineTo(p.x + r, p.y);
+        ctx.lineTo(p.x, p.y + r);
+        ctx.lineTo(p.x - r, p.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.stroke();
+      }
     }
 
     // ground-level effects first (corpses / rubble sit under the living)
@@ -270,7 +287,21 @@ export default function RtsGame({ config, onExit }: Props) {
       },
       [draw, syncHud, setAppPref, config.gameId],
     ),
+    active,
   );
+
+  // F2 starts a fresh skirmish (Windows convention), but only for the focused
+  // window so a background game isn't reset by a keypress meant for another.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'F2' && activeRef.current) {
+        e.preventDefault();
+        restartRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -354,6 +385,10 @@ export default function RtsGame({ config, onExit }: Props) {
     syncHud();
   }, [config, syncHud]);
 
+  useEffect(() => {
+    restartRef.current = restart;
+  }, [restart]);
+
   const onCommand = useCallback(
     (opt: CommandOption) => {
       const s = stateRef.current;
@@ -410,6 +445,7 @@ export default function RtsGame({ config, onExit }: Props) {
           Supply: <b>{hud.supplyUsed}/{hud.supplyCap}</b>
         </span>
         <span>Kills: {hud.kills}</span>
+        <span className="ml-auto text-[var(--win98-disabled-text)]">F2: New Skirmish</span>
       </div>
 
       <div className="flex flex-1 min-h-0">
@@ -444,6 +480,7 @@ export default function RtsGame({ config, onExit }: Props) {
               </div>
             </div>
           )}
+          <PauseVeil windowId={windowId} show={!active && hud.status === 'playing'} />
         </div>
 
         {/* Command panel */}

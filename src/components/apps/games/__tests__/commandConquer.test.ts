@@ -70,6 +70,20 @@ describe('Red Alert config validity', () => {
     }
   });
 
+  it('draws the ore field with a validated patch prop', () => {
+    for (const r of cfg.resources) {
+      expect(r.sprite).toBeDefined();
+      expect(validateSpriteDef(r.sprite!)).toEqual([]);
+    }
+  });
+
+  it('leaves the whole Allied roster visible — nothing is hidden', () => {
+    // Heavy Tank and Tesla Coil are enemy-only but capturable via Soviet
+    // Ordnance, so they stay in the panel; the config hides nothing.
+    for (const def of Object.values(cfg.unitTypes)) expect(def.hidden).toBeFalsy();
+    for (const def of Object.values(cfg.buildingTypes)) expect(def.hidden).toBeFalsy();
+  });
+
   it('makes Ore Trucks the scarce, expensive backbone of the economy', () => {
     const truck = cfg.unitTypes.truck;
     const rifle = cfg.unitTypes.rifle;

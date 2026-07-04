@@ -106,6 +106,13 @@ describe('AoE2 config validity', () => {
       if (b.sprite) expect(validateSpriteDef(b.sprite)).toEqual([]);
     }
   });
+
+  it('draws both resources with a validated patch prop (berry bush + trees)', () => {
+    for (const r of cfg.resources) {
+      expect(r.sprite).toBeDefined();
+      expect(validateSpriteDef(r.sprite!)).toEqual([]);
+    }
+  });
 });
 
 describe('AoE2 seeded smoke', () => {

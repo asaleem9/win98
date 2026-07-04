@@ -1,21 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { AppComponentProps } from '@/types/app';
 import { TabControl98 } from '@/components/ui/TabControl98';
 import { Button98 } from '@/components/ui/Button98';
 import { Select98 } from '@/components/ui/Select98';
+import { Input98 } from '@/components/ui/Input98';
+import { GroupBox98 } from '@/components/ui/GroupBox98';
 import { cn } from '@/lib/cn';
 import { useSettings, ColorScheme, ScreenSaverId } from '@/contexts/SettingsContext';
 import { useWindows } from '@/contexts/WindowContext';
 import { WALLPAPERS } from '@/lib/wallpapers';
-import { ScreenSaverManager } from '@/components/system/ScreenSaverManager';
+import { ScreenSaverManager, ScreenSaverView } from '@/components/system/ScreenSaverManager';
 
 const SCREENSAVERS: Array<{ id: ScreenSaverId; name: string }> = [
   { id: 'none', name: '(None)' },
-  { id: 'starfield', name: 'Starfield Simulation' },
-  { id: 'pipes', name: '3D Pipes' },
   { id: 'flying-windows', name: 'Flying Windows' },
+  { id: 'starfield', name: 'Starfield Simulation' },
+  { id: 'mystify', name: 'Mystify Your Mind' },
+  { id: 'pipes', name: '3D Pipes' },
+  { id: 'marquee', name: 'Scrolling Marquee' },
+  { id: 'maze', name: '3D Maze' },
 ];
 
 const COLOR_SCHEMES: Array<{ id: ColorScheme; name: string }> = [
@@ -26,7 +31,13 @@ const COLOR_SCHEMES: Array<{ id: ColorScheme; name: string }> = [
   { id: 'high-contrast', name: 'High Contrast Black' },
 ];
 
-function PreviewMonitor({ screenStyle }: { screenStyle: React.CSSProperties }) {
+function PreviewMonitor({
+  screenStyle,
+  children,
+}: {
+  screenStyle: React.CSSProperties;
+  children?: ReactNode;
+}) {
   return (
     <div className="flex flex-col items-center">
       <div
@@ -46,13 +57,17 @@ function PreviewMonitor({ screenStyle }: { screenStyle: React.CSSProperties }) {
           )}
           style={screenStyle}
         >
-          <div className="m-2 w-[60px]">
-            <div className="h-[8px] bg-[#000080] flex items-center px-[2px]">
-              <span className="text-white text-[5px] leading-none">Window</span>
-            </div>
-            <div className="h-[20px] bg-white border border-[#808080]" />
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-[8px] bg-[#C0C0C0] border-t border-[#DFDFDF]" />
+          {children ?? (
+            <>
+              <div className="m-2 w-[60px]">
+                <div className="h-[8px] bg-[#000080] flex items-center px-[2px]">
+                  <span className="text-white text-[5px] leading-none">Window</span>
+                </div>
+                <div className="h-[20px] bg-white border border-[#808080]" />
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-[8px] bg-[#C0C0C0] border-t border-[#DFDFDF]" />
+            </>
+          )}
         </div>
       </div>
       <div className="w-[60px] h-[8px] bg-[#C0C0C0] border-x-2 border-b-2 border-[#808080]" />
@@ -70,6 +85,8 @@ export default function DisplayProperties({ windowId }: AppComponentProps) {
   const [selectedSaver, setSelectedSaver] = useState<ScreenSaverId>(settings.screenSaver.id);
   const [selectedScheme, setSelectedScheme] = useState<ColorScheme>(settings.colorScheme);
   const [waitTime, setWaitTime] = useState(String(settings.screenSaver.timeoutMinutes));
+  const [marqueeText, setMarqueeText] = useState(settings.screenSaver.marqueeText ?? 'Your message here.');
+  const [marqueeSpeed, setMarqueeSpeed] = useState(settings.screenSaver.marqueeSpeed ?? 3);
   const [previewingSaver, setPreviewingSaver] = useState(false);
 
   const wallpaper = WALLPAPERS.find((w) => w.id === selectedWallpaper) ?? WALLPAPERS[0];
@@ -77,7 +94,12 @@ export default function DisplayProperties({ windowId }: AppComponentProps) {
   const apply = () => {
     setSetting('wallpaper', selectedWallpaper === 'none' ? null : selectedWallpaper);
     setSetting('colorScheme', selectedScheme);
-    setSetting('screenSaver', { id: selectedSaver, timeoutMinutes: Number(waitTime) || 10 });
+    setSetting('screenSaver', {
+      id: selectedSaver,
+      timeoutMinutes: Number(waitTime) || 10,
+      marqueeText,
+      marqueeSpeed,
+    });
   };
 
   const backgroundTab = (
@@ -114,7 +136,19 @@ export default function DisplayProperties({ windowId }: AppComponentProps) {
 
   const screenSaverTab = (
     <div className="flex flex-col items-center gap-3">
-      <PreviewMonitor screenStyle={{ backgroundColor: '#000000' }} />
+      <PreviewMonitor screenStyle={{ backgroundColor: '#000000' }}>
+        {selectedSaver !== 'none' && (
+          <ScreenSaverView
+            // Remount when the selection or marquee text/speed changes so the
+            // little preview always reflects the current choice.
+            key={`${selectedSaver}:${marqueeText}:${marqueeSpeed}`}
+            id={selectedSaver}
+            preview
+            marqueeText={marqueeText}
+            marqueeSpeed={marqueeSpeed}
+          />
+        )}
+      </PreviewMonitor>
       <div className="w-full">
         <div className="flex items-center gap-2 mb-3">
           <span>Screen Saver:</span>
@@ -131,6 +165,35 @@ export default function DisplayProperties({ windowId }: AppComponentProps) {
             Preview
           </Button98>
         </div>
+
+        {selectedSaver === 'marquee' && (
+          <GroupBox98 label="Marquee Settings" className="mb-3">
+            <div className="flex flex-col gap-2 pt-1">
+              <label className="flex items-center gap-2">
+                <span className="w-[42px]">Text:</span>
+                <Input98
+                  value={marqueeText}
+                  onChange={(e) => setMarqueeText(e.target.value)}
+                  className="flex-1"
+                  aria-label="Marquee text"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-[42px]">Speed:</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  value={marqueeSpeed}
+                  onChange={(e) => setMarqueeSpeed(Number(e.target.value))}
+                  className="flex-1"
+                  aria-label="Marquee speed"
+                />
+              </label>
+            </div>
+          </GroupBox98>
+        )}
+
         <div className="flex items-center gap-2">
           <span>Wait:</span>
           <Select98
@@ -224,7 +287,12 @@ export default function DisplayProperties({ windowId }: AppComponentProps) {
       {/* Fullscreen screensaver preview; the saver dismisses itself on input */}
       {previewingSaver && selectedSaver !== 'none' && (
         <div onPointerDown={() => setPreviewingSaver(false)} onKeyDown={() => setPreviewingSaver(false)}>
-          <ScreenSaverManager selectedSaver={selectedSaver} forceActive />
+          <ScreenSaverManager
+            selectedSaver={selectedSaver}
+            forceActive
+            marqueeText={marqueeText}
+            marqueeSpeed={marqueeSpeed}
+          />
         </div>
       )}
     </div>

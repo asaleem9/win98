@@ -7,6 +7,8 @@ const PaintApp = lazy(() => import('@/components/apps/paint/Paint'));
 const WordPadApp = lazy(() => import('@/components/apps/wordpad/WordPad'));
 const CharacterMapApp = lazy(() => import('@/components/apps/character-map/CharacterMap'));
 const SoundRecorderApp = lazy(() => import('@/components/apps/sound-recorder/SoundRecorder'));
+const PhoneDialerApp = lazy(() => import('@/components/apps/phone-dialer/PhoneDialer'));
+const HyperTerminalApp = lazy(() => import('@/components/apps/hyperterminal/HyperTerminal'));
 
 export const accessoriesApps: Record<string, AppDefinition> = {
   'notepad': {
@@ -73,6 +75,28 @@ export const accessoriesApps: Record<string, AppDefinition> = {
     component: SoundRecorderApp,
     defaultWindow: { title: 'Sound - Sound Recorder', width: 280, height: 220, minWidth: 280, minHeight: 220, resizable: false },
     startMenuPath: ['Programs', 'Accessories', 'Multimedia'],
+    singleton: true,
+  },
+  'phone-dialer': {
+    id: 'phone-dialer',
+    name: 'Phone Dialer',
+    icon: '/icons/phone-dialer-32.svg',
+    icon16: '/icons/phone-dialer-16.svg',
+    category: 'accessories',
+    component: PhoneDialerApp,
+    defaultWindow: { title: 'Phone Dialer', width: 360, height: 320, minWidth: 340, minHeight: 300, resizable: false },
+    startMenuPath: ['Programs', 'Accessories', 'Communications'],
+    singleton: true,
+  },
+  'hyperterminal': {
+    id: 'hyperterminal',
+    name: 'HyperTerminal',
+    icon: '/icons/hyperterminal-32.svg',
+    icon16: '/icons/hyperterminal-16.svg',
+    category: 'accessories',
+    component: HyperTerminalApp,
+    defaultWindow: { title: 'HyperTerminal', width: 580, height: 440, minWidth: 480, minHeight: 360 },
+    startMenuPath: ['Programs', 'Accessories', 'Communications'],
     singleton: true,
   },
 };

@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn';
 import { playSound } from '@/lib/sounds';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useGameLoop } from './engine/loop';
+import { useWindowActive, PauseVeil } from './engine/focusPause';
 import {
   PieceType,
   TrackCell,
@@ -277,8 +278,8 @@ function advanceParticles(list: Particle[], dt: number): Particle[] {
 }
 
 export default function RollerCoasterTycoon({ windowId }: AppComponentProps) {
-  void windowId;
   const { getAppPref, setAppPref } = useSettings();
+  const windowActive = useWindowActive(windowId);
 
   const [mode, setMode] = useState<'title' | 'park'>('title');
   const [tool, setTool] = useState<Tool>('straight');
@@ -810,8 +811,22 @@ export default function RollerCoasterTycoon({ windowId }: AppComponentProps) {
       },
       [draw, bump, setAppPref],
     ),
-    mode === 'park',
+    mode === 'park' && windowActive,
   );
+
+  // F2 lays out a fresh park (Windows New Game convention), but only while this
+  // window is focused so a background game isn't wiped by a stray keypress.
+  useEffect(() => {
+    if (mode !== 'park' || !windowActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'F2') {
+        e.preventDefault();
+        startNewGame();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode, windowActive, startNewGame]);
 
   useEffect(() => {
     if (mode === 'park') draw();
@@ -929,7 +944,8 @@ export default function RollerCoasterTycoon({ windowId }: AppComponentProps) {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] overflow-hidden">
+    <div className="relative flex flex-col h-full bg-[var(--win98-button-face)] font-[family-name:var(--win98-font)] text-[11px] overflow-hidden">
+      <PauseVeil windowId={windowId} show={!windowActive} />
       {/* Top status bar */}
       <div className="flex items-center gap-3 px-2 py-1 bg-[linear-gradient(to_right,#1a5e32,#2d8a4e)] text-white">
         <span className="font-bold">🎢 Forest Frontiers</span>
@@ -938,7 +954,8 @@ export default function RollerCoasterTycoon({ windowId }: AppComponentProps) {
         <span className="opacity-80">Goal: {fmt(WIN_TARGET)}</span>
         <span>👥 {view.guests}</span>
         {view.puddles > 0 && <span title="Puddles">🤢 {view.puddles}</span>}
-        <span className="ml-auto opacity-90">Best: {fmt(best)}</span>
+        <span className="ml-auto opacity-60" title="Start a fresh park">F2 New Park</span>
+        <span className="opacity-90">Best: {fmt(best)}</span>
       </div>
 
       {/* Coaster tabs */}

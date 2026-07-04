@@ -7,11 +7,11 @@
 // Style follows common.ts / rts-common.ts: mnemonic palette chars, one comment
 // per sprite naming its size, and a validate-all test (aoe2.test.ts).
 //
-// Note: the engine renders harvestable resource patches as flat colored diamonds,
-// so the berry bush and tree cluster below are authored for the sheet but do not
-// appear on the live map (food/wood patches show as gold/timber diamonds). The
-// Farm sprite *is* wired up — a placed Farm is a building, so its tilled field
-// draws, with a food diamond sitting on top. See AgeOfEmpires2.tsx.
+// Note: the berry bush and tree cluster below are wired to the food and wood
+// resources (ResourceDef.sprite), so harvestable patches draw them on the live
+// map, scaled a little by how much is left. The Farm sprite is a building —
+// placing one seeds a fresh food patch, so a small berry bush sits on its tilled
+// field once the starting berries run dry. See AgeOfEmpires2.tsx.
 
 import type { SpriteDef } from './sprite';
 import { OUTLINE, WHITE, SKIN, FOLIAGE, WOOD, METAL, FACTION_RED } from './palettes';
@@ -446,8 +446,8 @@ export const WATCH_TOWER: SpriteDef = {
 };
 
 // ---------------------------------------------------------------------------
-// Neutral map props — see the file header: the engine draws resource patches as
-// diamonds, so these are authored for the sheet but not wired into the map.
+// Neutral map props — wired to the food/wood resources, so patches draw these
+// instead of the fallback diamond (see the file header).
 // ---------------------------------------------------------------------------
 
 // Berry bush — 14x12. A leafy mound (G g f) studded with ripe berries (e p);

@@ -8,12 +8,19 @@ vi.mock('@/contexts/WindowContext', () => ({
   useWindows: () => ({ openWindow: mockOpenWindow }),
 }));
 
+let mockTaskbarSettings: { showClock: boolean };
+
 // The tray reads the Regional clock-format pref; stub it to the 12-hour default.
 vi.mock('@/contexts/SettingsContext', () => ({
   useSettings: () => ({
+    settings: { taskbar: mockTaskbarSettings },
     getAppPref: (_appId: string, _key: string, fallback: unknown) => fallback,
   }),
 }));
+
+beforeEach(() => {
+  mockTaskbarSettings = { showClock: true };
+});
 
 // Emitting an event synchronously updates React state via the tray's listeners,
 // so wrap dispatches in act to flush.
@@ -70,5 +77,18 @@ describe('SystemTray dynamic tray icons', () => {
     render(<SystemTray />);
     fireEvent.doubleClick(screen.getByTitle('Dial-Up Networking'));
     expect(mockOpenWindow).toHaveBeenCalledWith('network-neighborhood');
+  });
+});
+
+describe('SystemTray clock visibility', () => {
+  it('shows the clock by default', () => {
+    render(<SystemTray />);
+    expect(screen.getByText(/\d{1,2}:\d{2}/)).toBeInTheDocument();
+  });
+
+  it('hides the clock when Show clock is off', () => {
+    mockTaskbarSettings = { showClock: false };
+    render(<SystemTray />);
+    expect(screen.queryByText(/\d{1,2}:\d{2}/)).not.toBeInTheDocument();
   });
 });

@@ -112,10 +112,12 @@ export function SystemTray() {
   const [trayIcons, setTrayIcons] = useState<TrayIcon[]>([]);
   const [networkActive, setNetworkActive] = useState(false);
   const { openWindow } = useWindows();
-  const { getAppPref } = useSettings();
+  const { settings, getAppPref } = useSettings();
 
   // The Regional Settings applet flips the clock between 12- and 24-hour.
   const clock24h = getAppPref('regional', 'clock24h', false);
+  // Taskbar Properties can hide the tray clock entirely.
+  const showClock = settings?.taskbar?.showClock ?? true;
 
   useEffect(() => {
     const updateTime = () => {
@@ -224,12 +226,14 @@ export function SystemTray() {
         }}
         title="Volume"
       />
-      <span
-        className="select-none cursor-default"
-        onDoubleClick={() => setDateTimeOpen(true)}
-      >
-        {time}
-      </span>
+      {showClock && (
+        <span
+          className="select-none cursor-default"
+          onDoubleClick={() => setDateTimeOpen(true)}
+        >
+          {time}
+        </span>
+      )}
 
       {volumeOpen && <VolumePopup onClose={() => setVolumeOpen(false)} />}
       {dateTimeOpen && <DateTimeDialog onClose={() => setDateTimeOpen(false)} clock24h={clock24h} />}

@@ -7,9 +7,9 @@
 // Style follows common.ts / rts-common.ts: mnemonic palette chars, one comment
 // per sprite naming its size, and a validate-all test (starcraft.test.ts).
 //
-// Note: the engine renders resource patches as flat diamonds and has no sprite
-// field for them, so the mineral crystal and vespene geyser below are authored
-// for the sheet but not wired into the live map (same as aoe2's berry bush).
+// Note: the mineral crystal and vespene geyser below are wired to the minerals
+// and gas resources (ResourceDef.sprite), so their patches draw as crystal
+// clusters and geysers on the live map instead of flat diamonds.
 
 import type { SpriteDef } from './sprite';
 import { OUTLINE, WHITE, METAL, FACTION_RED } from './palettes';
@@ -453,8 +453,8 @@ export const SUNKEN_COLONY: SpriteDef = {
 };
 
 // ---------------------------------------------------------------------------
-// Neutral map props — see the file header: the engine draws resource patches as
-// diamonds, so these are authored for the sheet but not wired into the map.
+// Neutral map props — wired to the minerals/gas resources, so patches draw these
+// instead of the fallback diamond (see the file header).
 // ---------------------------------------------------------------------------
 
 // Mineral crystal — 14x14, 1 frame. A cluster of cyan crystal shards (C c) with

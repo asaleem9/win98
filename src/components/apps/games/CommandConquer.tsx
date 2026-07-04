@@ -19,6 +19,7 @@ import {
   POWER_PLANT,
   BARRACKS,
   WAR_FACTORY,
+  ORE_CLUSTER,
 } from './engine/sprites/redalert';
 
 // The shared RTS engine dressed as Red Alert. Its identity is a different
@@ -29,7 +30,7 @@ import {
 // Tanks. Exported for the config + smoke tests.
 export const CNC_CONFIG: RtsConfig = {
   gameId: 'command-conquer',
-  resources: [{ id: 'ore', name: 'Ore', color: '#e0c840' }],
+  resources: [{ id: 'ore', name: 'Ore', color: '#e0c840', sprite: ORE_CLUSTER }],
   startResources: { ore: 500 },
   colors: {
     player: '#3a7fd0',
@@ -268,12 +269,11 @@ export const CNC_CONFIG: RtsConfig = {
 };
 
 export default function CommandConquer({ windowId }: AppComponentProps) {
-  void windowId;
   const [screen, setScreen] = useState<'title' | 'game'>('title');
   const [showError, setShowError] = useState(false);
 
   if (screen === 'game') {
-    return <RtsGame config={CNC_CONFIG} onExit={() => setScreen('title')} />;
+    return <RtsGame config={CNC_CONFIG} windowId={windowId} onExit={() => setScreen('title')} />;
   }
 
   const startSkirmish = () => {

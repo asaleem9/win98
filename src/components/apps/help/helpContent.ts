@@ -759,12 +759,15 @@ The controls:
 - **Space bar** — pull back and release the plunger to launch the ball. Hold longer for more power.
 - **Z** or the **Left Arrow** — the left flipper.
 - **/** (slash) or the **Right Arrow** — the right flipper.
+- **F2** — start a fresh game at any time.
 
 How to play:
 
 1. Launch the ball with the plunger.
 2. Use the flippers to keep the ball from falling between them, and aim for the lit targets.
-3. Follow the **missions** shown in the message bar — completing them as a Space Cadet is how you climb the ranks and score big.
+3. Take on the **missions** shown in the message bar — Target Practice, Re-entry, Bumper Storm, Spin Cycle, and the Hyperspace Chase. Each one you finish lifts your rank from Cadet to Ensign, Lieutenant, and on up the ladder.
+
+Finish the Hyperspace Chase and a second ball drops for **multiball**: every point counts double while more than one ball is on the table, and you keep playing until the last one drains.
 
 You get three balls per game. Nudging the table can save a ball, but shove too hard and it will **TILT**, freezing the flippers until the ball drains.
 
@@ -776,23 +779,102 @@ You get three balls per game. Nudging the table can save a ball, but shove too h
     id: 'classic-games',
     title: 'Classic Games Collection',
     category: 'Games',
-    keywords: ['games', 'oregon trail', 'simcity', 'age of empires', 'starcraft', 'diablo', 'tony hawk', 'rollercoaster'],
-    indexEntries: ['games, classic', 'Oregon Trail', 'SimCity', 'StarCraft'],
+    keywords: ['games', 'oregon trail', 'simcity', 'age of empires', 'starcraft', 'diablo', 'tony hawk', 'rollercoaster', 'skifree', 'bunker', 'yeti'],
+    indexEntries: ['games, classic', 'Oregon Trail', 'SimCity', 'StarCraft', 'SkiFree', 'Bunker 98'],
     body: `Beyond the card and puzzle games, a shelf of era favorites is installed. Each opens from the Games menu.
 
 - **The Oregon Trail** — lead a wagon party west in 1848. Buy supplies, ford rivers, and try not to die of dysentery.
 - **SimCity** — found a city, zone it for homes, shops, and industry, and keep the citizens happy as it grows.
 - **RollerCoaster Tycoon** — build and run an amusement park, coasters and all.
-- **Age of Empires II** and **StarCraft** — gather resources, build a base, and command an army to victory.
-- **Command & Conquer** — real-time war between rival factions.
+- **Age of Empires II**, **StarCraft**, and **Command & Conquer** — gather resources, build a base, and send an army to crush your rival.
 - **Diablo II** — descend into the dungeons, battle monsters, and gather loot.
-- **Tony Hawk's Pro Skater 2** — chain tricks and combos for the biggest score.
+- **[Tony Hawk's Pro Skater 2](topic:tony-hawk)** — chain tricks, grinds, and manuals into one huge combo.
+- **[SkiFree](topic:skifree)** — bomb down an endless slope and stay ahead of the yeti.
+- **[Bunker 98](topic:bunker-98)** — a first-person shooter through corridors full of hostile drones.
 
-Each game explains its own controls when it starts. Save often, and have fun.
+Each game explains its own controls when it starts, and the action games all take **F2** to start over. Save often, and have fun.
 
 > Related Topics:
 - pinball
-- minesweeper`,
+- skifree
+- bunker-98`,
+  },
+  {
+    id: 'skifree',
+    title: 'SkiFree',
+    category: 'Games',
+    keywords: ['skifree', 'ski', 'yeti', 'slalom', 'downhill', 'snow', 'style', 'tricks', 'game'],
+    indexEntries: ['SkiFree', 'yeti', 'skiing'],
+    body: `SkiFree sends you straight down a snowy mountain. Dodge the trees, thread the flags, and — sooner or later — outrun the yeti. [Open SkiFree](app:skifree) to hit the slope.
+
+Pick a mode from the title screen:
+
+- **Free Style** — an endless run with no finish line. Rack up distance and style, but the yeti wakes at 2,000 metres and comes hungry.
+- **Slalom** — race the clock to 1,500 metres, threading every gate. Missing one adds a time penalty.
+- **Tree Slalom** — the same gates, hidden in a thick stand of pines.
+
+The controls:
+
+- **Left** and **Right arrows** (or the mouse) — steer.
+- **Down arrow** — tuck and point straight downhill for more speed.
+- **F** — a burst of extra speed.
+- **Up arrow** or **Space** — flip off a jump for style points. Land it clean or you wipe out.
+- **F2** — start a fresh run.
+
+Style points come from tricks off the ramps. The yeti can only grab you on the ground, so a well-timed jump buys you a few precious metres — but nobody outruns him forever.
+
+> Related Topics:
+- classic-games
+- bunker-98`,
+  },
+  {
+    id: 'bunker-98',
+    title: 'Bunker 98',
+    category: 'Games',
+    keywords: ['bunker', 'bunker 98', 'shooter', 'first person', '3d', 'doom', 'blaster', 'keycard', 'sector', 'game'],
+    indexEntries: ['Bunker 98', 'first-person shooter'],
+    body: `Bunker 98 is a first-person shooter. You are sealed inside an underground complex with an energy blaster and a horde of maintenance drones that have turned hostile. [Open Bunker 98](app:bunker-98) to drop in.
+
+Your objective in each sector is to reach the exit lift. Some are sealed behind blast doors — find the matching **silver** or **gold** keycard before you can open them.
+
+The controls:
+
+- **W A S D** — move; **A** and **D** also strafe side to side.
+- **Left/Right arrows** or the **mouse** — turn. Click the window first to lock the mouse for smooth aiming.
+- **Ctrl** or **click** — fire the blaster.
+- **E** or **Space** — open doors and throw the exit lever.
+- **Tab** — show the overhead map.
+- **F2** — restart the current sector.
+
+Clear each sector to see your rating for kills, items, and secrets. Data caches tucked off the main path are worth a fortune and count toward that secret score, so it pays to explore.
+
+> Related Topics:
+- classic-games
+- skifree`,
+  },
+  {
+    id: 'tony-hawk',
+    title: "Tony Hawk's Pro Skater 2",
+    category: 'Games',
+    keywords: ['tony hawk', 'pro skater', 'skateboard', 'skating', 'tricks', 'combo', 'grind', 'manual', 'special', 'thps', 'game'],
+    indexEntries: ["Tony Hawk's Pro Skater", 'skateboarding', 'combos'],
+    body: `Tony Hawk's Pro Skater 2 drops you into a skate park with one job: string tricks together for the biggest score before the run clock runs out. [Open the game](app:tony-hawk-2) to skate.
+
+The controls:
+
+- **Space** — ollie. Time it off a ramp or ledge to launch into the air.
+- **Left** and **Right arrows** — flip tricks while airborne.
+- **Up arrow** — a grab.
+- **Down arrow** — a judo.
+- **Up, Up** (double-tap) — a special trick, once your special meter is charged.
+- Land into **Down, Up** to hold a **manual** and keep the combo running between obstacles.
+- **F2** — restart the run.
+
+Ride onto a rail or ledge to **grind** it, and keep your balance to hold the grind. The real points come from chaining ollies, flips, grinds, and manuals into one long combo before you touch down — but a hard landing bails the trick and drops everything you banked. Collect the **S-K-A-T-E** letters and hit the score goals to clear each level.
+
+> Related Topics:
+- classic-games
+- pinball`,
   },
 
   // ------------------------------------------------------------------- System

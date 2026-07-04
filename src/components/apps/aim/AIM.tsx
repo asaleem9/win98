@@ -6,11 +6,33 @@ import { useWindows } from '@/contexts/WindowContext';
 import { playSound } from '@/lib/sounds';
 import { emit } from '@/lib/eventBus';
 import { generateReply, renderEmoticons } from './replyEngine';
+import { AIM_WELCOME_EVENT } from './firstRun';
 
 // The buddy who admires your freshly published GeoCities page, and how long
 // after publishing they get around to IMing you about it.
 const COMPLIMENT_BUDDY = 'sk8erboi99';
 const COMPLIMENT_DELAY_MS = 60_000;
+
+// On the first desktop session AIM auto-signs-on ~45s after login (scheduled in
+// firstRun.ts); when it does, this buddy pings you about the bundled games.
+const WELCOME_BUDDY = 'sk8erboi99';
+const WELCOME_IM_TEXT = 'yo! ur computer came with games, check Programs =)';
+
+// A while after you sign on, a buddy drops the era's inescapable link. Fires
+// once per session and from a different buddy than the compliment hook so the
+// two never pile onto the same conversation.
+const LINK_DROP_BUDDY = 'surfergirl_ca';
+const LINK_DROP_DELAY_MS = 90_000;
+const LINK_DROP_MESSAGE = 'yo check this out www.hampsterdance.com';
+
+// Session guard so the link only ever lands once, no matter how many times AIM
+// is opened and closed.
+let linkDropDelivered = false;
+
+/** Test hook: forget that the link drop already happened this session. */
+export function __resetAimLinkDrop(): void {
+  linkDropDelivered = false;
+}
 
 // Matches a bare or fully-qualified URL inside a chat message so it can render
 // as a clickable link (split() keeps the captured URL at odd indices).
@@ -475,10 +497,53 @@ export default function AIM({ windowId }: AppComponentProps) {
     };
   }, []);
 
+  // A minute and a half after sign-on, a buddy IMs the hamster dance link. Same
+  // delivery path as the publish compliment; guarded to fire only once a session.
+  useEffect(() => {
+    if (linkDropDelivered) return;
+    const timer = setTimeout(() => {
+      if (linkDropDelivered) return;
+      linkDropDelivered = true;
+      const roster = groupsRef.current.flatMap((g) => g.buddies);
+      const buddy = roster.find((b) => b.name === LINK_DROP_BUDDY)
+        ?? { name: LINK_DROP_BUDDY, status: 'online' as BuddyStatus };
+      const msg: ChatMessage = { from: LINK_DROP_BUDDY, text: LINK_DROP_MESSAGE, timestamp: getTimeString() };
+      playSound('aimMessage');
+      if (chatWithRef.current?.name === LINK_DROP_BUDDY) {
+        setChatMessages((prev) => [...prev, msg]);
+      } else {
+        setChatWith(buddy);
+        setChatMessages([...(PRELOADED_CONVOS[LINK_DROP_BUDDY] ?? []), msg]);
+      }
+    }, LINK_DROP_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Park the running-man presence icon in the system tray while signed on.
   useEffect(() => {
     emit('tray-register', { id: 'aim', icon: '/icons/aim-16.svg', tooltip: `AIM - ${MY_SCREEN_NAME}` });
     return () => emit('tray-unregister', { id: 'aim' });
+  }, []);
+
+  // First desktop session: AIM opens itself ~45s after login (see firstRun.ts),
+  // then fires AIM_WELCOME_EVENT so a buddy pops up with the door-open sound to
+  // point you at the bundled games. Same delivery path as the publish compliment.
+  useEffect(() => {
+    const onWelcome = () => {
+      const roster = groupsRef.current.flatMap((g) => g.buddies);
+      const buddy = roster.find((b) => b.name === WELCOME_BUDDY)
+        ?? { name: WELCOME_BUDDY, status: 'online' as BuddyStatus };
+      const msg: ChatMessage = { from: WELCOME_BUDDY, text: WELCOME_IM_TEXT, timestamp: getTimeString() };
+      playSound('aimDoorOpen');
+      if (chatWithRef.current?.name === WELCOME_BUDDY) {
+        setChatMessages((prev) => [...prev, msg]);
+      } else {
+        setChatWith(buddy);
+        setChatMessages([...(PRELOADED_CONVOS[WELCOME_BUDDY] ?? []), msg]);
+      }
+    };
+    window.addEventListener(AIM_WELCOME_EVENT, onWelcome);
+    return () => window.removeEventListener(AIM_WELCOME_EVENT, onWelcome);
   }, []);
 
   // Randomly sign buddies on and off, playing the classic AIM door sounds.

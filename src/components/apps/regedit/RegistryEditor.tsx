@@ -27,6 +27,11 @@ import {
   isUnderHklmSystem,
   FindMatch,
 } from './registryOverrides';
+import {
+  RegistryBindingContext,
+  findBinding,
+  applyBoundReads,
+} from './registryBindings';
 
 const REGISTRY_TREE: TreeNode[] = [
   {
@@ -68,7 +73,11 @@ const REGISTRY_TREE: TreeNode[] = [
         children: [
           { id: 'HKLM-Hardware', label: 'Hardware' },
           { id: 'HKLM-Software', label: 'Software', children: [
-            { id: 'HKLM-Software-Microsoft', label: 'Microsoft' },
+            { id: 'HKLM-Software-Microsoft', label: 'Microsoft', children: [
+              { id: 'HKLM-SW-MS-Windows', label: 'Windows', children: [
+                { id: 'HKLM-SW-MS-Windows-CV', label: 'CurrentVersion' },
+              ]},
+            ]},
             { id: 'HKLM-Software-Classes', label: 'Classes' },
           ]},
           { id: 'HKLM-System', label: 'System', children: [
@@ -127,6 +136,13 @@ const VALUES_BY_KEY: Record<string, RegistryValue[]> = {
     { name: 'TEMP', type: 'REG_SZ', data: 'C:\\WINDOWS\\TEMP' },
     { name: 'TMP', type: 'REG_SZ', data: 'C:\\WINDOWS\\TEMP' },
   ],
+  'HKLM-SW-MS-Windows-CV': [
+    { name: 'RegisteredOwner', type: 'REG_SZ', data: 'User' },
+    { name: 'RegisteredOrganization', type: 'REG_SZ', data: 'Microsoft' },
+    { name: 'ProductName', type: 'REG_SZ', data: 'Microsoft Windows 98' },
+    { name: 'Version', type: 'REG_SZ', data: '4.10.1998' },
+    { name: 'VersionNumber', type: 'REG_SZ', data: '4.10.1998' },
+  ],
 };
 
 function getBaseValues(keyId: string): RegistryValue[] {
@@ -153,8 +169,25 @@ type EditDialogState = { keyPath: string; value: RegistryValue } | null;
 type PromptState = { mode: 'newKey' | 'newValue'; text: string } | null;
 
 export default function RegistryEditor({}: AppComponentProps) {
-  const { getAppPref, setAppPref } = useSettings();
+  const { settings, setSetting, getAppPref, setAppPref } = useSettings();
   const { createFile } = useFileSystem();
+
+  // Bind a few registry values to live system settings, both directions.
+  const bindingCtx = useMemo<RegistryBindingContext>(
+    () => ({
+      wallpaper: settings.wallpaper,
+      setWallpaper: (value) => setSetting('wallpaper', value),
+      screenSaveTimeoutSeconds: settings.screenSaver.timeoutMinutes * 60,
+      setScreenSaveTimeoutSeconds: (seconds) =>
+        setSetting('screenSaver', {
+          ...settings.screenSaver,
+          timeoutMinutes: Math.max(1, Math.round(seconds / 60)),
+        }),
+      registeredOwner: getAppPref('system', 'userName', 'User'),
+      setRegisteredOwner: (name) => setAppPref('system', 'userName', name.trim() || 'User'),
+    }),
+    [settings.wallpaper, settings.screenSaver, setSetting, getAppPref, setAppPref],
+  );
 
   const [overrides, setOverridesState] = useState<RegistryOverrides>(() =>
     getAppPref('regedit', 'overrides', EMPTY_OVERRIDES),
@@ -190,8 +223,9 @@ export default function RegistryEditor({}: AppComponentProps) {
 
   const values = useMemo(() => {
     const effective = getEffectiveValues(selectedKeyPath, getBaseValues(selectedKey), overrides);
-    return effective.length > 0 ? effective : [PLACEHOLDER_VALUE];
-  }, [selectedKeyPath, selectedKey, overrides]);
+    const bound = applyBoundReads(selectedKey, effective, bindingCtx);
+    return bound.length > 0 ? bound : [PLACEHOLDER_VALUE];
+  }, [selectedKeyPath, selectedKey, overrides, bindingCtx]);
 
   const openEditDialog = useCallback((value: RegistryValue) => {
     if (value === PLACEHOLDER_VALUE) return;
@@ -201,6 +235,13 @@ export default function RegistryEditor({}: AppComponentProps) {
 
   const commitEdit = useCallback(() => {
     if (!editDialog) return;
+    // Bound values write straight to their live setting; overrides don't apply.
+    const binding = findBinding(selectedKey, editDialog.value.name);
+    if (binding) {
+      binding.write(bindingCtx, editText);
+      setEditDialog(null);
+      return;
+    }
     const path = valuePathFor(editDialog.keyPath, editDialog.value.name);
     const next = setValueData(overrides, path, editText);
     persistOverrides(next);
@@ -214,7 +255,7 @@ export default function RegistryEditor({}: AppComponentProps) {
       );
     }
     setEditDialog(null);
-  }, [editDialog, editText, overrides, persistOverrides]);
+  }, [editDialog, editText, overrides, persistOverrides, selectedKey, bindingCtx]);
 
   const runFind = useCallback(
     (query: string, startAt = 0) => {

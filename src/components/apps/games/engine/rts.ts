@@ -18,6 +18,9 @@ export interface ResourceDef {
   id: string;
   name: string;
   color: string;
+  // Optional pixel-art prop drawn on this resource's patches (mineral crystals,
+  // an ore heap, a berry bush). When absent, a patch renders as a flat diamond.
+  sprite?: SpriteDef;
 }
 
 export interface UnitTypeDef {
@@ -35,6 +38,10 @@ export interface UnitTypeDef {
   splashRadius?: number;
   healPerSec?: number;
   requiresUpgrade?: string; // upgrade id that must be researched first
+  // Kept out of the player's command panel entirely (getCommandOptions skips it).
+  // For roster entries the enemy fields directly but the player can never obtain,
+  // so they don't show as permanently-greyed clutter.
+  hidden?: boolean;
   sprite?: SpriteDef;
 }
 
@@ -53,6 +60,7 @@ export interface BuildingTypeDef {
   // its own location (Age of Empires farms).
   farmYieldsResource?: string;
   farmAmount?: number;
+  hidden?: boolean; // enemy-only; kept out of the player's command panel
   sprite?: SpriteDef;
 }
 
@@ -67,6 +75,7 @@ export interface UpgradeDef {
   effects: { unitTypeId: string; hpMult?: number; dmgMult?: number }[];
   unlocksUnits?: string[];
   announce?: string;
+  hidden?: boolean; // gate the player can never satisfy; kept out of the panel
 }
 
 export interface AiWave {
@@ -1233,12 +1242,13 @@ export function getCommandOptions(state: RtsState): CommandOption[] {
   const out: CommandOption[] = [];
 
   for (const [id, def] of Object.entries(cfg.unitTypes)) {
+    if (def.hidden) continue;
     const chk = trainCheck(state, id);
     out.push({ kind: 'train', id, name: def.name, cost: def.cost, enabled: chk.ok, reason: chk.reason });
   }
 
   for (const [id, def] of Object.entries(cfg.buildingTypes)) {
-    if (def.isBase) continue;
+    if (def.isBase || def.hidden) continue;
     let enabled = true;
     let reason: string | undefined;
     if (!buildingUnlocked(state, def)) {
@@ -1253,7 +1263,7 @@ export function getCommandOptions(state: RtsState): CommandOption[] {
   }
 
   for (const up of cfg.upgrades ?? []) {
-    if (state.researched.has(up.id)) continue;
+    if (up.hidden || state.researched.has(up.id)) continue;
     const chk = researchCheck(state, up.id);
     out.push({ kind: 'research', id: up.id, name: up.name, cost: up.cost, enabled: chk.ok, reason: chk.reason });
   }

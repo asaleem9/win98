@@ -113,7 +113,37 @@ export function unreadCount(mailbox: Mailbox): number {
 
 // ---- Seed + generated content -------------------------------------------------
 
+/**
+ * The vendor's welcome message — the freshest thing in a new PC's Inbox. The
+ * first-session "You've Got Mail" chime (see outlook/firstRun) announces it ~60s
+ * after login; it's seeded here so it's present whenever Outlook is opened.
+ */
+export const WELCOME_MAIL: Email = {
+  id: 'seed-welcome',
+  from: 'PC Depot Sales <sales@pcdepot.com>',
+  subject: 'Welcome to your new PC!',
+  date: '3/16/99',
+  unread: true,
+  body: `Dear Valued Customer,
+
+Congratulations on your brand-new Pentium II PC from PC Depot! You have made a smart investment in the future.
+
+Your system comes fully loaded with Windows 98, a blazing-fast 56K modem, and everything you need to get on the Information Superhighway. A few tips to get you started:
+
+  * Double-click the "Internet Explorer" icon to surf the World Wide Web
+  * Sign on to America Online to chat with friends and family
+  * Explore the games in Start > Programs > Games
+
+Our support line is open 24 hours a day (long-distance charges may apply). Thank you again for choosing PC Depot, and happy computing!
+
+Warm regards,
+The PC Depot Sales Team
+
+P.S. - Hungry for more software? Everything you could ever want is a free download away at www.downloads.com. Grab extra RAM, screen savers, smileys, and more!`,
+};
+
 export const SEED_INBOX: Email[] = [
+  WELCOME_MAIL,
   {
     id: 'seed-1',
     from: 'Prince Abubakar <prince@totallylegit.ng>',

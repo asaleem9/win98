@@ -11,6 +11,7 @@ import { Dialog98 } from '@/components/ui/Dialog98';
 import { FSNode } from '@/types/filesystem';
 import { formatSize } from '@/lib/filesystem';
 import { cn } from '@/lib/cn';
+import { CD_DISC_TITLE, CD_TRACK_COUNT, cdTotalDurationSec, formatCdTime } from '@/components/apps/cd-player/cdLogic';
 
 const DRIVE_CAPACITY = 2.1 * 1024 * 1024 * 1024; // 2.1 GB local disk
 
@@ -62,7 +63,8 @@ export default function MyComputer({}: AppComponentProps) {
   const openDrive = useCallback((drive: DriveDef) => {
     if (drive.id === 'c') { openWindow('explorer', { launchParams: { filePath: 'C:\\' } }); return; }
     if (drive.id === 'a') { showSystemError('3½ Floppy (A:)', 'A:\\ is not accessible.\n\nThe device is not ready.'); return; }
-    showSystemError('(D:)', 'D:\\ is not accessible.\n\nPlease insert a CD into the drive.');
+    // D: holds an audio CD — hand it to the CD Player rather than the shell.
+    openWindow('cd-player');
   }, [openWindow]);
 
   const handleSystemItem = useCallback((action: string) => {
@@ -169,6 +171,31 @@ function DriveProperties({ drive, root, onClose }: { drive: DriveDef; root: FSNo
   const used = drive.id === 'c' ? walkSize(root) : 0;
   const capacity = drive.id === 'c' ? DRIVE_CAPACITY : 0;
   const free = Math.max(0, capacity - used);
+
+  // D: has an audio CD loaded — show the disc rather than a "no disc" notice.
+  if (drive.id === 'd') {
+    return (
+      <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/10">
+        <Dialog98
+          title={`${drive.name} Properties`}
+          message={
+            <div className="w-[280px]">
+              <Row k="Label" v={CD_DISC_TITLE} />
+              <Row k="Type" v="Audio CD" />
+              <Row k="File system" v="CDFS" />
+              <div className="my-2 border-t border-[var(--win98-button-shadow)]" />
+              <Row k="Tracks" v={`${CD_TRACK_COUNT}`} />
+              <Row k="Total time" v={formatCdTime(cdTotalDurationSec())} />
+              <div className="my-2 border-t border-[var(--win98-button-shadow)]" />
+              <p className="text-[var(--win98-disabled-text)]">Double-click the drive to play this disc in CD Player.</p>
+            </div>
+          }
+          buttons={[{ label: 'OK', default: true, onClick: onClose }]}
+          className="shadow-lg"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/10">

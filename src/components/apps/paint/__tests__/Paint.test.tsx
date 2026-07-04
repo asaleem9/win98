@@ -2,7 +2,14 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/helpers/renderWithProviders';
 import { setClipboard, getClipboard, __resetClipboard } from '@/lib/clipboard';
+import { useSettings } from '@/contexts/SettingsContext';
+import { isImageWallpaper } from '@/lib/wallpapers';
 import Paint from '../Paint';
+
+function WallpaperProbe() {
+  const { settings } = useSettings();
+  return <div data-testid="wallpaper">{JSON.stringify(settings.wallpaper)}</div>;
+}
 
 // jsdom doesn't implement ResizeObserver; Paint uses it to size the canvas
 // to its container, so stub it out for the purposes of this test.
@@ -87,5 +94,24 @@ describe('Paint', () => {
     await user.click(screen.getByRole('menuitemradio', { name: /2x/ }));
 
     expect(canvas.getAttribute('data-zoom')).toBe('2');
+  });
+
+  it('pushes the picture to the desktop as a tiled bitmap wallpaper', async () => {
+    const user = userEvent.setup();
+    // Probe shares Paint's SettingsProvider so it sees the wallpaper it writes.
+    renderWithProviders(
+      <>
+        <Paint windowId="w1" />
+        <WallpaperProbe />
+      </>,
+    );
+
+    await user.click(screen.getByRole('menuitem', { name: 'File' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Set As Wallpaper (Tiled)' }));
+
+    const wallpaper = JSON.parse(screen.getByTestId('wallpaper').textContent || 'null');
+    expect(isImageWallpaper(wallpaper)).toBe(true);
+    expect(wallpaper.mode).toBe('tile');
+    expect(wallpaper.source).toContain('data:image/png');
   });
 });

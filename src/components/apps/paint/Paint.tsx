@@ -6,6 +6,9 @@ import { StatusBar98 } from '@/components/ui/StatusBar98';
 import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
 import { useWindows } from '@/contexts/WindowContext';
 import { useFileSystem } from '@/contexts/FileSystemContext';
+import { useSettings } from '@/contexts/SettingsContext';
+import { imageWallpaper } from '@/lib/wallpaperActions';
+import { WallpaperMode } from '@/lib/wallpapers';
 import { normalizePath } from '@/lib/fs/fsOperations';
 import { getParentPath } from '@/lib/filesystem';
 import { addRecentDoc } from '@/lib/recentDocs';
@@ -51,6 +54,7 @@ function baseName(path: string): string {
 export default function Paint({ windowId, launchParams, launchCount }: AppComponentProps) {
   const { updateTitle } = useWindows();
   const { readFile, writeFile } = useFileSystem();
+  const { setSetting } = useSettings();
   const { openPrint, printDialog } = usePrint(windowId, 'Paint');
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -360,6 +364,17 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
     }, name);
   }, [currentFilePath, openPrint]);
 
+  // Push the current picture to the desktop as the wallpaper, tiled or centered.
+  const setAsWallpaper = useCallback(
+    (mode: WallpaperMode) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      setSetting('wallpaper', imageWallpaper(canvas.toDataURL('image/png'), mode));
+      playSound('ding');
+    },
+    [setSetting],
+  );
+
   // Honor launch params on mount and whenever the app is re-launched with a file.
   useEffect(() => {
     if (launchParams?.filePath) loadPath(launchParams.filePath);
@@ -583,6 +598,9 @@ export default function Paint({ windowId, launchParams, launchCount }: AppCompon
         { label: 'Open...', shortcut: 'Ctrl+O', onClick: handleOpen },
         { label: 'Save', shortcut: 'Ctrl+S', onClick: handleSave },
         { label: 'Save As...', onClick: handleSaveAs },
+        { label: '', separator: true },
+        { label: 'Set As Wallpaper (Tiled)', onClick: () => setAsWallpaper('tile') },
+        { label: 'Set As Wallpaper (Centered)', onClick: () => setAsWallpaper('center') },
         { label: '', separator: true },
         { label: 'Print...', shortcut: 'Ctrl+P', onClick: handlePrint },
       ],

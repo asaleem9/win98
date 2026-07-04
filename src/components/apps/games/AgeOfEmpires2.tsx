@@ -19,6 +19,8 @@ import {
   STABLE,
   FARM,
   WATCH_TOWER,
+  BERRY_BUSH,
+  TREE_CLUSTER,
 } from './engine/sprites/aoe2';
 
 // The RTS engine in a medieval, age-progression dressing. Villagers gather Food
@@ -32,8 +34,8 @@ import {
 export const AOE_CONFIG: RtsConfig = {
   gameId: 'age-of-empires-2',
   resources: [
-    { id: 'food', name: 'Food', color: '#e0c24a' },
-    { id: 'wood', name: 'Wood', color: '#8a6438' },
+    { id: 'food', name: 'Food', color: '#e0c24a', sprite: BERRY_BUSH },
+    { id: 'wood', name: 'Wood', color: '#8a6438', sprite: TREE_CLUSTER },
   ],
   startResources: { food: 200, wood: 200 },
   colors: {
@@ -278,12 +280,11 @@ export const AOE_CONFIG: RtsConfig = {
 const MENU = ['Random Map', 'Death Match', 'Regicide', 'Exit'] as const;
 
 export default function AgeOfEmpires2({ windowId }: AppComponentProps) {
-  void windowId;
   const [screen, setScreen] = useState<'title' | 'game'>('title');
   const [showError, setShowError] = useState(false);
 
   if (screen === 'game') {
-    return <RtsGame config={AOE_CONFIG} onExit={() => setScreen('title')} />;
+    return <RtsGame config={AOE_CONFIG} windowId={windowId} onExit={() => setScreen('title')} />;
   }
 
   return (

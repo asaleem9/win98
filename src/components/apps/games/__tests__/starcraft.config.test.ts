@@ -115,6 +115,23 @@ describe('StarCraft config validity', () => {
       expect(validateSpriteDef(b.sprite!)).toEqual([]);
     }
   });
+
+  it('draws both resources with a validated patch prop (crystal + geyser)', () => {
+    for (const r of cfg.resources) {
+      expect(r.sprite).toBeDefined();
+      expect(validateSpriteDef(r.sprite!)).toEqual([]);
+    }
+  });
+
+  it('flags the enemy-only Zerg roster and its gate hidden', () => {
+    expect(cfg.unitTypes.zergling.hidden).toBe(true);
+    expect(cfg.unitTypes.hydralisk.hidden).toBe(true);
+    expect(cfg.buildingTypes.sunkenColony.hidden).toBe(true);
+    expect(cfg.upgrades!.find((u) => u.id === 'zergSwarm')!.hidden).toBe(true);
+    // Everything the player can actually field stays visible.
+    expect(cfg.unitTypes.marine.hidden).toBeFalsy();
+    expect(cfg.buildingTypes.barracks.hidden).toBeFalsy();
+  });
 });
 
 describe('StarCraft seeded smoke', () => {
@@ -176,12 +193,18 @@ describe('StarCraft seeded smoke', () => {
     expect(s.patches.at(-1)!.resourceId).toBe('gas');
   });
 
-  it('deadlock-gates the Zerg roster out of the player panel', () => {
+  it('keeps the enemy-only Zerg roster out of the player command panel', () => {
     const s = createRtsState(cfg);
     const opts = getCommandOptions(s);
-    expect(opt(opts, 'train', 'zergling').reason).toMatch(/Zerg Strain/);
-    expect(opt(opts, 'train', 'hydralisk').reason).toMatch(/Zerg Strain/);
-    expect(opt(opts, 'build', 'sunkenColony').reason).toMatch(/Zerg Strain/);
+    // The Zerg trio and their strain gate are hidden, so they never surface as
+    // panel entries — not even permanently-greyed ones.
+    expect(opts.some((o) => o.kind === 'train' && o.id === 'zergling')).toBe(false);
+    expect(opts.some((o) => o.kind === 'train' && o.id === 'hydralisk')).toBe(false);
+    expect(opts.some((o) => o.kind === 'build' && o.id === 'sunkenColony')).toBe(false);
+    expect(opts.some((o) => o.kind === 'research' && o.id === 'zergSwarm')).toBe(false);
+    // The Terran roster the player actually commands is still listed.
+    expect(opt(opts, 'train', 'marine').name).toBe('Marine');
+    expect(opt(opts, 'build', 'barracks').name).toBe('Barracks');
     // The strain itself can never be researched — it needs a Sunken Colony.
     s.resources.minerals = 9999;
     s.resources.gas = 9999;

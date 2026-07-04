@@ -22,6 +22,7 @@ const RegionalSettingsApp = lazy(() => import('@/components/apps/control-panel/R
 const FindFilesApp = lazy(() => import('@/components/apps/find-files/FindFiles'));
 const HelpApp = lazy(() => import('@/components/apps/help/Help'));
 const PrintersApp = lazy(() => import('@/components/apps/printers/Printers'));
+const DxDiagApp = lazy(() => import('@/components/apps/dxdiag/DxDiag'));
 
 export const systemApps: Record<string, AppDefinition> = {
   'msdos': {
@@ -250,6 +251,17 @@ export const systemApps: Record<string, AppDefinition> = {
     component: PrintersApp,
     defaultWindow: { title: 'Printers', width: 480, height: 340, minWidth: 340, minHeight: 240 },
     startMenuPath: ['Settings'],
+    singleton: true,
+  },
+  'dxdiag': {
+    id: 'dxdiag',
+    name: 'DirectX Diagnostic Tool',
+    icon: '/icons/dxdiag-32.svg',
+    icon16: '/icons/dxdiag-16.svg',
+    category: 'system',
+    component: DxDiagApp,
+    defaultWindow: { title: 'DirectX Diagnostic Tool', width: 480, height: 440, minWidth: 420, minHeight: 380 },
+    startMenuPath: ['Programs', 'Accessories', 'System Tools'],
     singleton: true,
   },
 };

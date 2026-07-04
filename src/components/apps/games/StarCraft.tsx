@@ -21,6 +21,8 @@ import {
   REFINERY,
   MISSILE_TURRET,
   SUNKEN_COLONY,
+  MINERAL_CRYSTAL,
+  GAS_GEYSER,
 } from './engine/sprites/starcraft';
 
 // Terran (player, blue) versus Zerg (enemy, purple) on the shared RTS engine.
@@ -32,17 +34,18 @@ import {
 // placing one seeds a fresh gas patch, opening a second income exactly as the
 // schema's farmYieldsResource intends.
 //
-// The Zerg strains (zergling, hydralisk) and the Sunken Colony are enemy-only,
-// but the engine's command panel lists every unit/building/upgrade in the config
-// to the player. They're deadlock-gated behind the 'zergSwarm' strain (which in
-// turn needs a Sunken Colony to research, which needs the strain to build) so the
-// player can never touch them — the enemy AI spawns waves and lays defenses
-// directly, bypassing those gates. They show as harmless disabled panel entries.
+// The Zerg strains (zergling, hydralisk) and the Sunken Colony are enemy-only.
+// They're deadlock-gated behind the 'zergSwarm' strain (which needs a Sunken
+// Colony to research, which in turn needs the strain to build) so the player can
+// never touch them — the enemy AI spawns waves and lays defenses directly,
+// bypassing those gates. Since the player can't obtain them, they're flagged
+// `hidden` and kept out of the command panel entirely rather than shown as
+// permanently-greyed clutter.
 const STARCRAFT_CONFIG: RtsConfig = {
   gameId: 'starcraft',
   resources: [
-    { id: 'minerals', name: 'Minerals', color: '#4fd6e0' },
-    { id: 'gas', name: 'Vespene Gas', color: '#43d17a' },
+    { id: 'minerals', name: 'Minerals', color: '#4fd6e0', sprite: MINERAL_CRYSTAL },
+    { id: 'gas', name: 'Vespene Gas', color: '#43d17a', sprite: GAS_GEYSER },
   ],
   startResources: { minerals: 150, gas: 0 },
   colors: {
@@ -139,6 +142,7 @@ const STARCRAFT_CONFIG: RtsConfig = {
       supply: 1,
       trainedAt: 'sunkenColony',
       requiresUpgrade: 'zergSwarm',
+      hidden: true,
       sightRange: 110,
       sprite: ZERGLING,
     },
@@ -154,6 +158,7 @@ const STARCRAFT_CONFIG: RtsConfig = {
       supply: 2,
       trainedAt: 'sunkenColony',
       requiresUpgrade: 'zergSwarm',
+      hidden: true,
       sightRange: 120,
       sprite: HYDRALISK,
     },
@@ -222,6 +227,7 @@ const STARCRAFT_CONFIG: RtsConfig = {
       buildTimeSec: 5,
       sightRange: 130,
       requiresUpgrade: 'zergSwarm',
+      hidden: true,
       attack: { damage: 14, range: 85, rate: 1.1 },
       sprite: SUNKEN_COLONY,
     },
@@ -273,6 +279,7 @@ const STARCRAFT_CONFIG: RtsConfig = {
       researchTimeSec: 999,
       researchAt: 'sunkenColony',
       effects: [],
+      hidden: true,
     },
   ],
   startSupply: 11,
@@ -323,7 +330,6 @@ const STARCRAFT_CONFIG: RtsConfig = {
 export { STARCRAFT_CONFIG };
 
 export default function StarCraft({ windowId }: AppComponentProps) {
-  void windowId;
   const [screen, setScreen] = useState<'title' | 'game'>('title');
   const [showError, setShowError] = useState(false);
 
@@ -339,7 +345,7 @@ export default function StarCraft({ windowId }: AppComponentProps) {
   );
 
   if (screen === 'game') {
-    return <RtsGame config={STARCRAFT_CONFIG} onExit={() => setScreen('title')} />;
+    return <RtsGame config={STARCRAFT_CONFIG} windowId={windowId} onExit={() => setScreen('title')} />;
   }
 
   return (

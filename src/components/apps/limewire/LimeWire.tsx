@@ -9,9 +9,16 @@ import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
 import { ContextMenu, ContextMenuItem } from '@/components/desktop/ContextMenu';
 import { standardHelpMenu } from '@/lib/menus';
 import { useFileSystem } from '@/contexts/FileSystemContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { useWindows } from '@/contexts/WindowContext';
 import { showSystemError } from '@/hooks/useFileOpener';
 import { musicTracks } from '@/lib/audio/tracks';
+import {
+  isNortonOpened,
+  quarantineThreat,
+  threatForDownload,
+  showNortonAlert,
+} from '@/components/apps/norton/realtimeShield';
 
 const DOWNLOADS_DIR = 'C:\\My Documents\\Downloads';
 
@@ -77,6 +84,7 @@ const RESULTS: SearchResult[] = [
 
 export default function LimeWire({ windowId }: AppComponentProps) {
   const { createFile } = useFileSystem();
+  const { getAppPref, setAppPref } = useSettings();
   const { openWindow, closeWindow } = useWindows();
 
   const [query, setQuery] = useState('');
@@ -172,11 +180,18 @@ export default function LimeWire({ windowId }: AppComponentProps) {
       if (dl.status !== 'complete') return;
       if (dl.virus && !virusFiredRef.current.has(i)) {
         virusFiredRef.current.add(i);
-        openWindow('bonzi-buddy');
-        showSystemError(
-          'Windows Security Alert',
-          `You have downloaded ${dl.filename}!\n\nWarning: This program has made changes to your computer. A friendly purple gorilla has been installed and will now help you browse the Internet.\n\n(Tip: never run .exe files from LimeWire.)`,
-        );
+        if (isNortonOpened()) {
+          // Norton's real-time shield intercepts the download and quarantines it
+          // before the gorilla can get a foot in the door.
+          quarantineThreat({ getAppPref, setAppPref }, threatForDownload(dl.filename, DOWNLOADS_DIR));
+          showNortonAlert();
+        } else {
+          openWindow('bonzi-buddy');
+          showSystemError(
+            'Windows Security Alert',
+            `You have downloaded ${dl.filename}!\n\nWarning: This program has made changes to your computer. A friendly purple gorilla has been installed and will now help you browse the Internet.\n\n(Tip: never run .exe files from LimeWire.)`,
+          );
+        }
       }
       if (!dl.virus && !persistedRef.current.has(i)) {
         persistedRef.current.add(i);
@@ -185,7 +200,7 @@ export default function LimeWire({ windowId }: AppComponentProps) {
         createFile(DOWNLOADS_DIR, dl.filename, dl.trackId ? `track:${dl.trackId}` : '[MP3 Audio]');
       }
     });
-  }, [downloads, createFile, openWindow]);
+  }, [downloads, createFile, openWindow, getAppPref, setAppPref]);
 
   const playInWinamp = useCallback((filename: string) => {
     openWindow('winamp', { launchParams: { filePath: `${DOWNLOADS_DIR}\\${filename}` } });

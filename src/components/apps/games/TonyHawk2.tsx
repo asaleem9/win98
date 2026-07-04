@@ -8,6 +8,7 @@ import { Button98 } from '@/components/ui/Button98';
 import { cn } from '@/lib/cn';
 import { makeRng, randInt, weightedPick, type Rand } from './engine/rng';
 import { useGameLoop } from './engine/loop';
+import { useWindowActive, PauseVeil } from './engine/focusPause';
 import {
   addBasePoints,
   addTrick,
@@ -270,8 +271,8 @@ const SPRITE_BY_POSE: Record<AirPose, typeof SKATER_OLLIE> = {
 };
 
 export default function TonyHawk2({ windowId }: AppComponentProps) {
-  void windowId;
   const { getAppPref, setAppPref } = useSettings();
+  const windowActive = useWindowActive(windowId);
 
   const [screen, setScreen] = useState<'title' | 'run' | 'summary'>('title');
   const [selectedLevel, setSelectedLevel] = useState(0);
@@ -1083,8 +1084,21 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
       },
       [step, draw],
     ),
-    screen === 'run',
+    screen === 'run' && windowActive,
   );
+
+  // F2 drops into a fresh run of the current level (Windows New Game convention).
+  useEffect(() => {
+    if (screen !== 'run' || !windowActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'F2') {
+        e.preventDefault();
+        startRun();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen, windowActive, startRun]);
 
   const mm = Math.floor(hud.timeLeft / 60);
   const ss = Math.floor(hud.timeLeft % 60);
@@ -1147,6 +1161,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
             style={{ imageRendering: 'pixelated' }}
             tabIndex={0}
           />
+          <PauseVeil windowId={windowId} show={!windowActive} />
         </div>
         {/* controls hint */}
         <div className="flex items-center justify-center gap-3 px-2 py-1 text-[9px] text-[#888] bg-[#0a0a0a] border-t border-[#333]">
@@ -1156,6 +1171,7 @@ export default function TonyHawk2({ windowId }: AppComponentProps) {
           <span><b className="text-[#ccff00]">↓</b> judo</span>
           <span><b className="text-[#ccff00]">↑↑</b> special</span>
           <span><b className="text-[#ccff00]">land ↓↑</b> manual</span>
+          <span><b className="text-[#ccff00]">F2</b> restart</span>
         </div>
       </div>
     );

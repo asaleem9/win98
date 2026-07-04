@@ -1,6 +1,114 @@
 import { FSNode } from '@/types/filesystem';
 import { resolvePathIn } from '@/lib/fs/fsOperations';
 
+// ---------------------------------------------------------------------------
+// First-run staged content. A fresh install lands the new owner on a desktop
+// with a hand-written tour note, a starter homepage in My Documents, and a
+// little mixtape Winamp can play. Everything the note points at is real and
+// reachable in the code — no vaporware.
+// ---------------------------------------------------------------------------
+
+const DESKTOP_README = `           Hey — welcome to your new computer! :)
+
+I set a few things up before I handed it over. Here's the good stuff,
+roughly in the order I'd try it. Have fun. Don't break anything.
+(Okay... maybe break one thing. Keep reading.)
+
+
+  1. BUILD A ROLLER COASTER
+     Start > Programs > Games > RollerCoaster Tycoon. Grab a piece of
+     track and click on the ground to lay it down. Loop it back to the
+     station and your ride opens for business.
+
+  2. SKI UNTIL THE YETI FINDS YOU
+     Start > Programs > Games > SkiFree. Point yourself downhill and
+     don't stop. Somewhere down the mountain an Abominable Snow Monster
+     turns up, and he is FAST. You can't outrun him. Nobody can.
+
+  3. PRINT SOMETHING AND WATCH IT SPOOL
+     Open Notepad (Start > Programs > Accessories), type a note, then
+     File > Print. To watch the job go through the queue, open
+     Start > Settings > Printers and double-click the printer.
+
+  4. PUBLISH YOUR HOMEPAGE
+     I left you a starter page: "My Homepage.htm" in My Documents. Open
+     Microsoft FrontPage (Start > Programs), choose File > Open and pull
+     it up from My Documents. Change whatever you want, then hit
+     File > Publish Web. After that, keep an eye on AIM — someone always
+     notices a new page.
+
+  5. DELETE WINDOWS (IF YOU DARE)
+     Start > Programs > MS-DOS Prompt. Type this and answer Y:
+
+         deltree C:\\WINDOWS
+
+     I'm not going to tell you what happens. Save your work first. Don't
+     say I didn't warn you.
+
+  6. RECORD YOUR OWN STARTUP SOUND
+     Your own voice can greet you at boot. Open Sound Recorder
+     (Start > Programs > Accessories > Multimedia), hit the red button,
+     say something, and File > Save As a .wav. Then go to Start >
+     Settings > Control Panel > Sounds, pick "Start Windows" from the
+     list, click Browse, and choose your recording.
+
+  7. THAT PASSWORD FILE
+     There's a "passwords.txt" sitting in My Documents that you were
+     absolutely not supposed to find. One of those passwords opens a
+     locked share over in Network Neighborhood. I'll let you work out
+     which one.
+
+  8. PLAY THE MIXTAPE
+     I burned you a few tracks — My Documents > My Mixtape. Double-click
+     any of them and Winamp takes it from there. It really whips the
+     llama's behind.
+
+  9. CHECK YOUR MAIL
+     There's a welcome message waiting in Outlook Express. The spam is
+     worth reading for a laugh — but the one titled "ILOVEYOU" is
+     trouble. You'll see.
+
+ 10. THE CLASSICS
+     Minesweeper, Solitaire, FreeCell, Hearts and 3D Pinball are all
+     under Start > Programs > Games. And if the screen ever goes quiet,
+     the flying-through-space thing lives in Display Properties >
+     Screen Saver > Preview.
+
+
+That's the tour. The rest you'll find on your own.
+
+                                                      - a friend
+`;
+
+const MY_HOMEPAGE_HTML = `<html>
+<head>
+  <title>Welcome to My Homepage!</title>
+</head>
+<body bgcolor="#000000" text="#00FF00">
+  <center>
+    <h1><font color="#FFFF00" face="Comic Sans MS">~*~ Welcome 2 My Homepage ~*~</font></h1>
+    <marquee behavior="alternate"><font color="#FF00FF">*** Under Construction *** Best viewed at 800x600 *** Sign my guestbook! ***</font></marquee>
+    <hr>
+    <p><font face="Arial" size="3">Hi and welcome to my little corner of the World Wide Web!</font></p>
+    <h2><font color="#00FFFF">About Me</font></h2>
+    <ul>
+      <li>Got this computer brand new and it RULES</li>
+      <li>Favorite band: whatever's on TRL</li>
+      <li>Favorite site: <a href="http://www.geocities.com">GeoCities</a></li>
+    </ul>
+    <h2><font color="#00FFFF">My Cool Links</font></h2>
+    <p>
+      <a href="http://www.yahoo.com">Yahoo!</a> |
+      <a href="http://www.altavista.com">AltaVista</a> |
+      <a href="http://www.hampsterdance.com">The Hampster Dance</a>
+    </p>
+    <hr>
+    <p><font size="1">You are visitor number 000001</font></p>
+    <p><font size="1">This page hosted by GeoCities. Get your own free homepage today!</font></p>
+  </center>
+</body>
+</html>`;
+
 export const virtualFileSystem: FSNode = {
   name: 'C:',
   type: 'directory',
@@ -38,6 +146,24 @@ export const virtualFileSystem: FSNode = {
         { name: 'budget.xls', type: 'file', icon: '/icons/xls-16.svg', created: '1999-02-20', modified: '1999-03-05', size: 45056, content: '[Excel Spreadsheet]' },
         { name: 'readme.txt', type: 'file', icon: '/icons/txt-16.svg', created: '1998-06-25', modified: '1998-06-25', size: 1024, content: 'Welcome to Windows 98!\n\nThis is your My Documents folder.\nYou can store your personal files here.' },
         { name: 'passwords.txt', type: 'file', icon: '/icons/txt-16.svg', created: '1999-01-04', modified: '1999-03-12', size: 512, content: 'My Passwords - KEEP SECRET\n\nAOL: CoolDad1962 / goldenretriever\nHotmail: dad_1962@hotmail.com / buster1988\nCompuServe: 70210,244 / access99\nATM PIN: 4592\ndads secret share: hunter2' },
+        // Starter homepage the README points at — opened/edited in FrontPage
+        // (File > Open), then Publish Web mirrors it into IE5's GeoCities page.
+        { name: 'My Homepage.htm', type: 'file', icon: '/icons/ie-16.svg', created: '1999-03-13', modified: '1999-03-14', size: MY_HOMEPAGE_HTML.length, content: MY_HOMEPAGE_HTML },
+        {
+          name: 'My Mixtape',
+          type: 'directory',
+          icon: '/icons/folder-16.svg',
+          created: '1999-03-14',
+          modified: '1999-03-14',
+          children: [
+            // 'track:<id>' content resolves to a real bundled track in tracks.ts
+            // via Winamp's resolveTrackFromContent, so these actually play.
+            { name: '01 - Dial-Up Dreams.mp3', type: 'file', icon: '/icons/winamp-16.svg', created: '1999-03-14', modified: '1999-03-14', size: 2883584, content: 'track:dial-up-dreams' },
+            { name: '02 - Midnight MIDI.mp3', type: 'file', icon: '/icons/winamp-16.svg', created: '1999-03-14', modified: '1999-03-14', size: 3014656, content: 'track:midnight-midi' },
+            { name: '03 - Screensaver Groove.mp3', type: 'file', icon: '/icons/winamp-16.svg', created: '1999-03-14', modified: '1999-03-14', size: 2752512, content: 'track:screensaver-groove' },
+            { name: '04 - Y2K Panic.mp3', type: 'file', icon: '/icons/winamp-16.svg', created: '1999-03-14', modified: '1999-03-14', size: 3145728, content: 'track:y2k-panic' },
+          ],
+        },
       ],
     },
     {
@@ -122,7 +248,11 @@ export const virtualFileSystem: FSNode = {
           icon: '/icons/folder-16.svg',
           created: '1998-06-25',
           modified: '1999-03-14',
-          children: [],
+          children: [
+            // Surfaces as a desktop icon (Desktop.tsx lists this dir); opens in
+            // Notepad via the .txt association.
+            { name: 'README - START HERE.txt', type: 'file', icon: '/icons/txt-16.svg', created: '1999-03-14', modified: '1999-03-14', size: DESKTOP_README.length, content: DESKTOP_README },
+          ],
         },
         {
           name: 'Start Menu',

@@ -7,6 +7,7 @@ import { playSound } from '@/lib/sounds';
 import { MenuBar, MenuDefinition } from '@/components/window/MenuBar';
 import { Dialog98 } from '@/components/ui/Dialog98';
 import { compileSprite, drawSprite } from '@/components/apps/games/engine/sprites';
+import { useWindowActive } from '@/components/apps/games/engine/focusPause';
 import { PINBALL_SPRITES } from '@/components/apps/games/engine/sprites/pinball';
 import {
   BallState,
@@ -211,6 +212,7 @@ const menuKeys = new Set(['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowD
 
 export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
   const { getAppPref, setAppPref } = useSettings();
+  const windowActive = useWindowActive(windowId);
 
   const [initialCompleted] = useState(() => getAppPref<number>(APP_ID, 'missionsCompleted', 0));
 
@@ -478,17 +480,15 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
     };
   }, [startGame, launchBall, triggerNudge]);
 
-  // pause when the tab/window is hidden
+  // Pause when another window covers this one or the tab is hidden. Resume stays
+  // manual (the Game menu / Pause key) so a ball doesn't launch the instant the
+  // window regains focus.
   useEffect(() => {
-    const onVis = () => {
-      if (document.hidden) {
-        pausedRef.current = true;
-        setPaused(true);
-      }
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
+    if (windowActive) return;
+    pausedRef.current = true;
+    const timer = setTimeout(() => setPaused(true), 0);
+    return () => clearTimeout(timer);
+  }, [windowActive]);
 
   useEffect(
     () => () => {
@@ -1030,8 +1030,12 @@ export default function SpaceCadetPinball({ windowId }: AppComponentProps) {
           </div>
         )}
         {paused && running && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50 cursor-pointer"
+            onClick={togglePause}
+          >
             <span className="text-[13px] text-white font-[family-name:monospace]">PAUSED</span>
+            <span className="text-[10px] text-white/80 font-[family-name:monospace]">click to resume</span>
           </div>
         )}
       </div>

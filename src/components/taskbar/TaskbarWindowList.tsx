@@ -5,6 +5,17 @@ import { cn } from '@/lib/cn';
 import { useWindows } from '@/contexts/WindowContext';
 import { getApp } from '@/lib/appRegistry';
 import { ContextMenu, ContextMenuItem } from '@/components/desktop/ContextMenu';
+import { playZoomAnimation, rectFromElement, viewportRect, Rect } from '@/components/system/ZoomAnimation';
+import { WindowState } from '@/types/window';
+
+// The on-screen rect a window occupies given its state — a maximized window
+// fills the desktop, otherwise it sits at its stored position/size. Used as the
+// zoom endpoint for taskbar-driven minimize/restore, where there's no live DOM
+// node to measure.
+function windowRectFromState(win: WindowState): Rect {
+  if (win.state === 'maximized') return viewportRect();
+  return { x: win.position.x, y: win.position.y, width: win.size.width, height: win.size.height };
+}
 
 export function TaskbarWindowList() {
   const { windows, focusWindow, minimizeWindow, maximizeWindow, restoreWindow, closeWindow } = useWindows();
@@ -20,15 +31,22 @@ export function TaskbarWindowList() {
           <button
             key={win.id}
             data-taskbar-button-for={win.id}
-            onClick={() => {
+            onClick={(e) => {
+              const buttonRect = rectFromElement(e.currentTarget);
               if (win.isFocused && win.state !== 'minimized') {
                 minimizeWindow(win.id);
+                playZoomAnimation({ from: windowRectFromState(win), to: buttonRect });
               } else {
                 focusWindow(win.id);
+                // Focusing a minimized window brings it back up; zoom out of the button.
+                if (win.state === 'minimized') {
+                  playZoomAnimation({ from: buttonRect, to: windowRectFromState(win) });
+                }
               }
             }}
             onContextMenu={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               setContextMenu({
                 position: { x: e.clientX, y: e.clientY },
                 items: [
