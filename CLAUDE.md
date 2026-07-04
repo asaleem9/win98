@@ -18,6 +18,8 @@ This file provides guidance to Claude Code when working with this repository.
 - **Window manager**: `useWindowManager` hook exposes reducer-based state; `windowReducer` is not exported. Supports owned/modal dialog windows (`ownerId`/`modal`, `ManagedDialog`), `resizable: false` enforcement, minimize-all/restore-all, and the zoom-rectangle animation (state dispatch stays synchronous; the animation is a fire-and-forget overlay).
 - **App registry**: 72 lazy-loaded apps in per-category files under `src/lib/registry/`, merged and re-exported by `src/lib/appRegistry.ts`. Each app receives `{ windowId, launchParams?, launchCount? }`. Apps with `singleton: true` focus the existing window; new windows cascade by 30px, wrapping every 10.
 - **Context**: `WindowProvider` wraps the app; access via `useWindows()`. Settings + per-app prefs via `useSettings()` (`getAppPref`/`setAppPref`). Virtual filesystem via `useFileSystem()` — mutations update `stateRef` synchronously so same-tick batches (create folder, then write files into it) all land.
+- **Persisted filesystem** (`src/contexts/FileSystemContext.tsx`): the tree saves to `localStorage['win98-fs-v1']`. On load, `graftSystemSeeds` reconciles a saved tree with newer OS content — the desktop program folders are refreshed wholesale, and a short allow-list of seed paths is copied in only if missing. **If you add a new seeded file/folder that returning visitors must see, add it to that graft (a fresh seed alone only reaches new profiles).**
+- **Mobile gate** (`src/components/system/MobileGate.tsx`, mounted in `layout.tsx`): a CSS-media-query (`(pointer: coarse) and (hover: none)`) desktop-only notice — SSR-safe, covers every state, never false-positives a narrow desktop window.
 
 ## Platform services
 
@@ -26,7 +28,7 @@ This file provides guidance to Claude Code when working with this repository.
 - **Event bus** (`src/lib/eventBus.ts`): typed `emit`/`on` over the `win98-*` window CustomEvents. **Clipboard** (`src/lib/clipboard.ts`): cross-app text/image/file cut-copy-paste; Explorer and the desktop consume `kind: 'files'`.
 - **Print pipeline** (`src/lib/print/`): `submitPrintJob` spools text/html/image jobs per printer; pages render to PNG data URLs and land in `C:\My Documents\Printed Documents`. Wire apps via `usePrint(windowId, appName)`; the Printers app shows the live queue.
 - **Audio** (`src/lib/sounds.ts` + `src/lib/audio/`): master gain with named channels (wave/midi/cd) feeding the Volume Control mixer; per-event sound overrides power the Control Panel Sounds applet; `MusicPlayer` carries the 10-band EQ used by Winamp.
-- **File associations** (`src/lib/fileAssociations.ts`) + `useFileOpener`: extension → app routing; `installer:<slug>` file content triggers the install wizard; `track:<id>` content resolves to bundled music.
+- **File associations** (`src/lib/fileAssociations.ts`) + `useFileOpener`: extension → app routing; `installer:<slug>` file content triggers the install wizard; `track:<id>` content resolves to bundled music; `app:<appId>` content is a program shortcut that opens that app. The desktop program folders come from `src/lib/desktopShortcuts.ts` (a manifest of all apps grouped into folders, kept in sync with the registry by a test).
 
 ## Games
 
