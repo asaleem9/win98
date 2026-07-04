@@ -533,3 +533,70 @@ html[data-win98-scheme='high-contrast'] {
   --win98-input-text: #ffffff;
   --win98-desktop: #000000;
 }
+
+/* -------------------------------------------------------------------------
+   Desktop-only gate. Hidden by default; shown on touch devices that lack a
+   fine pointer (phones, most tablets). A desktop with a narrow browser window
+   keeps a fine pointer + hover, so it is never falsely gated. Covers the whole
+   screen above every other layer.
+   ------------------------------------------------------------------------- */
+.mobile-gate {
+  display: none;
+}
+
+@media (pointer: coarse) and (hover: none) {
+  .mobile-gate {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--win98-desktop, #008080);
+    font-family: var(--win98-font, "MS Sans Serif", Tahoma, sans-serif);
+    font-size: 14px;
+    color: #000;
+  }
+
+  .mobile-gate-window {
+    width: 100%;
+    max-width: 420px;
+    background: var(--win98-button-face, #c0c0c0);
+    border: 2px solid;
+    border-top-color: var(--win98-button-highlight, #fff);
+    border-left-color: var(--win98-button-highlight, #fff);
+    border-bottom-color: var(--win98-button-dark-shadow, #000);
+    border-right-color: var(--win98-button-dark-shadow, #000);
+    box-shadow: inset -1px -1px 0 var(--win98-button-shadow, #808080),
+      inset 1px 1px 0 var(--win98-button-light, #dfdfdf);
+  }
+
+  .mobile-gate-title {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 6px;
+    font-weight: bold;
+    color: #fff;
+    background: linear-gradient(
+      to right,
+      var(--win98-titlebar-active-start, #000080),
+      var(--win98-titlebar-active-end, #1084d0)
+    );
+  }
+
+  .mobile-gate-body {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 18px 16px;
+    line-height: 1.45;
+  }
+
+  .mobile-gate-footer {
+    padding: 8px 16px 14px;
+    color: var(--win98-button-shadow, #808080);
+    font-size: 12px;
+  }
+}
