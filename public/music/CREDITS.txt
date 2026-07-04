@@ -24,3 +24,10 @@ Attribution (per incompetech.com):
   https://creativecommons.org/licenses/by/4.0/
 
 Source: https://incompetech.com/music/royalty-free/
+
+-----------------------------------------------------------------------------
+
+winamp-intro.mp3 is the original Winamp demo clip (v1.91, 1998). The Winamp
+name and this audio are the property of their respective owners; the file is
+preserved and distributed by the community archive at
+https://github.com/notpeter/winamp-demo. Included here as a nostalgic homage.

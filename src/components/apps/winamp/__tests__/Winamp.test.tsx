@@ -79,3 +79,23 @@ describe('Winamp', () => {
     expect(screen.getByText('Add File')).toBeInTheDocument();
   });
 });
+
+describe('Winamp intro clip', () => {
+  it('plays the spoken intro once on open, honoring mute', async () => {
+    const { setSoundsMuted } = await import('@/lib/sounds');
+    const playSpy = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+
+    setSoundsMuted(false);
+    const first = renderWithProviders(<Winamp windowId="intro-1" />);
+    expect(playSpy).toHaveBeenCalled();
+    first.unmount();
+
+    playSpy.mockClear();
+    setSoundsMuted(true);
+    renderWithProviders(<Winamp windowId="intro-2" />);
+    expect(playSpy).not.toHaveBeenCalled();
+
+    setSoundsMuted(false);
+    playSpy.mockRestore();
+  });
+});

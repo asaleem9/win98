@@ -16,8 +16,12 @@ import {
 } from '@/lib/audio/playlist';
 import { useFileSystem } from '@/contexts/FileSystemContext';
 import { FilePickerDialog } from '@/components/dialogs/FilePickerDialog';
+import { getSoundsMuted, getMasterVolume } from '@/lib/sounds';
 
 const APP_ID = 'winamp';
+
+// The classic spoken intro, played once each time Winamp is opened.
+const INTRO_SRC = '/music/winamp-intro.mp3';
 
 // Intrinsic skin width. The chrome was drawn to fill this exactly, so the
 // window is fitted to it rather than the reverse — that's what keeps the
@@ -91,6 +95,21 @@ export default function Winamp({ windowId, launchParams, launchCount }: AppCompo
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [picker, setPicker] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+
+  // Play the spoken intro once when Winamp opens. Launching is always driven by
+  // a click (desktop icon, Start menu, Run), so the browser lets it autoplay;
+  // a singleton relaunch just refocuses the window without remounting, so it
+  // won't nag on every click. Honors the global mute + volume.
+  useEffect(() => {
+    if (getSoundsMuted()) return;
+    const intro = new Audio(INTRO_SRC);
+    intro.volume = getMasterVolume();
+    intro.play().catch(() => {});
+    return () => {
+      intro.pause();
+      intro.src = '';
+    };
+  }, []);
 
   const track = playlist[index] ?? musicTracks[0];
   const titleText = `${index + 1}. ${track.artist} - ${track.title}  ***  `;
