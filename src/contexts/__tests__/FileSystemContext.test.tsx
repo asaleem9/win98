@@ -161,3 +161,66 @@ describe('same-tick mutation batches', () => {
     expect(result.current.readFile('C:\\My Documents\\Printed Documents\\doc - Page 2.png')).toBe('data:two');
   });
 });
+
+describe('system seed grafting for saved filesystems', () => {
+  it('adds the desktop program folders and missing seeds to a pre-folder save', () => {
+    // A minimal tree saved by an older build: no program folders, no README,
+    // but a user file that must survive the graft.
+    const oldRoot = {
+      name: 'C:',
+      type: 'directory',
+      children: [
+        {
+          name: 'Windows',
+          type: 'directory',
+          children: [{ name: 'Desktop', type: 'directory', children: [] }],
+        },
+        {
+          name: 'My Documents',
+          type: 'directory',
+          children: [{ name: 'my-essay.txt', type: 'file', content: 'do not lose me' }],
+        },
+      ],
+    };
+    window.localStorage.setItem(
+      'win98-fs-v1',
+      JSON.stringify({ version: 1, root: oldRoot, recycleBin: [] }),
+    );
+
+    const { result } = renderHook(() => useFileSystem(), { wrapper });
+    expect(result.current.getNode('C:\\Windows\\Desktop\\Games')?.type).toBe('directory');
+    expect(result.current.readFile('C:\\Windows\\Desktop\\Games\\Solitaire')).toBe('app:solitaire');
+    expect(result.current.getNode('C:\\Windows\\Desktop\\README - START HERE.txt')).toBeTruthy();
+    expect(result.current.getNode('C:\\My Documents\\My Mixtape')?.type).toBe('directory');
+    expect(result.current.readFile('C:\\My Documents\\my-essay.txt')).toBe('do not lose me');
+  });
+
+  it('refreshes stale program folders without duplicating them', () => {
+    const staleFolder = {
+      name: 'Games',
+      type: 'directory',
+      children: [{ name: 'Removed Game', type: 'file', content: 'app:gone' }],
+    };
+    const oldRoot = {
+      name: 'C:',
+      type: 'directory',
+      children: [
+        {
+          name: 'Windows',
+          type: 'directory',
+          children: [{ name: 'Desktop', type: 'directory', children: [staleFolder] }],
+        },
+      ],
+    };
+    window.localStorage.setItem(
+      'win98-fs-v1',
+      JSON.stringify({ version: 1, root: oldRoot, recycleBin: [] }),
+    );
+
+    const { result } = renderHook(() => useFileSystem(), { wrapper });
+    const desktop = result.current.listDir('C:\\Windows\\Desktop')!;
+    expect(desktop.filter((n) => n.name === 'Games')).toHaveLength(1);
+    expect(result.current.getNode('C:\\Windows\\Desktop\\Games\\Removed Game')).toBeNull();
+    expect(result.current.readFile('C:\\Windows\\Desktop\\Games\\SkiFree')).toBe('app:skifree');
+  });
+});

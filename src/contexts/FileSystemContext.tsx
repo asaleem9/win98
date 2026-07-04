@@ -13,6 +13,7 @@ import {
   joinPath,
 } from '@/lib/fs/fsOperations';
 import { emitFileWrite } from '@/lib/fs/writeEvents';
+import { DESKTOP_APP_FOLDERS, buildDesktopAppFolders } from '@/lib/desktopShortcuts';
 
 const STORAGE_KEY = 'win98-fs-v1';
 // Kept at 1 so existing saved filesystems still load; the fragments map is an
@@ -158,6 +159,46 @@ function fsReducer(state: FSState, action: FSAction): FSState {
   }
 }
 
+// Content the OS ships with that must appear even in filesystems saved before
+// it existed. Grafted into persisted trees on load: the desktop program
+// folders are system-owned and refreshed wholesale (so new apps show up for
+// returning visitors); the listed paths are copied from the seed only when
+// missing, leaving user edits alone.
+const SEED_PATHS_IF_MISSING = [
+  'C:\\Windows\\Desktop\\README - START HERE.txt',
+  'C:\\My Documents\\My Homepage.htm',
+  'C:\\My Documents\\My Mixtape',
+  'C:\\My Documents\\passwords.txt',
+];
+
+function graftSystemSeeds(persisted: FSNode): FSNode {
+  let root = persisted;
+
+  const desktopPath = 'C:\\Windows\\Desktop';
+  if (resolvePathIn(root, desktopPath)?.type === 'directory') {
+    const folderNames = new Set(Object.keys(DESKTOP_APP_FOLDERS));
+    const next = updateNodeAt(root, desktopPath, (n) => ({
+      ...n,
+      children: [
+        ...(n.children ?? []).filter((c) => !folderNames.has(c.name)),
+        ...buildDesktopAppFolders(),
+      ],
+    }));
+    if (next) root = next;
+  }
+
+  for (const path of SEED_PATHS_IF_MISSING) {
+    if (resolvePathIn(root, path)) continue;
+    const seeded = resolvePathIn(virtualFileSystem, path);
+    const parent = getParentPath(path);
+    if (!seeded || resolvePathIn(root, parent)?.type !== 'directory') continue;
+    const next = insertNode(root, parent, seeded);
+    if (next) root = next;
+  }
+
+  return root;
+}
+
 function loadInitialState(): FSState {
   const fallback: FSState = { root: virtualFileSystem, recycleBin: [], fragments: {} };
   if (typeof window === 'undefined') return fallback;
@@ -168,7 +209,7 @@ function loadInitialState(): FSState {
     if (parsed?.version !== STORAGE_VERSION || !parsed?.root?.children) return fallback;
     // `fragments` is absent in legacy payloads — default it so old saves still load.
     return {
-      root: parsed.root,
+      root: graftSystemSeeds(parsed.root),
       recycleBin: parsed.recycleBin ?? [],
       fragments: parsed.fragments ?? {},
     };
