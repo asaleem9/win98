@@ -91,7 +91,10 @@ export function WelcomeScreen({ onClose }: WelcomeScreenProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9000] flex items-center justify-center pointer-events-none">
+    // z-[5] keeps the splash above the desktop icons but below every real
+    // window (the manager starts at z-10) — like the real Welcome.exe, anything
+    // you open lands on top of it.
+    <div className="fixed inset-0 z-[5] flex items-center justify-center pointer-events-none">
       <div
         className={cn(
           'pointer-events-auto w-[560px] bg-[var(--win98-button-face)]',

@@ -236,6 +236,11 @@ export function FileSystemProvider({ children }: { children: ReactNode }) {
 
     const setRoot = (root: FSNode | null): FSResult => {
       if (!root) return { ok: false, error: 'The system cannot find the path specified.' };
+      // Keep the ref in step immediately, not at the next render — callers batch
+      // mutations in one tick (create a folder then write into it, or write one
+      // page per loop iteration) and each must see the tree the previous one
+      // produced, or later dispatches clobber earlier ones.
+      stateRef.current = { ...stateRef.current, root };
       dispatch({ type: 'SET_ROOT', payload: { root } });
       return { ok: true };
     };

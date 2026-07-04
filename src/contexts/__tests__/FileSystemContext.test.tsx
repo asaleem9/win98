@@ -146,3 +146,18 @@ describe('FileSystemContext', () => {
     expect(result.current.getNode('C:\\My Documents')).toBeTruthy();
   });
 });
+
+describe('same-tick mutation batches', () => {
+  it('keeps every mutation when a folder is created and written to in one tick', () => {
+    const { result } = renderHook(() => useFileSystem(), { wrapper });
+    act(() => {
+      // The print spooler does exactly this: ensure the output folder exists,
+      // then write one file per page, all before React re-renders.
+      expect(result.current.createFolder('C:\\My Documents', 'Printed Documents').ok).toBe(true);
+      expect(result.current.writeFile('C:\\My Documents\\Printed Documents\\doc - Page 1.png', 'data:one').ok).toBe(true);
+      expect(result.current.writeFile('C:\\My Documents\\Printed Documents\\doc - Page 2.png', 'data:two').ok).toBe(true);
+    });
+    expect(result.current.readFile('C:\\My Documents\\Printed Documents\\doc - Page 1.png')).toBe('data:one');
+    expect(result.current.readFile('C:\\My Documents\\Printed Documents\\doc - Page 2.png')).toBe('data:two');
+  });
+});
