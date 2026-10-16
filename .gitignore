@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 .claude/
 .playwright-mcp/
+
+# Claude Code files: local only, never published
+CLAUDE.md
+CLAUDE.local.md
+.claude/
